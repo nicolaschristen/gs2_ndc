@@ -1,0 +1,26 @@
+# Before building install these packages
+#
+# gcc openmpi-bin gfortran openmpi-bin libopenmpi-dev libfftw3-3 
+# libfftw3-mpi-dev libfftw3-dev libfftw3-bin libnetcdf-dev netcdf-bin
+
+define STANDARD_SYSTEM_CONFIGURATION
+export MAKEFLAGS='-j 6 -I Makefiles'\n
+endef
+
+COMPILER=intel
+USE_HDF5=
+include Makefile.$(COMPILER)
+
+USE_LOCAL_SPFUNC=on
+
+ifeq ($(USE_FFT),fftw3)
+	FFT_LIB =  -L/usr/local/shared/fftw/3.3.4-intel/lib/ -lfftw3 -lfftw3f
+endif
+ifeq ($(USE_FFT),fftw)
+	FFT_LIB = -L/usr/local/shared/fftw/2.1.5/lib -ldrfftw -ldfftw
+endif
+
+ifdef USE_NETCDF
+	NETCDF_INC = -I/usr/local/shared/netcdf/4.5.0-intel/include -I/usr/local/shared/netcdf/4.5.0-fortran-intel/include
+	NETCDF_LIB = -L/usr/local/shared/netcdf/4.5.0-intel/lib -L/usr/local/shared/netcdf/4.5.0-fortran-intel/lib -lnetcdf -lnetcdff
+endif

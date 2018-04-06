@@ -1,0 +1,27 @@
+ Job           -1 Running on            2  processors
+
+Couldn't open input file: ./new.in
+
+ Job ID:  -1, total from timer is:     0.00 min
+
+ Job           -1 Running on            2  processors
+
+Couldn't open input file: ./new.in
+ Error: species_knobs namelist file does not exist
+ get_indexed_namelist: following namelist not found species_parameters_1
+ Error           -1 reading species parameters
+ get_indexed_namelist: following namelist not found species_parameters_2
+ Error           -1 reading species parameters
+ get_indexed_namelist: following namelist not found dist_fn_species_knobs_1
+ Error           -1 dist_fn species knobs
+ get_indexed_namelist: following namelist not found dist_fn_species_knobs_2
+ Error           -1 dist_fn species knobs
+ Error:Field_option='implicit' requires at least one field is non-zero
+--------------------------------------------------------------------------
+MPI_ABORT was invoked on rank 1 in communicator MPI_COMM_WORLD 
+with errorcode 14.
+
+NOTE: invoking MPI_ABORT causes Open MPI to kill all MPI processes.
+You may or may not see output from other processes, depending on
+exactly when Open MPI kills them.
+--------------------------------------------------------------------------
