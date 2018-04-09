@@ -6064,7 +6064,7 @@ endif
                   ! endNDCTESTnl
                   if(gryfx_zonal%on) then
                       call add_nl_gryfx (g1) 
-                  else 
+                  else
                       call add_nl (g1, phi, apar, bpar)
                   endif
                   

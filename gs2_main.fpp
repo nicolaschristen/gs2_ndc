@@ -722,6 +722,7 @@ contains
     integer, intent(in) :: nstep_run
     logical :: temp_initval_override_store
     integer :: istep_loop_max
+    logical :: nlplot=.true. ! NDCTESTnlplot
 
     if (.not. state%included) return
 
@@ -837,6 +838,7 @@ contains
          !call broadcast(state%exit)
        !end if
 
+       if(nlplot) state%exit=.false. ! NDCTESTnlplot
        if(state%exit) state%converged = .true.
        if (state%exit) call debug_message(state%verb+1, &
          'gs2_main::evolve_equations exit true after diagnostics')
@@ -860,6 +862,7 @@ contains
 
             !If something has triggered a reset then reset here
             if(state%dont_change_timestep) reset = .false.
+            if(nlplot) reset=.false. ! NDCTESTnlplot
             if (reset) then
                call prepare_initial_values_overrides(state)
                call set_initval_overrides_to_current_vals(state%init%initval_ov)

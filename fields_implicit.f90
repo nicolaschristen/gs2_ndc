@@ -119,6 +119,7 @@ contains
     implicit none
 
     logical :: debug=.false.
+    logical :: nlplot=.true. ! NDCTESTnlplot
 
     if (initialized) return
     initialized = .true.
@@ -143,7 +144,10 @@ contains
         ! Must be done before resp. m.
         !if (run_scan) call set_scan_parameter(dummy)
     if (debug) write(6,*) "init_fields_implicit: response_matrix"
-    call init_response_matrix
+    ! NDCTESTnlplot
+    if(.not. nlplot) then
+        call init_response_matrix
+    end if
     if (debug) write(6,*) "init_fields_implicit: antenna"
     call init_antenna
   end subroutine init_fields_implicit
@@ -162,11 +166,20 @@ contains
     use dist_fn, only: get_init_field
     use init_g, only: new_field_init
     use mp, only: iproc
+    ! NDCTESTnlplot
+    use kt_grids, only: akx, aky, naky, ntheta0
+    use constants, only: pi
+    ! endNDCTESTnlplot
 
     implicit none
 
     logical, optional :: gf_lo
     logical :: local_gf_lo
+    ! NDCTESTnlplot
+    logical :: nlplot=.true.
+    real :: dkx, dky, stddev_x, stddev_y
+    integer :: ik, it
+    ! endNDCTESTnlplot
 
     if(present(gf_lo)) then
       local_gf_lo = gf_lo
@@ -182,8 +195,23 @@ contains
        !AJ fields redistribute.
        g = gnew
     else if (new_field_init) then
-       call get_init_field (phinew, aparnew, bparnew)
-       phi = phinew; apar = aparnew; bpar = bparnew; g = gnew
+       ! NDCTESTnlplot
+       if(nlplot) then
+           write(*,*) 'Initializing phi to Gaussian'
+           dkx = akx(2)-akx(1)
+           dky = aky(2)-aky(1)
+           do ik = 1, naky
+               do it = 1, ntheta0
+                   stddev_x = 0.25 * 2.*pi/dkx ! Lx/4
+                   stddev_y = 0.25 * 2.*pi/dky ! Ly/4
+                   phinew(:,it,ik) = exp(-1.*((akx(it)**2)*(stddev_x**2))/2.)*exp(-1.*((aky(ik)**2)*(stddev_y**2))/2.)
+               end do
+           end do
+           phi = phinew
+       else
+           call get_init_field (phinew, aparnew, bparnew)
+           phi = phinew; apar = aparnew; bpar = bparnew; g = gnew
+       end if
     else
        call getfield (phinew, aparnew, bparnew)
        phi = phinew; apar = aparnew; bpar = bparnew 
@@ -517,54 +545,39 @@ contains
     !character(len=20) :: my_format ! NDCTESTdist
     ! NDCTESTnlplot
     logical :: nlplot=.true.
+    logical :: nlplot2=.true.
     integer :: iglo,iy,ix,ie,il,is,isgn,iyxf
     real, dimension(:,:), allocatable :: fft_out
-    complex, dimension(:,:,:), allocatable :: g1
-    real :: stddev_x, stddev_y, dkx, dky
+    complex, dimension(:,:,:), allocatable :: phi_5d
     character(5) :: istep_str
     ! endNDCTESTnlplot
     
     ! NDCTESTnlplot
-    if(nlplot) then
+    if(nlplot .or. nlplot2) then
         write(istep_str,"(I1)") istep
-        open(83,file="/home/christenl/gs2/flowtest/linear/nl_plot/phi_vs_xy_it_"//istep_str,status="replace") ! NDCTESTnlplot
-        ! fill phi with Gaussian in kx,ky at first step
-        if(istep==1) then
-            nlplot = .false.
-            call init_transforms(ntgrid,naky,ntheta0,nlambda,negrid,nspec,nx,ny,nlplot)
-            nlplot = .true.
-
-            !write(83,"(A)") "we are in init gaussian"
-            dkx = akx(2)-akx(1)
-            dky = aky(2)-aky(1)
-            do ik = 1, naky
-                do it = 1, ntheta0
-                    stddev_x = 2.*pi/dkx ! Lx
-                    stddev_y = 2.*pi/dky ! Ly
-                    !write(83,"(ES10.3)") exp(akx(it)**2/(2.*stddev_x**2))
-                    !write(83,"(ES10.3)") exp(aky(ik)**2/(2.*stddev_y**2))
-                    phi(:,it,ik) = exp(-1.*((akx(it)**2)*(stddev_x**2))/2.)*exp(-1.*((aky(ik)**2)*(stddev_y**2))/2.)
-                end do
-            end do
-            phinew = phi
-        end if
+        open(81,file="/home/christenl/data/flowtest/nonlin/nlplot/fft_kxky_"//istep_str,status="replace")
+        open(82,file="/home/christenl/data/flowtest/nonlin/nlplot/fft_xky_"//istep_str,status="replace")
+        open(83,file="/home/christenl/data/flowtest/nonlin/nlplot/fft_xy_"//istep_str,status="replace")
+        !if(istep==1) then
+        !    write(83,"(A)") "we are in advance_implicit"
+        !    do ik = 1, naky
+        !        do it = 1, ntheta0
+        !            write(83,"(ES10.3)") exp(akx(it)**2/(2.*stddev_x**2))
+        !            write(83,"(ES10.3)") exp(aky(ik)**2/(2.*stddev_y**2))
+        !        end do
+        !    end do
+        !end if
     end if
     ! end NDCTESTnlplot
 
-    if(.not. nlplot) then ! NDCTESTnlplot remove if and re-align content
-        !GGH NOTE: apar_ext is initialized in this call
-        if(.not.no_driver) call antenna_amplitudes (apar_ext)
+    !GGH NOTE: apar_ext is initialized in this call
+    if(.not.no_driver) call antenna_amplitudes (apar_ext)
   
-        ! NDCQUEST: how is the ExB remap undone if the timestep needs to be re-set ?    
-        if (allocated(kx_shift) .or. allocated(theta0_shift)) call exb_shear (gnew, phinew, aparnew, bparnew, istep) 
-    end if ! NDCTESTnlplot remove end if
+    ! NDCQUEST: how is the ExB remap undone if the timestep needs to be re-set ?    
+    if (allocated(kx_shift) .or. allocated(theta0_shift)) call exb_shear (gnew, phinew, aparnew, bparnew, istep) 
         
     g = gnew
     phi = phinew
-    ! NDCTESTmichael
-    !if(explicit_flowshear) then
-    !    phinew = phinew + phistar
-    !end if
     apar = aparnew 
     bpar = bparnew       
 
@@ -572,41 +585,40 @@ contains
     if(nlplot) then
         call update_flowshear_phase(g_exb)
         ! copy phi to 5d array to use modified transform routines
-        allocate(g1(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-        g1 = 0.
+        allocate(phi_5d(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+        phi_5d = 0.
         do iglo = g_lo%llim_proc, g_lo%ulim_proc
             it = it_idx(g_lo,iglo)
             ik = ik_idx(g_lo,iglo)
             do ig = -ntgrid, ntgrid
-               g1(ig,1,iglo) = phi(ig,it,ik)
-               g1(ig,2,iglo) = phi(ig,it,ik)
+               phi_5d(ig,1,iglo) = phi(ig,it,ik)
+               phi_5d(ig,2,iglo) = phi(ig,it,ik)
             end do
         end do
         
-        allocate(fft_out(1:ny,yxf_lo%llim_proc:yxf_lo%ulim_alloc))
+        allocate(fft_out(ny,yxf_lo%llim_proc:yxf_lo%ulim_alloc))
         fft_out = 0.
         
-        call transform2(g1,fft_out)
+        call transform2(phi_5d,fft_out)
  
         ! NDCTESTnlplot5d
-        do iy = 1, ny
-            write(83,"(I2)",advance="no") iy
-            do iyxf = yxf_lo%llim_proc, yxf_lo%ulim_alloc
-                ix = it_idx(yxf_lo,iyxf) 
-                ie = ie_idx(yxf_lo,iyxf) 
-                il = il_idx(yxf_lo,iyxf) 
-                ig = ig_idx(yxf_lo,iyxf) 
-                is = is_idx(yxf_lo,iyxf) 
-                isgn = isign_idx(yxf_lo,iyxf) 
-                if(ie==1 .and. il==1 .and. ig==1 .and. is==1 .and. isgn==1) then
-                    !write(83,"(I2,ES10.2,A)",advance="no") ix, fft_out(iy,iyxf), " "
-                end if
-            end do
-            write(83,*) " " ! newline
-        end do
+        !do iy = 1, ny
+        !    write(83,"(I2)",advance="no") iy
+        !    do iyxf = yxf_lo%llim_proc, yxf_lo%ulim_alloc
+        !        ix = it_idx(yxf_lo,iyxf) 
+        !        ie = ie_idx(yxf_lo,iyxf) 
+        !        il = il_idx(yxf_lo,iyxf) 
+        !        ig = ig_idx(yxf_lo,iyxf) 
+        !        is = is_idx(yxf_lo,iyxf) 
+        !        isgn = isign_idx(yxf_lo,iyxf) 
+        !        if(ie==1 .and. il==1 .and. ig==1 .and. is==1 .and. isgn==1) then
+        !            write(83,"(I2,ES10.2,A)",advance="no") ix, fft_out(iy,iyxf), " "
+        !        end if
+        !    end do
+        !    write(83,*) " " ! newline
+        !end do
                 
-        close(83)
-        deallocate(g1,fft_out)
+        deallocate(phi_5d,fft_out)
     end if
     ! endNDCTESTnlplot
     
@@ -641,32 +653,6 @@ contains
             if (proc0) call time_message(.false.,timer_tadv_abr,' Tadv_rhs') ! NDCTESTtime
             
         end if
-
-        ! NDCTESTmichael2
-        !if(explicit_flowshear) then
-        !    
-        !    if(.not. allocated(expflow_antot)) then
-        !        allocate(expflow_antot(-ntgrid:ntgrid,ntheta0,naky))
-        !        allocate(expflow_antot_tdep(-ntgrid:ntgrid,ntheta0,naky))
-        !        allocate(dummy1(-ntgrid:ntgrid,ntheta0,naky))
-        !        allocate(dummy2(-ntgrid:ntgrid,ntheta0,naky))
-        !        allocate(phistar(-ntgrid:ntgrid,ntheta0,naky))
-        !    end if
-
-        !    expflow_opt = 2
-        !    call getan(expflow_antot, dummy1, dummy2, expflow_opt)
-        !    expflow_opt = 3
-        !    call getan(expflow_antot_tdep, dummy1, dummy2, expflow_opt)
-        !                  
-        !    do ig = -ntgrid,ntgrid
-        !        do it = 1,ntheta0
-        !            do ik = 1,naky
-        !                phistar(ig,it,ik) = 1./gamtot_tdep%old(ig,it,ik)*expflow_antot_tdep(ig,it,ik)-1./gamtot(ig,it,ik)*expflow_antot(ig,it,ik)
-        !            end do
-        !        end do
-        !    end do
-        !
-        !end if
 
         ! NDCTESTmichaelnew: compute phistar[it]
         if(explicit_flowshear) then
@@ -756,7 +742,6 @@ contains
                     end do
                 end do
             end do
-            write(*,*) '====================='
             
             phinew = phinew - phistar_old + phistar_new
             
@@ -769,27 +754,16 @@ contains
         ! Advance collisions, if separate from timeadv
         call collisions_advance (phi, bpar, phinew, aparnew, bparnew, istep, diagnostics)
 
-        ! NDCTESTmichael
-        !if(allocated(expflow_antot)) then
-        !    deallocate(expflow_antot, expflow_antot_tdep, &
-        !        dummy1, dummy2, phistar)
-        !end if
-
-        ! NDCTESTdist
-        !my_format = "(ES15.5, A)"
-        !ig = 10
-        !isgn = 2
-        !ik = 2
-        !il = 5
-        !ie = 5
-        !is = 1
-        !do it = 1, ntheta0
-        !    iglo = idx(g_lo, ik, it, il, ie, is) 
-        !    write(*,my_format,advance="no") real(gnew(ig,isgn, iglo)), "  "
-        !end do
-        !write(*,*) ""
-        ! endNDCTESTdist
     end if ! NDCTESTnlplot: remove end if
+
+    ! NDCTESTnlplot
+    if(nlplot) write(*,*) 'At the end of advance_implicit with istep=', istep
+    if(nlplot .or. nlplot2) then
+        close(81)
+        close(82)
+        close(83)
+    end if
+    ! endNDCTESTnlplot
 
   end subroutine advance_implicit
 
@@ -940,7 +914,6 @@ contains
     logical :: endpoint
     real, dimension(:), allocatable :: dkx ! NDCTESTshift
     logical :: tadv_for_interp ! NDCTESTshift
-    logical :: nlplot=.true. ! NDCTESTnlplot
 
     call prof_entering ("init_response_matrix", "fields_implicit")
 
@@ -997,313 +970,311 @@ contains
 !In comments cell refers to a 2pi domain whilst supercell is the connected domain,
 !i.e. we have classes of supercells based on the number of cells they contain.
         
-       if(.not. nlplot) then ! NDCTESTnlplot remove if and realign
-          ! For flow-shear cases
+       ! For flow-shear cases
+       if(implicit_flowshear .or. mixed_flowshear) then
+           ! required for shifting in kx during interpolation
+           allocate(dkx(naky))
+           dkx = (akx(2) - akx(1))
+       end if
+
+       ! In implicit implementation of flow-shear, need to compute different response
+       ! matrices dg/dphi for interpolation, whereas in mixed approach only need to compute one.
+       ! NDC 02/2018
+       if(implicit_flowshear) then
+           tadv_for_interp = .true.
+       elseif(mixed_flowshear) then
+           tadv_for_interp = .false.
+       end if
+       
+       ! Need to store a collection of am's if interpolation is performed before matrix inversion.
+       if(interp_before .and. .not. allocated(amcollec) .and. .not. explicit_flowshear) then
+           allocate(amcollec(i_class))
+       end if
+
+       do i = i_class, 1, -1
+          !Pretty sure this barrier is not needed
+          call barrier
+          !       if (proc0) write(*,*) 'beginning class ',i,' with size ',nidx*N_class(i)
+          !Allocate matrix am. First dimension is basically theta along the entire
+          !connected domain for each field. Second dimension is the local section
+          !of the M_class(i)*N_Class(i)*(2*ntgrid+1)*nfield compound domain.
+          !Clearly this will
+
+          ! If the flow-shear interpolation is performed after matrix inversion,
+          ! then only need to store temporary am's
+          if((.not. interp_before) .or. explicit_flowshear) then
+              allocate (am(nidx*N_class(i), f_lo(i)%llim_proc:f_lo(i)%ulim_alloc))
+              am = 0.0
+          end if
+
+          ! am's for shifted kx's,
+          ! required for aminv interpolation in cases with flow-shear --NDC 11/2017
           if(implicit_flowshear .or. mixed_flowshear) then
-              ! required for shifting in kx during interpolation
-              allocate(dkx(naky))
-              dkx = (akx(2) - akx(1))
-          end if
 
-          ! In implicit implementation of flow-shear, need to compute different response
-          ! matrices dg/dphi for interpolation, whereas in mixed approach only need to compute one.
-          ! NDC 02/2018
-          if(implicit_flowshear) then
-              tadv_for_interp = .true.
-          elseif(mixed_flowshear) then
-              tadv_for_interp = .false.
-          end if
+              if (proc0) call time_message(.false.,timer_interp_alloc,' Init_invert') ! NDCTESTtime
+        
+              if(interp_before) then
+                 
+                  if(.not. associated(amcollec(i)%am)) then
+
+                      allocate(amcollec(i)%am(nidx*N_class(i), f_lo(i)%llim_proc:f_lo(i)%ulim_alloc))
+                      allocate(amcollec(i)%am_left(nidx*N_class(i), f_lo(i)%llim_proc:f_lo(i)%ulim_alloc))
+                      allocate(amcollec(i)%am_right(nidx*N_class(i), f_lo(i)%llim_proc:f_lo(i)%ulim_alloc))
+                      allocate(amcollec(i)%am_interp(nidx*N_class(i), f_lo(i)%llim_proc:f_lo(i)%ulim_alloc))
           
-          ! Need to store a collection of am's if interpolation is performed before matrix inversion.
-          if(interp_before .and. .not. allocated(amcollec) .and. .not. explicit_flowshear) then
-              allocate(amcollec(i_class))
+                      amcollec(i)%am = 0.0
+                      amcollec(i)%am_left = 0.0
+                      amcollec(i)%am_right = 0.0
+                      amcollec(i)%am_interp = 0.0
+
+                  end if
+
+              else
+                  
+                  allocate(am_left(nidx*N_class(i),f_lo(i)%llim_proc:f_lo(i)%ulim_alloc))
+                  allocate(am_right(nidx*N_class(i),f_lo(i)%llim_proc:f_lo(i)%ulim_alloc))
+                  am_left = 0.
+                  am_right = 0.
+
+              end if
+
+              if (proc0) call time_message(.false.,timer_interp_alloc,' Init_invert') ! NDCTESTtime
+
           end if
 
-          do i = i_class, 1, -1
-             !Pretty sure this barrier is not needed
-             call barrier
-             !       if (proc0) write(*,*) 'beginning class ',i,' with size ',nidx*N_class(i)
-             !Allocate matrix am. First dimension is basically theta along the entire
-             !connected domain for each field. Second dimension is the local section
-             !of the M_class(i)*N_Class(i)*(2*ntgrid+1)*nfield compound domain.
-             !Clearly this will
+          !Do we need to zero all arrays on every loop? This can be more expensive than might think.
+          g = 0.0
 
-             ! If the flow-shear interpolation is performed after matrix inversion,
-             ! then only need to store temporary am's
-             if((.not. interp_before) .or. explicit_flowshear) then
-                 allocate (am(nidx*N_class(i), f_lo(i)%llim_proc:f_lo(i)%ulim_alloc))
-                 am = 0.0
-             end if
+          phi = 0.0
+          apar = 0.0
+          bpar = 0.0
+          phinew = 0.0
+          aparnew = 0.0
+          bparnew = 0.0
 
-             ! am's for shifted kx's,
-             ! required for aminv interpolation in cases with flow-shear --NDC 11/2017
-             if(implicit_flowshear .or. mixed_flowshear) then
+          !Loop over individual 2pi domains / cells
+          do n = 1, N_class(i)
+             !Loop over theta grid points in cell
+             !This is like a loop over nidx as we also handle all the fields in this loop
+             do ig = -ntgrid, ntgrid
+                !Are we at a connected boundary point on the lower side (i.e. left hand end of a
+                !tube/cell connected to the left)
+                endpoint = n > 1
+                endpoint = ig == -ntgrid .and. endpoint
 
-                 if (proc0) call time_message(.false.,timer_interp_alloc,' Init_invert') ! NDCTESTtime
-           
-                 if(interp_before) then
-                    
-                     if(.not. associated(amcollec(i)%am)) then
+                !Start counting fields
+                ifield = 0
 
-                         allocate(amcollec(i)%am(nidx*N_class(i), f_lo(i)%llim_proc:f_lo(i)%ulim_alloc))
-                         allocate(amcollec(i)%am_left(nidx*N_class(i), f_lo(i)%llim_proc:f_lo(i)%ulim_alloc))
-                         allocate(amcollec(i)%am_right(nidx*N_class(i), f_lo(i)%llim_proc:f_lo(i)%ulim_alloc))
-                         allocate(amcollec(i)%am_interp(nidx*N_class(i), f_lo(i)%llim_proc:f_lo(i)%ulim_alloc))
-             
-                         amcollec(i)%am = 0.0
-                         amcollec(i)%am_left = 0.0
-                         amcollec(i)%am_right = 0.0
-                         amcollec(i)%am_interp = 0.0
-
-                     end if
-
-                 else
-                     
-                     allocate(am_left(nidx*N_class(i),f_lo(i)%llim_proc:f_lo(i)%ulim_alloc))
-                     allocate(am_right(nidx*N_class(i),f_lo(i)%llim_proc:f_lo(i)%ulim_alloc))
-                     am_left = 0.
-                     am_right = 0.
-
-                 end if
-
-                 if (proc0) call time_message(.false.,timer_interp_alloc,' Init_invert') ! NDCTESTtime
-
-             end if
-
-             !Do we need to zero all arrays on every loop? This can be more expensive than might think.
-             g = 0.0
-
-             phi = 0.0
-             apar = 0.0
-             bpar = 0.0
-             phinew = 0.0
-             aparnew = 0.0
-             bparnew = 0.0
-
-             !Loop over individual 2pi domains / cells
-             do n = 1, N_class(i)
-                !Loop over theta grid points in cell
-                !This is like a loop over nidx as we also handle all the fields in this loop
-                do ig = -ntgrid, ntgrid
-                   !Are we at a connected boundary point on the lower side (i.e. left hand end of a
-                   !tube/cell connected to the left)
-                   endpoint = n > 1
-                   endpoint = ig == -ntgrid .and. endpoint
-
-                   !Start counting fields
-                   ifield = 0
-
-                   !Find response to phi
-                   if (fphi > epsilon(0.0)) then
-                      ifield = ifield + 1
-                      if (endpoint) then
-                         !Do all members of supercell together
-                         do m = 1, M_class(i)
-                            ik = f_lo(i)%ik(m,n-1)
-                            it = f_lo(i)%it(m,n-1)
-                            phinew(ntgrid,it,ik) = 1.0
-                         end do
-                      endif
+                !Find response to phi
+                if (fphi > epsilon(0.0)) then
+                   ifield = ifield + 1
+                   if (endpoint) then
                       !Do all members of supercell together
                       do m = 1, M_class(i)
-                         ik = f_lo(i)%ik(m,n)
-                         it = f_lo(i)%it(m,n)
-                         phinew(ig,it,ik) = 1.0
+                         ik = f_lo(i)%ik(m,n-1)
+                         it = f_lo(i)%it(m,n-1)
+                         phinew(ntgrid,it,ik) = 1.0
                       end do
-                      if (.not. skip_initialisation) then
-                          ! NDCTESTshift: moving kxstar to kx
-                          if(implicit_flowshear .or. mixed_flowshear) then
-                              !interp_shift_kx = -1 NDCTESTshift
-                              if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
-                              call update_kperp2_tdep(0.*dkx)
-                              call update_aj0_tdep
-                              call update_gamtot_tdep
-                              if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
+                   endif
+                   !Do all members of supercell together
+                   do m = 1, M_class(i)
+                      ik = f_lo(i)%ik(m,n)
+                      it = f_lo(i)%it(m,n)
+                      phinew(ig,it,ik) = 1.0
+                   end do
+                   if (.not. skip_initialisation) then
+                       ! NDCTESTshift: moving kxstar to kx
+                       if(implicit_flowshear .or. mixed_flowshear) then
+                           !interp_shift_kx = -1 NDCTESTshift
+                           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
+                           call update_kperp2_tdep(0.*dkx)
+                           call update_aj0_tdep
+                           call update_gamtot_tdep
+                           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
 
-                              if(implicit_flowshear) then
-                                  if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
-                                  call update_wdrift_tdep(0.*dkx)
-                                  if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
-                                  if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
-                                  call init_invert_rhs
-                                  if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
-                              end if
-                          end if
+                           if(implicit_flowshear) then
+                               if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
+                               call update_wdrift_tdep(0.*dkx)
+                               if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
+                               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
+                               call init_invert_rhs
+                               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
+                           end if
+                       end if
 
-                          trigger_timer_aminv = .true. ! NDCTESTtime
-                          trigger_timer_interp = .false. ! NDCTESTtime
-                          if (proc0) call time_message(.false.,timer_aminv_row,' Tadv_tdep') ! NDCTESTtime
-                          if(interp_before .and. .not. explicit_flowshear) then
-                              call init_response_row (ig, ifield, amcollec(i)%am, i, n)
-                          else
-                              call init_response_row (ig, ifield, am, i, n)
-                          end if
-                          if (proc0) call time_message(.false.,timer_aminv_row,' Tadv_tdep') ! NDCTESTtime
-                          trigger_timer_aminv = .false. ! NDCTESTtime
+                       trigger_timer_aminv = .true. ! NDCTESTtime
+                       trigger_timer_interp = .false. ! NDCTESTtime
+                       if (proc0) call time_message(.false.,timer_aminv_row,' Tadv_tdep') ! NDCTESTtime
+                       if(interp_before .and. .not. explicit_flowshear) then
+                           call init_response_row (ig, ifield, amcollec(i)%am, i, n)
+                       else
+                           call init_response_row (ig, ifield, am, i, n)
+                       end if
+                       if (proc0) call time_message(.false.,timer_aminv_row,' Tadv_tdep') ! NDCTESTtime
+                       trigger_timer_aminv = .false. ! NDCTESTtime
 
-                          ! am for shifted kx's,
-                          ! required for aminv interpolation in cases with flow-shear --NDC 11/2017
-                          if(implicit_flowshear .or. mixed_flowshear) then
-                          
-                              !interp_shift_kx = -1 NDCTESTshift
-                              ! NDCTESTshift: moving to kx-0.5*dkx
-                              if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
-                              call update_kperp2_tdep(-0.5*dkx) ! NDCTEST: change factor to -1.
-                              call update_aj0_tdep
-                              call update_gamtot_tdep
-                              if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
+                       ! am for shifted kx's,
+                       ! required for aminv interpolation in cases with flow-shear --NDC 11/2017
+                       if(implicit_flowshear .or. mixed_flowshear) then
+                       
+                           !interp_shift_kx = -1 NDCTESTshift
+                           ! NDCTESTshift: moving to kx-0.5*dkx
+                           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
+                           call update_kperp2_tdep(-0.5*dkx) ! NDCTEST: change factor to -1.
+                           call update_aj0_tdep
+                           call update_gamtot_tdep
+                           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
 
-                              if(implicit_flowshear) then
-                                  if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
-                                  call update_wdrift_tdep(-0.5*dkx)
-                                  if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
-                                  if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
-                                  call init_invert_rhs
-                                  if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
-                              end if
-                              ! endNDCTESTshift
+                           if(implicit_flowshear) then
+                               if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
+                               call update_wdrift_tdep(-0.5*dkx)
+                               if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
+                               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
+                               call init_invert_rhs
+                               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
+                           end if
+                           ! endNDCTESTshift
 
-                              !call init_response_row(ig,ifield,am_left,i,n,interp_shift_kx) NDCTESTshift
-                              trigger_timer_interp = .true. ! NDCTESTtime
-                              trigger_timer_aminv = .false. ! NDCTESTtime
-                              if (proc0) call time_message(.false.,timer_interp_row,' Tadv_tdep') ! NDCTESTtime
-                              if(interp_before) then
-                                  call init_response_row(ig,ifield,amcollec(i)%am_left,i,n,tadv_for_interp) ! NDCTESTinv
-                              else
-                                  call init_response_row(ig,ifield,am_left,i,n,tadv_for_interp)
-                              end if
-                              if (proc0) call time_message(.false.,timer_interp_row,' Tadv_tdep') ! NDCTESTtime
-                              trigger_timer_interp = .false. ! NDCTESTtime
-                              
-                              !interp_shift_kx = 1 NDCTESTshift
+                           !call init_response_row(ig,ifield,am_left,i,n,interp_shift_kx) NDCTESTshift
+                           trigger_timer_interp = .true. ! NDCTESTtime
+                           trigger_timer_aminv = .false. ! NDCTESTtime
+                           if (proc0) call time_message(.false.,timer_interp_row,' Tadv_tdep') ! NDCTESTtime
+                           if(interp_before) then
+                               call init_response_row(ig,ifield,amcollec(i)%am_left,i,n,tadv_for_interp) ! NDCTESTinv
+                           else
+                               call init_response_row(ig,ifield,am_left,i,n,tadv_for_interp)
+                           end if
+                           if (proc0) call time_message(.false.,timer_interp_row,' Tadv_tdep') ! NDCTESTtime
+                           trigger_timer_interp = .false. ! NDCTESTtime
+                           
+                           !interp_shift_kx = 1 NDCTESTshift
 
-                              ! NDCTESTshift: moving to kx+0.5*dkx
-                              if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
-                              call update_kperp2_tdep(0.5*dkx) ! NDCTEST: remove factor of 0.5
-                              call update_aj0_tdep
-                              call update_gamtot_tdep
-                              if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
+                           ! NDCTESTshift: moving to kx+0.5*dkx
+                           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
+                           call update_kperp2_tdep(0.5*dkx) ! NDCTEST: remove factor of 0.5
+                           call update_aj0_tdep
+                           call update_gamtot_tdep
+                           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
 
-                              if(implicit_flowshear) then
-                                  if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
-                                  call update_wdrift_tdep(0.5*dkx)
-                                  if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
-                                  if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
-                                  call init_invert_rhs
-                                  if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
-                              end if
-                              ! endNDCTESTshift
-                              
-                              !call init_response_row(ig,ifield,am_right,i,n,interp_shift_kx) NDCTESTshift
-                              trigger_timer_interp = .true. ! NDCTESTtime
-                              trigger_timer_aminv = .false. ! NDCTESTtime
-                              if (proc0) call time_message(.false.,timer_interp_row,' Tadv_tdep') ! NDCTESTtime
-                              if(interp_before) then
-                                  call init_response_row(ig,ifield,amcollec(i)%am_right,i,n,tadv_for_interp) ! NDCTESTinv
-                              else
-                                  call init_response_row(ig,ifield,am_right,i,n,tadv_for_interp)
-                              end if
-                              if (proc0) call time_message(.false.,timer_interp_row,' Tadv_tdep') ! NDCTESTtime
-                              trigger_timer_interp = .false. ! NDCTESTtime
+                           if(implicit_flowshear) then
+                               if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
+                               call update_wdrift_tdep(0.5*dkx)
+                               if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
+                               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
+                               call init_invert_rhs
+                               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
+                           end if
+                           ! endNDCTESTshift
+                           
+                           !call init_response_row(ig,ifield,am_right,i,n,interp_shift_kx) NDCTESTshift
+                           trigger_timer_interp = .true. ! NDCTESTtime
+                           trigger_timer_aminv = .false. ! NDCTESTtime
+                           if (proc0) call time_message(.false.,timer_interp_row,' Tadv_tdep') ! NDCTESTtime
+                           if(interp_before) then
+                               call init_response_row(ig,ifield,amcollec(i)%am_right,i,n,tadv_for_interp) ! NDCTESTinv
+                           else
+                               call init_response_row(ig,ifield,am_right,i,n,tadv_for_interp)
+                           end if
+                           if (proc0) call time_message(.false.,timer_interp_row,' Tadv_tdep') ! NDCTESTtime
+                           trigger_timer_interp = .false. ! NDCTESTtime
 
-                              ! NDCTESTshift: moving back to kxstar(t)
-                              if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
-                              call update_kperp2_tdep(kx_shift)
-                              call update_aj0_tdep
-                              call update_gamtot_tdep
-                              if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
-                              
-                              if(implicit_flowshear) then
-                                  if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
-                                  call update_wdrift_tdep(kx_shift)
-                                  if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
-                                  if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
-                                  call init_invert_rhs
-                                  if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
-                              end if
-                              ! endNDCTESTshift
+                           ! NDCTESTshift: moving back to kxstar(t)
+                           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
+                           call update_kperp2_tdep(kx_shift)
+                           call update_aj0_tdep
+                           call update_gamtot_tdep
+                           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
+                           
+                           if(implicit_flowshear) then
+                               if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
+                               call update_wdrift_tdep(kx_shift)
+                               if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
+                               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
+                               call init_invert_rhs
+                               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
+                           end if
+                           ! endNDCTESTshift
 
-                          end if
+                       end if
 
-                      end if
-                      phinew = 0.0
                    end if
+                   phinew = 0.0
+                end if
 
-                   !Find response to apar
-                   if (fapar > epsilon(0.0)) then
-                      ifield = ifield + 1
-                      if (endpoint) then
-                         !Do all members of supercell together
-                         do m = 1, M_class(i)
-                            ik = f_lo(i)%ik(m,n-1)
-                            it = f_lo(i)%it(m,n-1)
-                            aparnew(ntgrid,it,ik) = 1.0
-                         end do
-                      endif
+                !Find response to apar
+                if (fapar > epsilon(0.0)) then
+                   ifield = ifield + 1
+                   if (endpoint) then
                       !Do all members of supercell together
                       do m = 1, M_class(i)
-                         ik = f_lo(i)%ik(m,n)
-                         it = f_lo(i)%it(m,n)
-                         aparnew(ig,it,ik) = 1.0
+                         ik = f_lo(i)%ik(m,n-1)
+                         it = f_lo(i)%it(m,n-1)
+                         aparnew(ntgrid,it,ik) = 1.0
                       end do
-                      call init_response_row (ig, ifield, am, i, n)
-                      aparnew = 0.0
-                   end if
+                   endif
+                   !Do all members of supercell together
+                   do m = 1, M_class(i)
+                      ik = f_lo(i)%ik(m,n)
+                      it = f_lo(i)%it(m,n)
+                      aparnew(ig,it,ik) = 1.0
+                   end do
+                   call init_response_row (ig, ifield, am, i, n)
+                   aparnew = 0.0
+                end if
 
-                   !Find response to bpar
-                   if (fbpar > epsilon(0.0)) then
-                      ifield = ifield + 1
-                      if (endpoint) then
-                         !Do all members of supercell together
-                         do m = 1, M_class(i)
-                            ik = f_lo(i)%ik(m,n-1)
-                            it = f_lo(i)%it(m,n-1)
-                            bparnew(ntgrid,it,ik) = 1.0
-                         end do
-                      endif
+                !Find response to bpar
+                if (fbpar > epsilon(0.0)) then
+                   ifield = ifield + 1
+                   if (endpoint) then
                       !Do all members of supercell together
                       do m = 1, M_class(i)
-                         ik = f_lo(i)%ik(m,n)
-                         it = f_lo(i)%it(m,n)
-                         bparnew(ig,it,ik) = 1.0
+                         ik = f_lo(i)%ik(m,n-1)
+                         it = f_lo(i)%it(m,n-1)
+                         bparnew(ntgrid,it,ik) = 1.0
                       end do
-                      call init_response_row (ig, ifield, am, i, n)
-                      bparnew = 0.0
-                   end if
-                end do
+                   endif
+                   !Do all members of supercell together
+                   do m = 1, M_class(i)
+                      ik = f_lo(i)%ik(m,n)
+                      it = f_lo(i)%it(m,n)
+                      bparnew(ig,it,ik) = 1.0
+                   end do
+                   call init_response_row (ig, ifield, am, i, n)
+                   bparnew = 0.0
+                end if
              end do
-
-             if(.not. interp_before .or. explicit_flowshear) then
-                 !Invert the matrix
-                 call init_inverse_matrix (am, aminv, i)
-
-                 !Free memory
-                 deallocate (am)
-
-                 ! aminv for shifted kx's,
-                 ! required for aminv interpolation in cases with flow-sear --NDC 11/2017
-                          
-                 if (implicit_flowshear .or. mixed_flowshear) then
-                     if (proc0) call time_message(.false.,timer_interp_invert,' Tadv_tdep') ! NDCTESTtime
-                     call init_inverse_matrix(am_left, aminv_left, i)
-                     if (proc0) call time_message(.false.,timer_interp_invert,' Tadv_tdep') ! NDCTESTtime
-                     if (proc0) call time_message(.false.,timer_interp_alloc,' Init_invert') ! NDCTESTtime
-                     deallocate (am_left)
-                     if (proc0) call time_message(.false.,timer_interp_alloc,' Init_invert') ! NDCTESTtime
-
-                     if (proc0) call time_message(.false.,timer_interp_invert,' Tadv_tdep') ! NDCTESTtime
-                     call init_inverse_matrix(am_right, aminv_right, i)
-                     if (proc0) call time_message(.false.,timer_interp_invert,' Tadv_tdep') ! NDCTESTtime
-                     if (proc0) call time_message(.false.,timer_interp_alloc,' Init_invert') ! NDCTESTtime
-                     deallocate (am_right)
-                     if (proc0) call time_message(.false.,timer_interp_alloc,' Init_invert') ! NDCTESTtime
-                 end if
-
-             end if
           end do
-                              
-          if(allocated(dkx)) deallocate(dkx)
-      end if ! NDCTESTnlplot remove end if and realign
+
+          if(.not. interp_before .or. explicit_flowshear) then
+              !Invert the matrix
+              call init_inverse_matrix (am, aminv, i)
+
+              !Free memory
+              deallocate (am)
+
+              ! aminv for shifted kx's,
+              ! required for aminv interpolation in cases with flow-sear --NDC 11/2017
+                       
+              if (implicit_flowshear .or. mixed_flowshear) then
+                  if (proc0) call time_message(.false.,timer_interp_invert,' Tadv_tdep') ! NDCTESTtime
+                  call init_inverse_matrix(am_left, aminv_left, i)
+                  if (proc0) call time_message(.false.,timer_interp_invert,' Tadv_tdep') ! NDCTESTtime
+                  if (proc0) call time_message(.false.,timer_interp_alloc,' Init_invert') ! NDCTESTtime
+                  deallocate (am_left)
+                  if (proc0) call time_message(.false.,timer_interp_alloc,' Init_invert') ! NDCTESTtime
+
+                  if (proc0) call time_message(.false.,timer_interp_invert,' Tadv_tdep') ! NDCTESTtime
+                  call init_inverse_matrix(am_right, aminv_right, i)
+                  if (proc0) call time_message(.false.,timer_interp_invert,' Tadv_tdep') ! NDCTESTtime
+                  if (proc0) call time_message(.false.,timer_interp_alloc,' Init_invert') ! NDCTESTtime
+                  deallocate (am_right)
+                  if (proc0) call time_message(.false.,timer_interp_alloc,' Init_invert') ! NDCTESTtime
+              end if
+
+          end if
+       end do
+                           
+       if(allocated(dkx)) deallocate(dkx)
     
     endif 
 

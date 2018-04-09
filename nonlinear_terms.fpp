@@ -320,12 +320,14 @@ contains
     use mp, only: max_allreduce, iproc
     use theta_grid, only: ntgrid, kxfac
     use gs2_layouts, only: g_lo, ik_idx, it_idx
-    use gs2_layouts, only: accelx_lo, yxf_lo
+    use gs2_layouts, only: accelx_lo, yxf_lo, &
+        ie_idx,il_idx,is_idx,isign_idx,ig_idx ! NDCTESTnlplot
     use dist_fn_arrays, only: g, g_adjust
     use species, only: spec
     use gs2_transforms, only: transform2, inverse2
     use run_parameters, only: fapar, fbpar, fphi, reset, immediate_reset
     use kt_grids, only: aky, akx
+    !use kt_grids, only: ny ! NDCTESTnlplot
     use gs2_time, only: save_dt_cfl, check_time_step_too_large
     use constants, only: zi
     use unit_tests, only: debug_message
@@ -336,6 +338,7 @@ contains
     real :: max_vel, zero
     real :: dt_cfl
     integer, parameter :: verb = 4
+    !integer :: ie,il,isgn,iy, iyxf ! NDCTESTnlplot
 
     integer :: iglo, ik, it, is, ig, ia
     
@@ -360,6 +363,22 @@ contains
        call transform2 (g1, aba, ia)
     else
        call transform2 (g1, ba)
+       ! NDCTESTnlplot
+       !do iy = 1, ny
+       !    do iyxf = yxf_lo%llim_proc, yxf_lo%ulim_proc
+       !        it=it_idx(yxf_lo,iyxf)
+       !        ie=ie_idx(yxf_lo,iyxf)
+       !        il=il_idx(yxf_lo,iyxf)
+       !        is=is_idx(yxf_lo,iyxf)
+       !        ig=ig_idx(yxf_lo,iyxf)
+       !        isgn=isign_idx(yxf_lo,iyxf)
+       !        if(ie==4 .and. il==4 .and. ig==4) then
+       !            !write(83,"(I2,I2,I2,I2,I2)") it,iy,ig,isgn,ie,il,is ! NDCTESTnlplot
+       !            write(*,*) ba(iy,iyxf) ! NDCTESTnlplot
+       !        end if
+       !    end do
+       !end do
+       ! endNDCTESTnlplot
     end if
 
     call debug_message(verb, 'nonlinear_terms::add_nl calculated dphi/dx')

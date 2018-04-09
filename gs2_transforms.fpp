@@ -1331,7 +1331,7 @@ contains
   subroutine transform2_5d (g, yxf)
     use gs2_layouts, only: g_lo, yxf_lo, ik_idx, &
         xxf_lo ! NDCTESTnl
-    use gs2_layouts, only: ie_idx,il_idx,is_idx,isign_idx,ig_idx,it_idx, yxf_lo! NDCTESTnlplot
+    use gs2_layouts, only: ie_idx,il_idx,is_idx,isign_idx,ig_idx,it_idx ! NDCTESTnlplot
     use unit_tests,only: debug_message
     use constants, only: zi ! NDCTESTnl
     use kt_grids, only: nx, aky, explicit_flowshear, implicit_flowshear, mixed_flowshear ! NDCTESTnl
@@ -1344,6 +1344,9 @@ contains
     integer :: iglo
     integer :: ix, ik, ixxf ! NDCTESTnl
     integer :: ig,ie,il,is,isgn,it, iy, iyxf ! NDCTESTnlplot
+    logical :: nlplot=.true. ! NDCTESTnlplot
+    logical :: nlplot2=.true. ! NDCTESTnlplot
+    logical :: is_open ! NDCTESTnlplot
 
     call debug_message(4, 'gs2_transforms::transform2_5d starting')
 
@@ -1368,18 +1371,20 @@ contains
        if (ik_idx(g_lo, iglo) == 1) cycle
        g(:,:,iglo) = g(:,:,iglo) / 2.0
        ! NDCTESTnlplot
-       !it=it_idx(g_lo,iglo)
-       !ik=ik_idx(g_lo,iglo)
-       !ie=ie_idx(g_lo,iglo)
-       !il=il_idx(g_lo,iglo)
-       !is=is_idx(g_lo,iglo)
-       !if(ie==1 .and. il==1 .and. is==1) then
-       !    write(83,"(I2,I2,I2,I2,I2)") it,ik,ie,il,is ! NDCTESTnlplot
-       !    write(83,"(ES10.3)") g(1,1,iglo) ! NDCTESTnlplot
-       !end if
+       inquire(unit=81, opened=is_open)
+       if(nlplot .and. is_open) then
+           it=it_idx(g_lo,iglo)
+           ik=ik_idx(g_lo,iglo)
+           ie=ie_idx(g_lo,iglo)
+           il=il_idx(g_lo,iglo)
+           is=is_idx(g_lo,iglo)
+           if(ie==1 .and. il==1 .and. is==1) then
+               write(81,"(I4,I4,I4,I4,I4)") it,ik,ie,il,is ! NDCTESTnlplot
+               write(81,"(ES10.5)") g(1,1,iglo) ! NDCTESTnlplot
+           end if
+       end if
        ! endNDCTESTnlplot
     end do
-    !write(83,"(A)") " " ! NDCTESTnlplot
 
     call transform_x (g, xxf)
     
@@ -1390,44 +1395,63 @@ contains
                 ik = ik_idx(xxf_lo, ixxf)
                 xxf(ix, ixxf) = xxf(ix, ixxf) * exp(-1.*zi*flowshear_phase(ix,ik))
                 ! NDCTESTnlplot
-                ie=ie_idx(xxf_lo,ixxf)
-                il=il_idx(xxf_lo,ixxf)
-                is=is_idx(xxf_lo,ixxf)
-                ig=ig_idx(xxf_lo,ixxf)
-                isgn=isign_idx(xxf_lo,ixxf)
-                if(ie==1 .and. il==1 .and. is==1 .and. isgn==1 .and. ig==1) then
-                    write(83,"(I2,I2,I2,I2,I2)") ix,ik,ie,il,is ! NDCTESTnlplot
-                    write(83,"(ES10.3)") xxf(ix,ixxf) ! NDCTESTnlplot
+                inquire(unit=82, opened=is_open)
+                if(nlplot .and. is_open) then
+                    ie=ie_idx(xxf_lo,ixxf)
+                    il=il_idx(xxf_lo,ixxf)
+                    is=is_idx(xxf_lo,ixxf)
+                    ig=ig_idx(xxf_lo,ixxf)
+                    isgn=isign_idx(xxf_lo,ixxf)
+                    if(ie==1 .and. il==1 .and. is==1 .and. isgn==1 .and. ig==1) then
+                        write(82,"(I4,I4,I4,I4,I4)") ix,ik,ie,il,is ! NDCTESTnlplot
+                        write(82,"(ES10.5)") xxf(ix,ixxf) ! NDCTESTnlplot
+                    end if
                 end if
                 ! endNDCTESTnlplot
             end do
         end do
     end if
-    !write(83,"(A)") " " ! NDCTESTnlplot
-    ! endNDCTESTnl
-
-    call transform_y (xxf, yxf)
-    
     ! NDCTESTnlplot
-    !if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-    !    do iy = 1, ny
-    !        do iyxf = yxf_lo%llim_proc, yxf_lo%ulim_alloc
-    !            it=it_idx(yxf_lo,iyxf)
-    !            ie=ie_idx(yxf_lo,iyxf)
-    !            il=il_idx(yxf_lo,iyxf)
-    !            is=is_idx(yxf_lo,iyxf)
-    !            ig=ig_idx(yxf_lo,iyxf)
-    !            isgn=isign_idx(yxf_lo,iyxf)
+    !if(nlplot2) then
+    !    do ix = 1, nx
+    !        do ixxf = xxf_lo%llim_proc, xxf_lo%ulim_proc
+    !            ik = ik_idx(xxf_lo, ixxf)
+    !            ie=ie_idx(xxf_lo,ixxf)
+    !            il=il_idx(xxf_lo,ixxf)
+    !            is=is_idx(xxf_lo,ixxf)
+    !            ig=ig_idx(xxf_lo,ixxf)
+    !            isgn=isign_idx(xxf_lo,ixxf)
     !            if(ie==1 .and. il==1 .and. is==1 .and. isgn==1 .and. ig==1) then
-    !                write(83,"(I2,I2,I2,I2,I2)") it,iy,ie,il,is ! NDCTESTnlplot
-    !                write(83,"(ES10.3)") yxf(iy,iyxf) ! NDCTESTnlplot
+    !                write(83,"(I2,I2,I2,I2,I2)") ix,ik,ie,il,is ! NDCTESTnlplot
+    !                write(83,"(ES10.3)") xxf(ix,ixxf) ! NDCTESTnlplot
     !            end if
     !        end do
     !    end do
     !end if
     ! endNDCTESTnlplot
+    ! endNDCTESTnl
 
-    ! ... print yxf NDCTESTnlplot
+    call transform_y (xxf, yxf)
+    
+    ! NDCTESTnlplot
+    inquire(unit=83,opened=is_open)
+    if((nlplot .or. nlplot2) .and. is_open) then
+        do iy = 1, ny
+            do iyxf = yxf_lo%llim_proc, yxf_lo%ulim_proc
+                it=it_idx(yxf_lo,iyxf)
+                ie=ie_idx(yxf_lo,iyxf)
+                il=il_idx(yxf_lo,iyxf)
+                is=is_idx(yxf_lo,iyxf)
+                ig=ig_idx(yxf_lo,iyxf)
+                isgn=isign_idx(yxf_lo,iyxf)
+                if(ie==1 .and. il==1 .and. is==1 .and. isgn==1 .and. ig==1) then
+                    write(83,"(I4,I4,I4,I4,I4)") it,iy,ie,il,is ! NDCTESTnlplot
+                    write(83,"(ES10.5)") yxf(iy,iyxf) ! NDCTESTnlplot
+                end if
+            end do
+        end do
+    end if
+    ! endNDCTESTnlplot
   end subroutine transform2_5d
 
   subroutine inverse2_5d (yxf, g)
