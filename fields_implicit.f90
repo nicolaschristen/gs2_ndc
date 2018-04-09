@@ -585,6 +585,7 @@ contains
     if(nlplot) then
         call update_flowshear_phase(g_exb)
         ! copy phi to 5d array to use modified transform routines
+        write(*,*) 'Copying phi to 5d array.'
         allocate(phi_5d(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
         phi_5d = 0.
         do iglo = g_lo%llim_proc, g_lo%ulim_proc
@@ -598,6 +599,8 @@ contains
         
         allocate(fft_out(ny,yxf_lo%llim_proc:yxf_lo%ulim_alloc))
         fft_out = 0.
+
+        write(*,*) 'Calling transform2'
         
         call transform2(phi_5d,fft_out)
  
