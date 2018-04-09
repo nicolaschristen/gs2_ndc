@@ -202,8 +202,8 @@ contains
            dky = aky(2)-aky(1)
            do ik = 1, naky
                do it = 1, ntheta0
-                   stddev_x = 0.25 * 2.*pi/dkx ! Lx/4
-                   stddev_y = 0.25 * 2.*pi/dky ! Ly/4
+                   stddev_x = 1. !0.25 * 2.*pi/dkx ! Lx=2*pi/dkx
+                   stddev_y = 1. !0.25 * 2.*pi/dky ! Ly=2*pi/dky
                    phinew(:,it,ik) = exp(-1.*((akx(it)**2)*(stddev_x**2))/2.)*exp(-1.*((aky(ik)**2)*(stddev_y**2))/2.)
                end do
            end do
