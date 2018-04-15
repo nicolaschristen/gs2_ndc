@@ -177,7 +177,7 @@ contains
     logical :: local_gf_lo
     ! NDCTESTnlplot
     logical :: nlplot=.true.
-    real :: dkx, dky, stddev_x, stddev_y
+    real :: dkx, dky, alpha_x, alpha_y
     integer :: ik, it
     ! endNDCTESTnlplot
 
@@ -202,9 +202,9 @@ contains
            dky = aky(2)-aky(1)
            do ik = 1, naky
                do it = 1, ntheta0
-                   stddev_x = 1. !0.25 * 2.*pi/dkx ! Lx=2*pi/dkx
-                   stddev_y = 1. !0.25 * 2.*pi/dky ! Ly=2*pi/dky
-                   phinew(:,it,ik) = exp(-1.*((akx(it)**2)*(stddev_x**2))/2.)*exp(-1.*((aky(ik)**2)*(stddev_y**2))/2.)
+                   alpha_x = 1./64. * (2.*pi/dkx)**2 ! -> exp(-x**2/(Lx/4)**2)
+                   alpha_y = 1./256. * (2.*pi/dky)**2 ! -> exp(-y**2/(Ly/8)**2)
+                   phinew(:,it,ik) = exp(-1.*alpha_x*(akx(it)**2))*exp(-1.*alpha_y*(aky(ik)**2))
                end do
            end do
            phi = phinew
@@ -525,7 +525,7 @@ contains
     use mp, only: proc0 ! NDCTEST
     use job_manage, only: time_message ! NDCTESTtime
     use gs2_layouts, only: g_lo, yxf_lo, ig_idx, it_idx, ik_idx, isign_idx, is_idx, ie_idx, il_idx ! NDCTESTnlplot
-    use gs2_transforms, only: transform2, update_flowshear_phase, init_transforms ! NDCTESTnlplot
+    use gs2_transforms, only: transform2, update_flowshear_phase_fac, init_transforms ! NDCTESTnlplot
     use constants, only: pi ! NDCTESTnlplot
     use le_grids, only: nlambda, negrid ! NDCTESTnlplot
     use species, only: nspec ! NDCTESTnlplot
@@ -554,10 +554,16 @@ contains
     
     ! NDCTESTnlplot
     if(nlplot .or. nlplot2) then
-        write(istep_str,"(I1)") istep
-        open(81,file="/home/christenl/data/flowtest/nonlin/nlplot/fft_kxky_"//istep_str,status="replace")
-        open(82,file="/home/christenl/data/flowtest/nonlin/nlplot/fft_xky_"//istep_str,status="replace")
-        open(83,file="/home/christenl/data/flowtest/nonlin/nlplot/fft_xy_"//istep_str,status="replace")
+        write(istep_str,"(I0)") istep
+        if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+            open(81,file="/home/christenl/data/flowtest/nonlin/nlplot/fft_kxky_"//trim(istep_str)//".dat",status="replace")
+            open(82,file="/home/christenl/data/flowtest/nonlin/nlplot/fft_xky_"//trim(istep_str)//".dat",status="replace")
+            open(83,file="/home/christenl/data/flowtest/nonlin/nlplot/fft_xy_"//trim(istep_str)//".dat",status="replace")
+        else
+            open(81,file="/home/christenl/data/flowtest/nonlin/nlplot/fft_kxky_"//trim(istep_str)//"_old.dat",status="replace")
+            open(82,file="/home/christenl/data/flowtest/nonlin/nlplot/fft_xky_"//trim(istep_str)//"_old.dat",status="replace")
+            open(83,file="/home/christenl/data/flowtest/nonlin/nlplot/fft_xy_"//trim(istep_str)//"_old.dat",status="replace")
+        end if
         !if(istep==1) then
         !    write(83,"(A)") "we are in advance_implicit"
         !    do ik = 1, naky
@@ -583,7 +589,7 @@ contains
 
     ! NDCTESTnlplot
     if(nlplot) then
-        call update_flowshear_phase(g_exb)
+        call update_flowshear_phase_fac(g_exb)
         ! copy phi to 5d array to use modified transform routines
         write(*,*) 'Copying phi to 5d array.'
         allocate(phi_5d(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))

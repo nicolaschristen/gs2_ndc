@@ -24,6 +24,7 @@ module dist_fn_arrays
   public :: wdrift_tdep
   public :: wdriftttp_tdep
   public :: t_last_jump ! NDCTESTnl
+  public :: remap_period ! NDCTESTnl
   
   ! dist fn
   complex, dimension (:,:,:), allocatable :: g, gnew, g_restart_tmp
@@ -91,7 +92,8 @@ module dist_fn_arrays
   
   real, dimension(:), allocatable :: kx_shift_old
 
-  real, dimension(:), allocatable :: t_last_jump
+  real, dimension(:), allocatable :: t_last_jump ! NDCTESTnl
+  real, dimension(:), allocatable :: remap_period ! NDCTESTnl
 
   
 contains

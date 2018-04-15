@@ -793,6 +793,7 @@ dist_fn.o: \
 	 gs2_time.o \
 	 gs2_transforms.o \
 	 hyper.o \
+	 job_manage.o \
 	 kt_grids.o \
 	 le_derivatives.o \
 	 le_grids.o \
@@ -813,6 +814,35 @@ dist_fn_arrays.o: \
 	 mp.o \
 	 species.o \
 	 theta_grid.o 
+dist_fn_tmp.o: \
+	 antenna.o \
+	 collisions.o \
+	 constants.o \
+	 dist_fn_arrays.o \
+	 fields_arrays.o \
+	 file_utils.o \
+	 gauss_quad.o \
+	 geometry.o \
+	 gs2_heating.o \
+	 gs2_layouts.o \
+	 gs2_time.o \
+	 gs2_transforms.o \
+	 hyper.o \
+	 job_manage.o \
+	 kt_grids.o \
+	 le_derivatives.o \
+	 le_grids.o \
+	 mp.o \
+	 nonlinear_terms.o \
+	 overrides.o \
+	 prof.o \
+	 redistribute.o \
+	 run_parameters.o \
+	 species.o \
+	 spfunc.o \
+	 text_options.o \
+	 theta_grid.o \
+	 unit_tests.o 
 drive.o: \
 	 regression.o 
 dump_grids.o: \
@@ -901,18 +931,22 @@ fields_gf_local.o: \
 	 theta_grid.o 
 fields_implicit.o: \
 	 antenna.o \
+	 constants.o \
 	 dist_fn.o \
 	 dist_fn_arrays.o \
 	 fields_arrays.o \
 	 file_utils.o \
 	 gs2_layouts.o \
 	 gs2_save.o \
+	 gs2_transforms.o \
 	 init_g.o \
 	 job_manage.o \
 	 kt_grids.o \
+	 le_grids.o \
 	 mp.o \
 	 prof.o \
 	 run_parameters.o \
+	 species.o \
 	 theta_grid.o \
 	 unit_tests.o 
 fields_local.o: \
@@ -1208,8 +1242,11 @@ gs2_save.o: \
 	 unit_tests.o 
 gs2_time.o: 
 gs2_transforms.o: \
+	 constants.o \
+	 dist_fn_arrays.o \
 	 fft_work.o \
 	 gs2_layouts.o \
+	 gs2_time.o \
 	 kt_grids.o \
 	 mp.o \
 	 prof.o \
@@ -1297,6 +1334,7 @@ kpar.o: \
 kt_grids.o: \
 	 constants.o \
 	 file_utils.o \
+	 job_manage.o \
 	 mp.o \
 	 overrides.o \
 	 text_options.o \

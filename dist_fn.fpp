@@ -4114,10 +4114,11 @@ endif
   end function get_rightmost_it
 
   subroutine allocate_arrays
-    use kt_grids, only: naky,  box, explicit_flowshear, implicit_flowshear, mixed_flowshear
+    use kt_grids, only: naky,  box, explicit_flowshear, implicit_flowshear, mixed_flowshear, &
+        akx, aky ! NDCTESTnl
     use theta_grid, only: ntgrid, shat
     use dist_fn_arrays, only: g, gnew, &
-        t_last_jump ! NDCTESTnl
+        t_last_jump, remap_period ! NDCTESTnl
     use dist_fn_arrays, only: kx_shift, kx_shift_old, theta0_shift   ! MR
     use gs2_layouts, only: g_lo
     use run_parameters, only: fapar
@@ -4126,6 +4127,9 @@ endif
 #endif
     implicit none
 !    logical :: alloc = .true.
+
+    integer :: ik ! NDCTESTnl
+    real :: dkx ! NDCTESTnl
 
 !    if (alloc) then
     if (.not. allocated(g)) then
@@ -4174,11 +4178,18 @@ endif
           if (box .or. shat .eq. 0.0) then
              allocate (kx_shift(naky))
              kx_shift = 0.
-             if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+             ! NDCTESTnlplot: in if, remove last logical
+             if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. (.not. mixed_flowshear)) then
                  allocate(kx_shift_old(naky))
                  kx_shift_old = 0.
                  allocate(t_last_jump(naky)) ! NDCTESTnl
                  t_last_jump = 0. ! NDCTESTnl
+                 allocate(remap_period(naky)) ! NDCTESTnl
+                 remap_period = 0. ! NDCTESTnl
+                 dkx = akx(2) - akx(1) ! NDCTESTnl
+                 do ik = 2, naky ! ky=0 is never re-mapped
+                     remap_period(ik) = dkx/(g_exb*aky(ik)) ! NDCTESTnl
+                 end do
              end if
           else
              allocate (theta0_shift(naky))
@@ -4402,7 +4413,7 @@ endif
     use species, only: nspec
     use run_parameters, only: fphi, fapar, fbpar
     use dist_fn_arrays, only: kx_shift, kx_shift_old, theta0_shift, &
-        t_last_jump ! NDCTESTnl
+        t_last_jump, remap_period ! NDCTESTnl
     use gs2_time, only: code_dt, code_dt_old, code_time
     use constants, only: twopi   
     use theta_grid, only: theta ! NDCTEST 
@@ -4425,7 +4436,13 @@ endif
     !logical, save :: exb_first = .true.
     complex , dimension(-ntgrid:ntgrid) :: z
     character(130) :: str
-    real :: first_jump_fac ! NDCTESTnl
+    real :: first_jump_fac=0. ! NDCTESTnl
+    ! NDCTESTnlplot
+    logical :: nlplot=.true.
+    real :: alpha_x, alpha_y
+    real :: dky
+    integer, dimension(:), allocatable :: mycount
+    ! endNDCTESTnlplot
 
     integer :: ig=0 ! NDCTEST
 
@@ -4518,9 +4535,7 @@ endif
               else
                   first_jump_fac = 0.
               end if
-              if(aky(ik)/=0. .and. g_exbfac/=0.) then
-                  t_last_jump(ik) = t_last_jump(ik) + (abs(jump(ik))-0.5*first_jump_fac)*dkx/(g_exb*aky(ik))
-              end if
+              t_last_jump(ik) = t_last_jump(ik) + (abs(jump(ik))-0.5*first_jump_fac)*remap_period(ik)*g_exbfac
               ! endNDCTESTnl
 
           end if
@@ -4717,6 +4732,17 @@ endif
     end if
     
     if (box .or. shat .eq. 0.0) then
+       ! NDCTESTnlplot
+       if(nlplot) then
+          dky = aky(2)-aky(1)
+          alpha_x = 1./64. * (twopi/dkx)**2 ! -> exp(-x**2/(Lx/4)**2)
+          alpha_y = 1./256. * (twopi/dky)**2 ! -> exp(-y**2/(Ly/8)**2)
+          if(.not. allocated(mycount)) then
+              allocate(mycount(naky))
+              mycount = 0
+          end if
+       end if
+       ! endNDCTESTnlplot
        do ik = naky, 2, -1
           if (jump(ik) < 0) then
              if (fphi > epsilon(0.0)) then
@@ -4724,7 +4750,14 @@ endif
                    phi(:,ikx_indexed(it),ik) = phi(:,ikx_indexed(it-jump(ik)),ik)
                 end do
                 do it = ntheta0 + jump(ik) + 1, ntheta0
-                   phi(:,ikx_indexed(it),ik) = 0.
+                   ! NDCTESTnlplot
+                   if(nlplot) then
+                       phi(:,ikx_indexed(it),ik) = exp(-1.*alpha_x*((akx(ikx_indexed(it))-(jump(ik)+mycount(ik))*dkx)**2))*exp(-1.*alpha_y*(aky(ik)**2))
+                       mycount(ik) = mycount(ik) + jump(ik)
+                   else
+                       phi(:,ikx_indexed(it),ik) = 0.
+                   end if
+                   ! endNDCTESTnlplot
                    ! NDCTEST
                    !phi(:,ikx_indexed(it),ik) = phi(-ntgrid,ikx_indexed(ntheta0+jump(ik)),ik)
                 end do
@@ -4802,7 +4835,14 @@ endif
                    phi(:,ikx_indexed(it),ik) = phi(:,ikx_indexed(it-jump(ik)),ik)
                 end do
                 do it = jump(ik), 1, -1
-                   phi(:,ikx_indexed(it),ik) = 0.
+                   ! NDCTESTnlplot
+                   if(nlplot) then
+                       phi(:,ikx_indexed(it),ik) = exp(-1.*alpha_x*((akx(ikx_indexed(it))-(jump(ik)+mycount(ik))*dkx)**2))*exp(-1.*alpha_y*(aky(ik)**2))
+                       mycount(ik) = mycount(ik) + jump(ik)
+                   else
+                       phi(:,ikx_indexed(it),ik) = 0.
+                   end if
+                   ! endNDCTESTnlplot
                    ! NDCTEST
                    !phi(:,ikx_indexed(it),ik) = phi(ntgrid,ikx_indexed(jump(ik)+1),ik)
                 end do
@@ -6018,7 +6058,7 @@ endif
               add_nl_gryfx, add_nl, zip
           use run_parameters, only: reset
           use dist_fn_arrays, only: g
-          use gs2_transforms, only: update_flowshear_phase
+          use gs2_transforms, only: update_flowshear_phase_fac
 
           implicit none
           
@@ -6059,7 +6099,7 @@ endif
                   call debug_message(verb, 'dist_fn::add_explicit calling nonlinear_terms::add_nl')
                   ! NDCTESTnl
                   if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-                      call update_flowshear_phase(g_exb)
+                      call update_flowshear_phase_fac(g_exb)
                   end if
                   ! endNDCTESTnl
                   if(gryfx_zonal%on) then
