@@ -558,7 +558,7 @@ contains
         if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
             open(81,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_kxky_"//trim(istep_str)//".dat",status="replace")
             open(82,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_xky_"//trim(istep_str)//".dat",status="replace")
-            open(83,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_xystar_"//trim(istep_str)//".dat",status="replace")
+            open(83,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_xy_"//trim(istep_str)//".dat",status="replace")
             open(84,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_kxky_padx_"//trim(istep_str)//".dat",status="replace")
             open(85,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_xky_padxy_"//trim(istep_str)//".dat",status="replace")
         else

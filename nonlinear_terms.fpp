@@ -316,13 +316,14 @@ contains
     call add_nl(g1, phi, apar, bpar)
   end subroutine nonlinear_terms_unit_test_time_add_nl
 
-  subroutine add_nl (g1, phi, apar, bpar)
+  subroutine add_nl (g1, phi, apar, bpar, g_exb_opt) ! NDCTESTnl: added optional argument
     use mp, only: max_allreduce, iproc
     use theta_grid, only: ntgrid, kxfac
     use gs2_layouts, only: g_lo, ik_idx, it_idx
     use gs2_layouts, only: accelx_lo, yxf_lo, &
         ie_idx,il_idx,is_idx,isign_idx,ig_idx ! NDCTESTnlplot
-    use dist_fn_arrays, only: g, g_adjust
+    use dist_fn_arrays, only: g, g_adjust, &
+        t_last_jump ! NDCTESTnl
     use species, only: spec
     use gs2_transforms, only: transform2, inverse2
     use run_parameters, only: fapar, fbpar, fphi, reset, immediate_reset
@@ -334,6 +335,7 @@ contains
     implicit none
     complex, dimension (-ntgrid:,:,g_lo%llim_proc:), intent (out) :: g1
     complex, dimension (-ntgrid:,:,:), intent (in) :: phi, apar, bpar
+    real, intent(in), optional :: g_exb_opt ! NDCTESTnl
     integer :: i, j, k
     real :: max_vel, zero
     real :: dt_cfl
@@ -453,7 +455,14 @@ contains
     call g_adjust(g1,phi,bpar,fphi,fbpar)
     do iglo = g_lo%llim_proc, g_lo%ulim_proc
        it = it_idx(g_lo,iglo)
-       g1(:,:,iglo)=g1(:,:,iglo)*zi*akx(it)
+       ! NDCTESTnl
+       if(present(g_exb_opt)) then
+           ik = ik_idx(g_lo,iglo)
+           g1(:,:,iglo) = g1(:,:,iglo)*zi*(akx(it)+g_exb_opt*t_last_jump(ik)*aky(ik))
+       else
+           g1(:,:,iglo)=g1(:,:,iglo)*zi*akx(it)
+       end if
+       ! endNDCTESTnl
     enddo
     
     !Transform to real space
@@ -529,7 +538,13 @@ contains
          it = it_idx(g_lo,iglo)
          ik = ik_idx(g_lo,iglo)
          do ig = -ntgrid, ntgrid
-            fac = zi*akx(it)*aj0(ig,iglo)*phi(ig,it,ik)*fphi
+            ! NDCTESTnl
+            if(present(g_exb_opt)) then
+                fac = zi*(akx(it)+g_exb_opt*t_last_jump(ik)*aky(ik))*aj0(ig,iglo)*phi(ig,it,ik)*fphi
+            else
+                fac = zi*akx(it)*aj0(ig,iglo)*phi(ig,it,ik)*fphi
+            end if
+            ! endNDCTESTnl
             g1(ig,1,iglo) = fac
             g1(ig,2,iglo) = fac
          end do

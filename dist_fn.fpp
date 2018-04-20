@@ -6120,7 +6120,13 @@ endif
                   if(gryfx_zonal%on) then
                       call add_nl_gryfx (g1) 
                   else
-                      call add_nl (g1, phi, apar, bpar)
+                      ! NDCTESTnl: added flowshear case
+                      if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+                          call add_nl(g1, phi, apar, bpar, g_exb)
+                      else
+                          call add_nl(g1, phi, apar, bpar)
+                      end if
+                      ! endNDCTESTnl
                   endif
                   
                   ! Takes g1 containing the nonlinear term at grid points and returns g1 at cell centers.
