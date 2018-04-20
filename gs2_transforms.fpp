@@ -204,7 +204,7 @@ contains
             flowshear_phase_fac = 1.
         end if
         
-        open(71,file="/home/christenl/data/flowtest/nonlin/nlplot/x_grid.dat",status="replace") ! NDCTESTnlplot
+        open(71,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/x_grid.dat",status="replace") ! NDCTESTnlplot
         dkx = akx(2)-akx(1)
         dx = 1./(nx-1) * 2.*pi/dkx
 
@@ -219,7 +219,7 @@ contains
         close(71) ! NDCTESTnlplot
        
         ! NDCTESTnlplot
-        open(72,file="/home/christenl/data/flowtest/nonlin/nlplot/y_grid.dat",status="replace")
+        open(72,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/y_grid.dat",status="replace")
         dky = aky(2)-aky(1)
         dy = 1./(ny-1) * 2.*pi/dky
 
@@ -256,14 +256,16 @@ contains
       do ix = 1, nx
           do ik = 1, naky
               if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then ! NDCTESTnlplot remove if statement and realign
+                  ! NDCTESTnlplot: transform to y**
                   flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*(maxval(t_last_jump)-t_last_jump(ik))*x_grid(ix))
+                  ! NDCTESTnlplot: transform to y*
+                  !flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*t_last_jump(ik)*x_grid(ix))
+                  ! NDCTESTnlplot: transform to y
+                  !flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*(code_time-t_last_jump(ik))*x_grid(ix))
               else
-                  flowshear_phase_fac(ix,ik) = 1. ! NDCTESTnlplot: remove this line
+                  ! NDCTESTnlplot: next line is to visualize in lab frame, remove it.
+                  flowshear_phase_fac(ix,ik) = 1.
               end if
-              ! NDCTESTnlplot: to visualize in the rest frame
-              flowshear_phase_fac(ix,ik) = flowshear_phase_fac(ix,ik) * &
-                  exp(-1.*zi*aky(ik)*g_exb*(code_time-maxval(t_last_jump))*x_grid(ix))
-              ! endNDCTESTnlplot
           end do
       end do
 
@@ -1264,23 +1266,22 @@ contains
     ! endNDCTESTnlplot
     call gather (g2x, g, xxf)
     ! NDCTESTnlplot
-    !inquire(unit=92,opened=is_open)
-    !if(nlplot .and. is_open) then
-    !    do ix=1,xxf_lo%nx
-    !        do ixxf=xxf_lo%llim_proc,xxf_lo%ulim_proc
-    !            ig=ig_idx(xxf_lo,ixxf)
-    !            ik=ik_idx(xxf_lo,ixxf)
-    !            ie=ie_idx(xxf_lo,ixxf)
-    !            il=il_idx(xxf_lo,ixxf)
-    !            isgn=isign_idx(xxf_lo,ixxf)
-    !            is=is_idx(xxf_lo,ixxf)
-    !            if(ig==1 .and. ie==1 .and. il==1 .and. is==1 .and. isgn==1) then
-    !                write(92,"(A3,A3)") ix, ik
-    !                write(92,"(E5.2,A5,E5.2)") real(xxf(ix,ixxf)),'+ i*', aimag(xxf(ix,ixxf))
-    !            end if
-    !        end do
-    !    end do
-    !end if
+    inquire(unit=84,opened=is_open)
+    if(nlplot .and. is_open) then
+        do ix=1,xxf_lo%nx
+            do ixxf=xxf_lo%llim_proc,xxf_lo%ulim_proc
+                ig=ig_idx(xxf_lo,ixxf)
+                ik=ik_idx(xxf_lo,ixxf)
+                ie=ie_idx(xxf_lo,ixxf)
+                il=il_idx(xxf_lo,ixxf)
+                isgn=isign_idx(xxf_lo,ixxf)
+                is=is_idx(xxf_lo,ixxf)
+                if(ig==1 .and. ie==1 .and. il==1 .and. is==1 .and. isgn==1) then
+                    write(84,"(I0,A,I0,A,E14.7)") ix," ",ik," ",real(xxf(ix,ixxf)) ! NDCTESTnlplot
+                end if
+            end do
+        end do
+    end if
     ! endNDCTESTnlplot
 
     ! do ffts
@@ -1363,7 +1364,8 @@ contains
   end subroutine inverse_x5d
 
   subroutine transform_y5d (xxf, yxf)
-    use gs2_layouts, only: xxf_lo, yxf_lo
+    use gs2_layouts, only: xxf_lo, yxf_lo, &
+        it_idx, ik_idx, ie_idx, il_idx, is_idx, isign_idx, ig_idx ! NDCTESTnlplot
     use prof, only: prof_entering, prof_leaving
     use redistribute, only: gather
     implicit none
@@ -1376,6 +1378,11 @@ contains
 # else
     real, dimension (:,yxf_lo%llim_proc:), intent(in out) :: yxf
 # endif
+    ! NDCTESTnlplot
+    logical :: is_open
+    logical :: nlplot =.true.
+    integer :: ig,iglo,it,ik,ie,il,is,isgn,iy,iyxf
+    ! endNDCTESTnlplot
 
 
     call prof_entering ("transform_y5d", "gs2_transforms")
@@ -1384,6 +1391,25 @@ contains
 !an FFT routine.
     fft = 0.
     call gather (x2y, xxf, fft)
+
+    ! NDCTESTnlplot
+    inquire(unit=85,opened=is_open)
+    if(nlplot .and. is_open) then
+        do iy=1,yxf_lo%ny
+            do iyxf=yxf_lo%llim_proc,yxf_lo%ulim_proc
+                ig=ig_idx(yxf_lo,iyxf)
+                it=it_idx(yxf_lo,iyxf)
+                ie=ie_idx(yxf_lo,iyxf)
+                il=il_idx(yxf_lo,iyxf)
+                isgn=isign_idx(yxf_lo,iyxf)
+                is=is_idx(yxf_lo,iyxf)
+                if(ig==1 .and. ie==1 .and. il==1 .and. is==1 .and. isgn==1) then
+                    write(85,"(I0,A,I0,A,E14.7,A,E14.7)") it," ",iy," ",real(fft(iy,iyxf))," ",aimag(fft(iy,iyxf)) ! NDCTESTnlplot
+                end if
+            end do
+        end do
+    end if
+    ! endNDCTESTnlplot
 
     ! do ffts
 # if FFT == _FFTW_
@@ -1477,9 +1503,14 @@ contains
 
     do iglo = g_lo%llim_proc, g_lo%ulim_proc
        if (ik_idx(g_lo, iglo) == 1) cycle
-       g(:,:,iglo) = g(:,:,iglo) / 2.0
-       ! NDCTESTnlplot
-       inquire(unit=81, opened=is_open)
+       if(.not. nlplot) then ! NDCTESTnlplot: remove if statement
+           g(:,:,iglo) = g(:,:,iglo) / 2.0
+       end if
+    end do
+    
+    ! NDCTESTnlplot
+    inquire(unit=81, opened=is_open)
+    do iglo = g_lo%llim_proc, g_lo%ulim_proc
        if(nlplot .and. is_open) then
            it=it_idx(g_lo,iglo)
            ik=ik_idx(g_lo,iglo)
@@ -1490,8 +1521,8 @@ contains
                write(81,"(I0,A,I0,A,E14.7)") it," ",ik," ",real(g(1,1,iglo)) ! NDCTESTnlplot
            end if
        end if
-       ! endNDCTESTnlplot
     end do
+    ! endNDCTESTnlplot
 
     call transform_x (g, xxf)
     

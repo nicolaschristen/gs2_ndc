@@ -556,13 +556,17 @@ contains
     if(nlplot .or. nlplot2) then
         write(istep_str,"(I0)") istep
         if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-            open(81,file="/home/christenl/data/flowtest/nonlin/nlplot/fft_kxky_"//trim(istep_str)//".dat",status="replace")
-            open(82,file="/home/christenl/data/flowtest/nonlin/nlplot/fft_xky_"//trim(istep_str)//".dat",status="replace")
-            open(83,file="/home/christenl/data/flowtest/nonlin/nlplot/fft_xy_"//trim(istep_str)//".dat",status="replace")
+            open(81,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_kxky_"//trim(istep_str)//".dat",status="replace")
+            open(82,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_xky_"//trim(istep_str)//".dat",status="replace")
+            open(83,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_xystar_"//trim(istep_str)//".dat",status="replace")
+            open(84,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_kxky_padx_"//trim(istep_str)//".dat",status="replace")
+            open(85,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_xky_padxy_"//trim(istep_str)//".dat",status="replace")
         else
-            open(81,file="/home/christenl/data/flowtest/nonlin/nlplot/fft_kxky_"//trim(istep_str)//"_old.dat",status="replace")
-            open(82,file="/home/christenl/data/flowtest/nonlin/nlplot/fft_xky_"//trim(istep_str)//"_old.dat",status="replace")
-            open(83,file="/home/christenl/data/flowtest/nonlin/nlplot/fft_xy_"//trim(istep_str)//"_old.dat",status="replace")
+            open(81,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_kxky_"//trim(istep_str)//"_old.dat",status="replace")
+            open(82,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_xky_"//trim(istep_str)//"_old.dat",status="replace")
+            open(83,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_xy_"//trim(istep_str)//"_old.dat",status="replace")
+            open(84,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_kxky_padx_"//trim(istep_str)//"_old.dat",status="replace")
+            open(85,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_xky_padxy_"//trim(istep_str)//"_old.dat",status="replace")
         end if
         !if(istep==1) then
         !    write(83,"(A)") "we are in advance_implicit"
@@ -771,6 +775,8 @@ contains
         close(81)
         close(82)
         close(83)
+        close(84)
+        close(85)
     end if
     ! endNDCTESTnlplot
 

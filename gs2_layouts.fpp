@@ -4014,7 +4014,8 @@ contains
     xxf_lo%nsign = nsign
     xxf_lo%naky = naky
     xxf_lo%ntheta0 = ntheta0
-    if (nx > ntheta0) then
+    !if (nx > ntheta0) then ! NDCTESTnlplot uncomment
+    if (nx >= ntheta0) then ! NDCTESTnlplot delete
        xxf_lo%nx = nx
     else
        xxf_lo%nx = (3*ntheta0+1)/2
@@ -4984,12 +4985,14 @@ contains
     if (initialized_y_transform) return
     initialized_y_transform = .true.
 
-    if (nx > ntheta0) then
+    !if (nx > ntheta0) then ! NDCTESTnlplot uncomment
+    if (nx >= ntheta0) then ! NDCTESTnlplot delete
        nnx = nx
     else
        nnx = (3*ntheta0+1)/2
     end if
-    if (ny > naky) then
+    !if (ny > naky) then ! NDCTESTnlplot uncomment
+    if (ny >= naky) then ! NDCTESTnlplot delete
        nny = ny
     else
        nny = 3*naky

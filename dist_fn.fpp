@@ -4188,7 +4188,7 @@ endif
                  remap_period = 0. ! NDCTESTnl
                  dkx = akx(2) - akx(1) ! NDCTESTnl
                  do ik = 2, naky ! ky=0 is never re-mapped
-                     remap_period(ik) = dkx/(g_exb*aky(ik)) ! NDCTESTnl
+                     remap_period(ik) = abs(dkx/(g_exb*aky(ik))) ! NDCTESTnl
                  end do
              end if
           else
@@ -4518,7 +4518,14 @@ endif
     if ( box .or. shat .eq. 0.0 ) then
        do ik=1, naky
           kx_shift(ik) = kx_shift(ik) - aky(ik)*g_exb*g_exbfac*gdt*tunits(ik)
+          ! NDCTESTnlplot: uncomment next line, delete the rest
           jump(ik) = nint(kx_shift(ik)/dkx)
+          !if(g_exb>0.) then
+          !    jump(ik) = ceiling(kx_shift(ik)/dkx)
+          !else
+          !    jump(ik) = floor(kx_shift(ik)/dkx)
+          !end if
+          ! endNDCTESTnlplot
           kx_shift(ik) = kx_shift(ik) - jump(ik)*dkx
           ! write(*,*) "jump(",ik,") = ", jump(ik) ! NDCTEST
           ! In flow-shear cases, kx_shift_old is kx_shift at the previous time-step with ExB jumps taken into account, ie:
@@ -4528,18 +4535,18 @@ endif
               
               !kx_shift_old(ik) = kx_shift_old(ik) - jump(ik)*dkx
               kx_shift_old(ik) = kx_shift(ik) + aky(ik)*g_exb*g_exbfac*gdt*tunits(ik) ! undo last time-step
-              
-              ! NDCTESTnl
-              if(t_last_jump(ik)==0. .and. jump(ik)/=0) then
-                  first_jump_fac = 1.
-              else
-                  first_jump_fac = 0.
-              end if
-              t_last_jump(ik) = t_last_jump(ik) + (abs(jump(ik))-0.5*first_jump_fac)*remap_period(ik)*g_exbfac
-              ! endNDCTESTnl
 
           end if
           ! endNDCTESTkxshift
+              
+          ! NDCTESTnl: move the follwing into a flowshear if statement and remove first_jump_fac
+          if(t_last_jump(ik)==0. .and. jump(ik)/=0) then
+              first_jump_fac = 0.
+          else
+              first_jump_fac = 0.
+          end if
+          t_last_jump(ik) = t_last_jump(ik) + (abs(jump(ik))-0.5*first_jump_fac)*remap_period(ik)*g_exbfac
+          ! endNDCTESTnl
        end do
        !do ig = -ntgrid,ntgrid
        !   write(*,*) theta(ig) ! NDCTEST
@@ -4753,7 +4760,6 @@ endif
                    ! NDCTESTnlplot
                    if(nlplot) then
                        phi(:,ikx_indexed(it),ik) = exp(-1.*alpha_x*((akx(ikx_indexed(it))-(jump(ik)+mycount(ik))*dkx)**2))*exp(-1.*alpha_y*(aky(ik)**2))
-                       mycount(ik) = mycount(ik) + jump(ik)
                    else
                        phi(:,ikx_indexed(it),ik) = 0.
                    end if
@@ -4827,6 +4833,11 @@ endif
                    enddo
                 enddo
              enddo
+             ! NDCTESTnlplot
+             if(nlplot) then
+                 mycount(ik) = mycount(ik) + jump(ik)
+             end if
+             ! endNDCTESTnlplot
           endif
 
           if (jump(ik) > 0) then 
@@ -4838,7 +4849,6 @@ endif
                    ! NDCTESTnlplot
                    if(nlplot) then
                        phi(:,ikx_indexed(it),ik) = exp(-1.*alpha_x*((akx(ikx_indexed(it))-(jump(ik)+mycount(ik))*dkx)**2))*exp(-1.*alpha_y*(aky(ik)**2))
-                       mycount(ik) = mycount(ik) + jump(ik)
                    else
                        phi(:,ikx_indexed(it),ik) = 0.
                    end if
@@ -4912,6 +4922,11 @@ endif
                    enddo
                 enddo
              enddo
+             ! NDCTESTnlpot
+             if(nlplot) then
+                 mycount(ik) = mycount(ik) + jump(ik)
+             end if
+             ! endNDCTESTnlpot
           endif
        enddo
 
