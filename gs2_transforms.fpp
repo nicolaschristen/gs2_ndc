@@ -257,11 +257,11 @@ contains
           do ik = 1, naky
               if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then ! NDCTESTnlplot remove if statement and realign
                   ! NDCTESTnlplot: transform to y**
-                  flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*(maxval(t_last_jump)-t_last_jump(ik))*x_grid(ix))
+                  !flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*(maxval(t_last_jump)-t_last_jump(ik))*x_grid(ix))
                   ! NDCTESTnlplot: transform to y*
                   !flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*t_last_jump(ik)*x_grid(ix))
                   ! NDCTESTnlplot: transform to y
-                  !flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*(code_time-t_last_jump(ik))*x_grid(ix))
+                  flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*(code_time-t_last_jump(ik))*x_grid(ix))
               else
                   ! NDCTESTnlplot: next line is to visualize in lab frame, remove it.
                   flowshear_phase_fac(ix,ik) = 1.
