@@ -115,7 +115,7 @@ module gs2_transforms
 #endif
 
   real, dimension(:), allocatable :: x_grid ! NDCTESTnl
-  real, dimension(:), allocatable :: y_grid ! NDCTESTnlplot
+  real, dimension(:), allocatable :: y_grid ! NDCTESTremap_plot
   complex, dimension(:,:), allocatable :: flowshear_phase_fac ! NDCTESTnl
 
 contains
@@ -130,7 +130,7 @@ contains
     use gs2_layouts, only: fft_wisdom_file, fft_use_wisdom, fft_measure_plan
     use fft_work, only: load_wisdom, save_wisdom, measure_plan
     use kt_grids, only: akx, explicit_flowshear, implicit_flowshear, mixed_flowshear ! NDCTESTnl
-    use kt_grids, only: aky ! NDCTESTnlplot
+    use kt_grids, only: aky ! NDCTESTremap_plot
     use constants, only: pi ! NDCTESTnl
     implicit none
     integer, intent (in) :: ntgrid, naky, ntheta0, nlambda, negrid, nspec
@@ -139,10 +139,11 @@ contains
     logical, parameter :: debug = .false.
     real :: dkx, dx ! NDCTESTnl
     integer :: ix ! NDCTESTnl
-    ! NDCTESTnlplot
+    ! NDCTESTremap_plot
+    logical :: remap_plot = .true.
     real :: dky, dy
     integer :: iy
-    ! endNDCTESTnlplot
+    ! endNDCTESTremap_plot
 
     character (1) :: char
 ! CMR, 12/2/2010:  return correct status of "accelerated" even if already initialised
@@ -194,32 +195,32 @@ contains
     if (proc0.and.fft_use_wisdom) call save_wisdom(trim(fft_wisdom_file))
 
     ! NDCTESTnl
-    ! NDCTESTnlplot: in if statement, remove last logical
-    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. (.not. mixed_flowshear)) then
+    ! NDCTESTremap_plot: in if statement, remove last logical
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. remap_plot) then
 
         if(.not. allocated(x_grid)) then
             allocate(x_grid(nx))
-            allocate(y_grid(ny)) ! NDCTESTnlplot
+            allocate(y_grid(ny)) ! NDCTESTremap_plot
             allocate(flowshear_phase_fac(nx,naky))
             flowshear_phase_fac = 1.
         end if
         
-        open(71,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/x_grid.dat",status="replace") ! NDCTESTnlplot
+        open(71,file="/home/christenl/data/gs2/flowtest/nonlin/nlfelix2/x_grid.dat",status="replace") ! NDCTESTremap_plot
         dkx = akx(2)-akx(1)
         dx = 1./(nx-1) * 2.*pi/dkx
 
         do ix = 1, nx/2+1
             x_grid(ix) = (ix-1)*dx
-            write(71,"(E14.7)") x_grid(ix)
+            write(71,"(E14.7)") x_grid(ix) ! NDCTESTremap_plot
         end do
         do ix = nx/2+2, nx
             x_grid(ix) = (ix-nx-1)*dx
-            write(71,"(E14.7)") x_grid(ix)
+            write(71,"(E14.7)") x_grid(ix) ! NDCTESTremap_plot
         end do
-        close(71) ! NDCTESTnlplot
+        close(71) ! NDCTESTremap_plot
        
-        ! NDCTESTnlplot
-        open(72,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/y_grid.dat",status="replace")
+        ! NDCTESTremap_plot
+        open(72,file="/home/christenl/data/gs2/flowtest/nonlin/nlfelix2/y_grid.dat",status="replace")
         dky = aky(2)-aky(1)
         dy = 1./(ny-1) * 2.*pi/dky
 
@@ -232,7 +233,7 @@ contains
             write(72,"(E14.7)") y_grid(iy)
         end do
         close(72)
-        ! endNDCTESTnlplot
+        ! endNDCTESTremap_plot
 
     end if
     ! endNDCTESTnl
@@ -243,7 +244,7 @@ contains
   subroutine update_flowshear_phase_fac(g_exb)
       
       use kt_grids, only: nx, naky, aky, &
-          explicit_flowshear, implicit_flowshear, mixed_flowshear ! NDCTESTnlplot
+          explicit_flowshear, implicit_flowshear, mixed_flowshear ! NDCTESTremap_plot
       use dist_fn_arrays, only: t_last_jump
       use gs2_time, only: code_time
       use constants, only: zi
@@ -255,15 +256,15 @@ contains
       
       do ix = 1, nx
           do ik = 1, naky
-              if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then ! NDCTESTnlplot remove if statement and realign
-                  ! NDCTESTnlplot: transform to y**
+              if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then ! NDCTESTremap_plot remove if statement and realign
+                  ! NDCTESTremap_plot: transform to y**
                   !flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*(maxval(t_last_jump)-t_last_jump(ik))*x_grid(ix))
-                  ! NDCTESTnlplot: transform to y*
-                  !flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*t_last_jump(ik)*x_grid(ix))
-                  ! NDCTESTnlplot: transform to y
+                  ! NDCTESTremap_plot: transform to y*
+                  !flowshear_phase_fac(ix,ik) = exp(zi*aky(ik)*g_exb*t_last_jump(ik)*x_grid(ix))
+                  ! NDCTESTremap_plot: transform to y
                   flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*(code_time-t_last_jump(ik))*x_grid(ix))
               else
-                  ! NDCTESTnlplot: next line is to visualize in lab frame, remove it.
+                  ! NDCTESTremap_plot: next line is to visualize in lab frame, remove it.
                   flowshear_phase_fac(ix,ik) = 1.
               end if
           end do
@@ -313,9 +314,6 @@ contains
 
 # elif FFT == _FFTW3_
 
-       write(*,*) 'Hello from init_x_transform, xxf dim :'! NDCTESTnlplot
-       write(*,*) xxf_lo%nx, xxf_lo%llim_proc, ':', xxf_lo%ulim_alloc! NDCTESTnlplot
-       write(*,*) ! NDCTESTnlplot
        if (.not.allocated(xxf)) then
           allocate (xxf(xxf_lo%nx,xxf_lo%llim_proc:xxf_lo%ulim_alloc))
        endif
@@ -1221,10 +1219,10 @@ contains
     use gs2_layouts, only: xxf_lo, g_lo
     use prof, only: prof_entering, prof_leaving
     use redistribute, only: gather
-    ! NDCTESTnlplot
+    ! NDCTESTremap_plot
     use gs2_layouts, only: it_idx, ik_idx, ie_idx, il_idx, is_idx, isign_idx, ig_idx
     use theta_grid, only: ntgrid
-    ! endNDCTESTnlplot
+    ! endNDCTESTremap_plot
     implicit none
     complex, dimension (-xxf_lo%ntgrid:,:,g_lo%llim_proc:), intent (in) :: g
     complex, dimension (:,xxf_lo%llim_proc:), intent (out) :: xxf
@@ -1232,11 +1230,6 @@ contains
     complex, dimension(:), allocatable :: aux
     integer :: i
 # endif
-    ! NDCTESTnlplot
-    logical :: is_open
-    logical :: nlplot =.true.
-    integer :: ig,iglo,it,ik,ie,il,is,isgn,ix,ixxf
-    ! endNDCTESTnlplot
 
     call prof_entering ("transform_x5d", "gs2_transforms")
 
@@ -1245,44 +1238,7 @@ contains
 !CMR, 7/3/2011: gather pulls appropriate pieces of g onto this processor for
 !    local Fourier transform in x, and may also pad with zeros for dealiasing
 !
-    ! NDCTESTnlplot
-    !write(*,*) 'Hello from transform_x5d, going in!'
-    !inquire(unit=91,opened=is_open)
-    !if(nlplot .and. is_open) then
-    !    do ig=-ntgrid,ntgrid
-    !        do iglo=g_lo%llim_proc,g_lo%ulim_proc
-    !            it=it_idx(g_lo,iglo)
-    !            ik=ik_idx(g_lo,iglo)
-    !            ie=ie_idx(g_lo,iglo)
-    !            il=il_idx(g_lo,iglo)
-    !            is=is_idx(g_lo,iglo)
-    !            if(ig==1 .and. ie==1 .and. il==1 .and. is==1) then
-    !                write(91,"(A3,A3)") it, ik
-    !                write(91,"(E5.2,A5,E5.2)") real(g(ig,1,iglo)),'+ i*', aimag(g(ig,1,iglo))
-    !            end if
-    !        end do
-    !    end do
-    !end if
-    ! endNDCTESTnlplot
     call gather (g2x, g, xxf)
-    ! NDCTESTnlplot
-    inquire(unit=84,opened=is_open)
-    if(nlplot .and. is_open) then
-        do ix=1,xxf_lo%nx
-            do ixxf=xxf_lo%llim_proc,xxf_lo%ulim_proc
-                ig=ig_idx(xxf_lo,ixxf)
-                ik=ik_idx(xxf_lo,ixxf)
-                ie=ie_idx(xxf_lo,ixxf)
-                il=il_idx(xxf_lo,ixxf)
-                isgn=isign_idx(xxf_lo,ixxf)
-                is=is_idx(xxf_lo,ixxf)
-                if(ig==1 .and. ie==1 .and. il==1 .and. is==1 .and. isgn==1) then
-                    write(84,"(I0,A,I0,A,E14.7)") ix," ",ik," ",real(xxf(ix,ixxf)) ! NDCTESTnlplot
-                end if
-            end do
-        end do
-    end if
-    ! endNDCTESTnlplot
 
     ! do ffts
 # if FFT == _FFTW_
@@ -1294,34 +1250,13 @@ contains
     !JH to be xxf_lo%llim_proc in this situation, and that will give 
     !JH 1 FFT to be calculated which the code can correctly undertake.
     i = xxf_lo%ulim_alloc - xxf_lo%llim_proc + 1
-    !write(*,*) 'Hello from transform_x5d, i =', i ! NDCTESTnlplot
 
     allocate (aux(xf_fft%n))
     call fftw_f77 (xf_fft%plan, i, xxf, 1, xxf_lo%nx, aux, 0, 0)
     deallocate (aux)
 # elif FFT == _FFTW3_
-    !write(*,*) 'Hello from transform_x5d, calling FFTW_PREFIX' ! NDCTESTnlplot
     call FFTW_PREFIX(_execute)(xf_fft%plan)
 # endif
-    ! NDCTESTnlplot
-    !inquire(unit=93,opened=is_open)
-    !if(nlplot .and. is_open) then
-    !    do ix=1,xxf_lo%nx
-    !        do ixxf=xxf_lo%llim_proc,xxf_lo%ulim_proc
-    !            ig=ig_idx(xxf_lo,ixxf)
-    !            ik=ik_idx(xxf_lo,ixxf)
-    !            ie=ie_idx(xxf_lo,ixxf)
-    !            il=il_idx(xxf_lo,ixxf)
-    !            isgn=isign_idx(xxf_lo,ixxf)
-    !            is=is_idx(xxf_lo,ixxf)
-    !            if(ig==1 .and. ie==1 .and. il==1 .and. is==1 .and. isgn==1) then
-    !                write(93,"(A3,A3)") ix, ik
-    !                write(93,"(E5.2,A5,E5.2)") real(xxf(ix,ixxf)),'+ i*', aimag(xxf(ix,ixxf))
-    !            end if
-    !        end do
-    !    end do
-    !end
-    ! endNDCTESTnlplotf
 
     call prof_leaving ("transform_x5d", "gs2_transforms")
   end subroutine transform_x5d
@@ -1364,8 +1299,7 @@ contains
   end subroutine inverse_x5d
 
   subroutine transform_y5d (xxf, yxf)
-    use gs2_layouts, only: xxf_lo, yxf_lo, &
-        it_idx, ik_idx, ie_idx, il_idx, is_idx, isign_idx, ig_idx ! NDCTESTnlplot
+    use gs2_layouts, only: xxf_lo, yxf_lo
     use prof, only: prof_entering, prof_leaving
     use redistribute, only: gather
     implicit none
@@ -1378,12 +1312,6 @@ contains
 # else
     real, dimension (:,yxf_lo%llim_proc:), intent(in out) :: yxf
 # endif
-    ! NDCTESTnlplot
-    logical :: is_open
-    logical :: nlplot =.true.
-    integer :: ig,iglo,it,ik,ie,il,is,isgn,iy,iyxf
-    ! endNDCTESTnlplot
-
 
     call prof_entering ("transform_y5d", "gs2_transforms")
 
@@ -1391,25 +1319,6 @@ contains
 !an FFT routine.
     fft = 0.
     call gather (x2y, xxf, fft)
-
-    ! NDCTESTnlplot
-    inquire(unit=85,opened=is_open)
-    if(nlplot .and. is_open) then
-        do iy=1,yxf_lo%ny
-            do iyxf=yxf_lo%llim_proc,yxf_lo%ulim_proc
-                ig=ig_idx(yxf_lo,iyxf)
-                it=it_idx(yxf_lo,iyxf)
-                ie=ie_idx(yxf_lo,iyxf)
-                il=il_idx(yxf_lo,iyxf)
-                isgn=isign_idx(yxf_lo,iyxf)
-                is=is_idx(yxf_lo,iyxf)
-                if(ig==1 .and. ie==1 .and. il==1 .and. is==1 .and. isgn==1) then
-                    write(85,"(I0,A,I0,A,E14.7,A,E14.7)") it," ",iy," ",real(fft(iy,iyxf))," ",aimag(fft(iy,iyxf)) ! NDCTESTnlplot
-                end if
-            end do
-        end do
-    end if
-    ! endNDCTESTnlplot
 
     ! do ffts
 # if FFT == _FFTW_
@@ -1466,21 +1375,21 @@ contains
   subroutine transform2_5d (g, yxf)
     use gs2_layouts, only: g_lo, yxf_lo, ik_idx, &
         xxf_lo ! NDCTESTnl
-    use gs2_layouts, only: ie_idx,il_idx,is_idx,isign_idx,ig_idx,it_idx ! NDCTESTnlplot
+    use gs2_layouts, only: ie_idx,il_idx,is_idx,isign_idx,ig_idx,it_idx ! NDCTESTremap_plot
     use unit_tests,only: debug_message
     use constants, only: zi ! NDCTESTnl
     use kt_grids, only: nx, aky, explicit_flowshear, implicit_flowshear, mixed_flowshear ! NDCTESTnl
-    use kt_grids, only: ny ! NDCTESTnlplot
+    use kt_grids, only: ny ! NDCTESTremap_plot
     use gs2_time, only: code_time ! NDCTESTnl
     implicit none
     complex, dimension (:,:,g_lo%llim_proc:), intent (in out) :: g
     real, dimension (:,yxf_lo%llim_proc:), intent (out) :: yxf
     integer :: iglo
     integer :: ix, ik, ixxf ! NDCTESTnl
-    integer :: ig,ie,il,is,isgn,it, iy, iyxf ! NDCTESTnlplot
-    logical :: nlplot=.true. ! NDCTESTnlplot
-    logical :: nlplot2=.true. ! NDCTESTnlplot
-    logical :: is_open ! NDCTESTnlplot
+    integer :: ig,ie,il,is,isgn,it, iy, iyxf ! NDCTESTremap_plot
+    logical :: remap_plot_shear =.false. ! NDCTESTremap_plot
+    logical :: remap_plot_nl =.true. ! NDCTESTremap_plot
+    logical :: is_open ! NDCTESTremap_plot
 
     call debug_message(4, 'gs2_transforms::transform2_5d starting')
 
@@ -1499,81 +1408,31 @@ contains
 !       e.g. fac in get_volume_average
 !
 
-    !write(83,"(A)") "we are in transform2_5d" ! NDCTESTnlplot
-
     do iglo = g_lo%llim_proc, g_lo%ulim_proc
        if (ik_idx(g_lo, iglo) == 1) cycle
-       if(.not. nlplot) then ! NDCTESTnlplot: remove if statement
+       if(.not. (remap_plot_shear .or. remap_plot_nl)) then ! NDCTESTremap_plot: remove if statement
            g(:,:,iglo) = g(:,:,iglo) / 2.0
        end if
     end do
-    
-    ! NDCTESTnlplot
-    inquire(unit=81, opened=is_open)
-    do iglo = g_lo%llim_proc, g_lo%ulim_proc
-       if(nlplot .and. is_open) then
-           it=it_idx(g_lo,iglo)
-           ik=ik_idx(g_lo,iglo)
-           ie=ie_idx(g_lo,iglo)
-           il=il_idx(g_lo,iglo)
-           is=is_idx(g_lo,iglo)
-           if(ie==1 .and. il==1 .and. is==1) then
-               write(81,"(I0,A,I0,A,E14.7)") it," ",ik," ",real(g(1,1,iglo)) ! NDCTESTnlplot
-           end if
-       end if
-    end do
-    ! endNDCTESTnlplot
 
     call transform_x (g, xxf)
     
-    ! NDCTESTnl
-    ! NDCTESTnlplot: put following loop inside flowshear if statement
-    do ix = 1, nx
-        do ixxf = xxf_lo%llim_proc, xxf_lo%ulim_proc
-            ik = ik_idx(xxf_lo, ixxf)
-            ! multiply by the phase factor
-            xxf(ix, ixxf) = xxf(ix, ixxf) * flowshear_phase_fac(ix,ik)
-            ! NDCTESTnlplot
-            inquire(unit=82, opened=is_open)
-            if(nlplot .and. is_open) then
-                ie=ie_idx(xxf_lo,ixxf)
-                il=il_idx(xxf_lo,ixxf)
-                is=is_idx(xxf_lo,ixxf)
-                ig=ig_idx(xxf_lo,ixxf)
-                isgn=isign_idx(xxf_lo,ixxf)
-                if(ie==1 .and. il==1 .and. is==1 .and. isgn==1 .and. ig==1) then
-                    write(82,"(I0,A,I0,A,E14.7,A,E14.7)") ix," ",ik," ",real(xxf(ix,ixxf))," ",aimag(xxf(ix,ixxf)) ! NDCTESTnlplot
-                end if
-            end if
-            ! endNDCTESTnlplot
+    ! NDCTESTnl: multiply by phase factor
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+        do ix = 1, nx
+            do ixxf = xxf_lo%llim_proc, xxf_lo%ulim_proc
+                ik = ik_idx(xxf_lo, ixxf)
+                xxf(ix, ixxf) = xxf(ix, ixxf) * flowshear_phase_fac(ix,ik)
+            end do
         end do
-    end do
+    end if
     ! endNDCTESTnl
 
-    ! NDCTESTnlplot
-    !if(nlplot2) then
-    !    do ix = 1, nx
-    !        do ixxf = xxf_lo%llim_proc, xxf_lo%ulim_proc
-    !            ik = ik_idx(xxf_lo, ixxf)
-    !            ie=ie_idx(xxf_lo,ixxf)
-    !            il=il_idx(xxf_lo,ixxf)
-    !            is=is_idx(xxf_lo,ixxf)
-    !            ig=ig_idx(xxf_lo,ixxf)
-    !            isgn=isign_idx(xxf_lo,ixxf)
-    !            if(ie==1 .and. il==1 .and. is==1 .and. isgn==1 .and. ig==1) then
-    !                write(83,"(I2,I2,I2,I2,I2)") ix,ik,ie,il,is ! NDCTESTnlplot
-    !                write(83,"(ES10.3)") xxf(ix,ixxf) ! NDCTESTnlplot
-    !            end if
-    !        end do
-    !    end do
-    !end if
-    ! endNDCTESTnlplot
-
     call transform_y (xxf, yxf)
-    
-    ! NDCTESTnlplot
+
+    ! NDCTESTremap_plot
     inquire(unit=83,opened=is_open)
-    if((nlplot .or. nlplot2) .and. is_open) then
+    if(remap_plot_shear .and. is_open) then
         do iy = 1, ny
             do iyxf = yxf_lo%llim_proc, yxf_lo%ulim_proc
                 it=it_idx(yxf_lo,iyxf)
@@ -1583,12 +1442,12 @@ contains
                 ig=ig_idx(yxf_lo,iyxf)
                 isgn=isign_idx(yxf_lo,iyxf)
                 if(ie==1 .and. il==1 .and. is==1 .and. isgn==1 .and. ig==1) then
-                    write(83,"(I0,A,I0,A,E14.7)") it," ",iy," ",yxf(iy,iyxf) ! NDCTESTnlplot
+                    write(83,"(I0,A,I0,A,E14.7)") it," ",iy," ",yxf(iy,iyxf) ! NDCTESTremap_plot
                 end if
             end do
         end do
     end if
-    ! endNDCTESTnlplot
+    ! endNDCTESTremap_plot
   end subroutine transform2_5d
 
   subroutine inverse2_5d (yxf, g)

@@ -119,7 +119,7 @@ contains
     implicit none
 
     logical :: debug=.false.
-    logical :: nlplot=.true. ! NDCTESTnlplot
+    logical :: remap_plot=.true. ! NDCTESTremap_plot
 
     if (initialized) return
     initialized = .true.
@@ -144,8 +144,8 @@ contains
         ! Must be done before resp. m.
         !if (run_scan) call set_scan_parameter(dummy)
     if (debug) write(6,*) "init_fields_implicit: response_matrix"
-    ! NDCTESTnlplot
-    if(.not. nlplot) then
+    ! NDCTESTremap_plot
+    if(.not. remap_plot) then
         call init_response_matrix
     end if
     if (debug) write(6,*) "init_fields_implicit: antenna"
@@ -166,20 +166,21 @@ contains
     use dist_fn, only: get_init_field
     use init_g, only: new_field_init
     use mp, only: iproc
-    ! NDCTESTnlplot
+    ! NDCTESTremap_plot
     use kt_grids, only: akx, aky, naky, ntheta0
     use constants, only: pi
-    ! endNDCTESTnlplot
+    use gs2_layouts, only: g_lo,ik_idx,it_idx
+    ! endNDCTESTremap_plot
 
     implicit none
 
     logical, optional :: gf_lo
     logical :: local_gf_lo
-    ! NDCTESTnlplot
-    logical :: nlplot=.true.
+    ! NDCTESTremap_plot
+    logical :: remap_plot=.true.
     real :: dkx, dky, alpha_x, alpha_y
-    integer :: ik, it
-    ! endNDCTESTnlplot
+    integer :: ik, it,iglo
+    ! endNDCTESTremap_plot
 
     if(present(gf_lo)) then
       local_gf_lo = gf_lo
@@ -195,19 +196,29 @@ contains
        !AJ fields redistribute.
        g = gnew
     else if (new_field_init) then
-       ! NDCTESTnlplot
-       if(nlplot) then
+       ! NDCTESTremap_plot
+       if(remap_plot) then
            write(*,*) 'Initializing phi to Gaussian'
            dkx = akx(2)-akx(1)
            dky = aky(2)-aky(1)
+           alpha_x = 1./64. * (2.*pi/dkx)**2 ! -> exp(-x**2/sig_x**2) with sig_x = 2*sqrt(alpha_x) = Lx
+           alpha_y = 1./256. * (2.*pi/dky)**2 ! -> exp(-y**2/sig_y**2) with sig_y = 2*sqrt(alpha_y) = Ly
+
+           ! Gaussian in phi
            do ik = 1, naky
                do it = 1, ntheta0
-                   alpha_x = 1./64. * (2.*pi/dkx)**2 ! -> exp(-x**2/(Lx/4)**2)
-                   alpha_y = 1./256. * (2.*pi/dky)**2 ! -> exp(-y**2/(Ly/8)**2)
-                   phinew(:,it,ik) = exp(-1.*alpha_x*(akx(it)**2))*exp(-1.*alpha_y*(aky(ik)**2))
+                   phinew(:,it,ik) = 100*exp(-1.*alpha_x*(akx(it)**2))*exp(-1.*alpha_y*(aky(ik)**2))
                end do
            end do
            phi = phinew
+
+           ! Gaussian in g
+           do iglo = g_lo%llim_proc, g_lo%ulim_proc
+               ik = ik_idx(g_lo,iglo)
+               it = it_idx(g_lo,iglo)
+               gnew(:,:,iglo) = exp(-1.*alpha_y*(akx(it)**2))*exp(-1.*alpha_x*(aky(ik)**2))
+           end do
+           g = gnew
        else
            call get_init_field (phinew, aparnew, bparnew)
            phi = phinew; apar = aparnew; bpar = bparnew; g = gnew
@@ -513,22 +524,22 @@ contains
         update_kperp2_tdep, update_aj0_tdep, update_gamtot_tdep, compute_wdrift, init_invert_rhs, &
         update_wdrift_tdep, &
         gamtot, getan ! NDCTESTmichael
-    use dist_fn, only: g_exb ! NDCTESTnlplot
+    use dist_fn, only: g_exb ! NDCTESTremap_plot
     use dist_fn_arrays, only: g, gnew, kx_shift, theta0_shift, &
         gamtot_tdep ! NDCTESTmichael
     use unit_tests, only: debug_message
     use mp, only: iproc
     use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear, &
         naky, ntheta0 ! NDCTESTmichael
-    use kt_grids, only: nx, ny, akx, aky ! NDCTESTnlplot
+    use kt_grids, only: nx, ny, akx, aky ! NDCTESTremap_plot
     use theta_grid, only: ntgrid ! NDCTESTmichael
     use mp, only: proc0 ! NDCTEST
     use job_manage, only: time_message ! NDCTESTtime
-    use gs2_layouts, only: g_lo, yxf_lo, ig_idx, it_idx, ik_idx, isign_idx, is_idx, ie_idx, il_idx ! NDCTESTnlplot
-    use gs2_transforms, only: transform2, update_flowshear_phase_fac, init_transforms ! NDCTESTnlplot
-    use constants, only: pi ! NDCTESTnlplot
-    use le_grids, only: nlambda, negrid ! NDCTESTnlplot
-    use species, only: nspec ! NDCTESTnlplot
+    use gs2_layouts, only: g_lo, yxf_lo, ig_idx, it_idx, ik_idx, isign_idx, is_idx, ie_idx, il_idx ! NDCTESTremap_plot
+    use gs2_transforms, only: transform2, update_flowshear_phase_fac, init_transforms ! NDCTESTremap_plot
+    use constants, only: pi ! NDCTESTremap_plot
+    use le_grids, only: nlambda, negrid ! NDCTESTremap_plot
+    use species, only: nspec ! NDCTESTremap_plot
     !use gs2_layouts, only: g_lo, idx ! NDCTESTdist
     implicit none
     integer :: diagnostics = 1
@@ -543,42 +554,25 @@ contains
     complex, dimension(:,:,:), allocatable :: dummy1, dummy2 ! NDCTESTmichaelnew
     !integer :: isgn, il, ie, is, iglo ! NDCTESTdist
     !character(len=20) :: my_format ! NDCTESTdist
-    ! NDCTESTnlplot
-    logical :: nlplot=.true.
-    logical :: nlplot2=.true.
+    ! NDCTESTremap_plot
+    logical :: remap_plot_shear=.false.
+    logical :: remap_plot_nl=.true.
     integer :: iglo,iy,ix,ie,il,is,isgn,iyxf
     real, dimension(:,:), allocatable :: fft_out
     complex, dimension(:,:,:), allocatable :: phi_5d
     character(5) :: istep_str
-    ! endNDCTESTnlplot
+    ! endNDCTESTremap_plot
     
-    ! NDCTESTnlplot
-    if(nlplot .or. nlplot2) then
+    ! NDCTESTremap_plot
+    if(remap_plot_shear .or. remap_plot_nl) then
         write(istep_str,"(I0)") istep
         if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-            open(81,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_kxky_"//trim(istep_str)//".dat",status="replace")
-            open(82,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_xky_"//trim(istep_str)//".dat",status="replace")
-            open(83,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_xy_"//trim(istep_str)//".dat",status="replace")
-            open(84,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_kxky_padx_"//trim(istep_str)//".dat",status="replace")
-            open(85,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_xky_padxy_"//trim(istep_str)//".dat",status="replace")
+            open(83,file="/home/christenl/data/gs2/flowtest/nonlin/nlfelix2/test_xy_"//trim(istep_str)//"_g_exb.dat",status="replace")
         else
-            open(81,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_kxky_"//trim(istep_str)//"_old.dat",status="replace")
-            open(82,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_xky_"//trim(istep_str)//"_old.dat",status="replace")
-            open(83,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_xy_"//trim(istep_str)//"_old.dat",status="replace")
-            open(84,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_kxky_padx_"//trim(istep_str)//"_old.dat",status="replace")
-            open(85,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/fft_xky_padxy_"//trim(istep_str)//"_old.dat",status="replace")
+            open(83,file="/home/christenl/data/gs2/flowtest/nonlin/nlfelix2/test_xy_"//trim(istep_str)//"_old.dat",status="replace")
         end if
-        !if(istep==1) then
-        !    write(83,"(A)") "we are in advance_implicit"
-        !    do ik = 1, naky
-        !        do it = 1, ntheta0
-        !            write(83,"(ES10.3)") exp(akx(it)**2/(2.*stddev_x**2))
-        !            write(83,"(ES10.3)") exp(aky(ik)**2/(2.*stddev_y**2))
-        !        end do
-        !    end do
-        !end if
     end if
-    ! end NDCTESTnlplot
+    ! end NDCTESTremap_plot
 
     !GGH NOTE: apar_ext is initialized in this call
     if(.not.no_driver) call antenna_amplitudes (apar_ext)
@@ -591,8 +585,8 @@ contains
     apar = aparnew 
     bpar = bparnew       
 
-    ! NDCTESTnlplot
-    if(nlplot) then
+    ! NDCTESTremap_plot
+    if(remap_plot_shear) then
         call update_flowshear_phase_fac(g_exb)
         ! copy phi to 5d array to use modified transform routines
         write(*,*) 'Copying phi to 5d array.'
@@ -610,32 +604,19 @@ contains
         allocate(fft_out(ny,yxf_lo%llim_proc:yxf_lo%ulim_alloc))
         fft_out = 0.
 
-        write(*,*) 'Calling transform2'
-        
         call transform2(phi_5d,fft_out)
- 
-        ! NDCTESTnlplot5d
-        !do iy = 1, ny
-        !    write(83,"(I2)",advance="no") iy
-        !    do iyxf = yxf_lo%llim_proc, yxf_lo%ulim_alloc
-        !        ix = it_idx(yxf_lo,iyxf) 
-        !        ie = ie_idx(yxf_lo,iyxf) 
-        !        il = il_idx(yxf_lo,iyxf) 
-        !        ig = ig_idx(yxf_lo,iyxf) 
-        !        is = is_idx(yxf_lo,iyxf) 
-        !        isgn = isign_idx(yxf_lo,iyxf) 
-        !        if(ie==1 .and. il==1 .and. ig==1 .and. is==1 .and. isgn==1) then
-        !            write(83,"(I2,ES10.2,A)",advance="no") ix, fft_out(iy,iyxf), " "
-        !        end if
-        !    end do
-        !    write(83,*) " " ! newline
-        !end do
                 
         deallocate(phi_5d,fft_out)
+
+    elseif(remap_plot_nl) then
+
+        ! time stepping to evolve g
+        call timeadv(phi, apar, bpar, phinew, aparnew, bparnew, istep)
+
     end if
-    ! endNDCTESTnlplot
+    ! endNDCTESTremap_plot
     
-    if(.not. nlplot) then ! NDCTESTnlplot: remove if statement and align correctly all its content.
+    if(.not. (remap_plot_shear .or. remap_plot_nl)) then ! NDCTESTremap_plot: remove if statement and align correctly all its content.
         ! In cases with flow-shear, after kx_shift got updated in exb_shear,
         ! update time-dependent kperp2, aj0, gamtot, wdrift, wdriftttp, a, b, r, ainv.
         ! NDC 02/2018
@@ -767,18 +748,13 @@ contains
         ! Advance collisions, if separate from timeadv
         call collisions_advance (phi, bpar, phinew, aparnew, bparnew, istep, diagnostics)
 
-    end if ! NDCTESTnlplot: remove end if
+    end if ! NDCTESTremap_plot: remove end if
 
-    ! NDCTESTnlplot
-    if(nlplot) write(*,*) 'At the end of advance_implicit with istep=', istep
-    if(nlplot .or. nlplot2) then
-        close(81)
-        close(82)
+    ! NDCTESTremap_plot
+    if(remap_plot_shear .or. remap_plot_nl) then
         close(83)
-        close(84)
-        close(85)
     end if
-    ! endNDCTESTnlplot
+    ! endNDCTESTremap_plot
 
   end subroutine advance_implicit
 

@@ -4178,8 +4178,10 @@ endif
           if (box .or. shat .eq. 0.0) then
              allocate (kx_shift(naky))
              kx_shift = 0.
-             ! NDCTESTnlplot: in if, remove last logical
+             ! NDCTESTremap_plot: in if, remove last logical
              if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. (.not. mixed_flowshear)) then
+             ! endNDCTESTremap_plot
+             !if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
                  allocate(kx_shift_old(naky))
                  kx_shift_old = 0.
                  allocate(t_last_jump(naky)) ! NDCTESTnl
@@ -4224,6 +4226,9 @@ endif
     use collisions, only: split_collisions
     use job_manage, only: time_message ! NDCTESTtime
     use mp, only: proc0 ! NDCTESTtime
+    ! NDCTESTremap_plot
+    use gs2_time, only: code_dt
+    ! endNDCTESTremap_plot
     implicit none
     complex, dimension (-ntgrid:,:,:), intent (in) :: phi, apar, bpar
     complex, dimension (-ntgrid:,:,:), intent (in) :: phinew, aparnew, bparnew
@@ -4234,99 +4239,132 @@ endif
     integer :: modep
     integer,save :: istep_last=-1
     integer, parameter :: verb = 3
+    ! NDCTESTremap_plot
+    logical :: remap_plot_nl = .true.
+    real :: c0,c1,c2,dt0,dt1,dt2
+    ! endNDCTESTremap_plot
 
-    ! NDCTESTtime
-    if(present(trigger_aminv_opt)) then
-        trigger_timer_aminv2 = trigger_aminv_opt
+    ! NDCTESTremap_plot
+    if(remap_plot_nl) then
+        ! store NL term in gexp_1
+        call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
+            phi, apar, bpar, istep, bkdiff(1))
+
+        ! AB3 coeffs with cst dt
+        dt0 = code_dt
+        dt1 = code_dt
+        dt2 = code_dt
+        c0 = (1. / (dt1 +dt2)) * ( &
+             ((dt0 + dt1)**2./dt1)*( (dt0+dt1)/3. + dt2/2. ) &
+             - dt1*(dt1/3. + dt2/2.) )
+        c1 = - dt0**2. * ( dt0/3. + (dt1+dt2)/2. ) / (dt1*dt2)
+        c2 = dt0**2. * ( dt0/3. + dt1/2. ) / ( dt2*(dt1+dt2) )
+             
+        select case (istep)
+        case (0)
+            ! nothing
+        case (1)
+            gnew = g - code_dt * gexp_1
+        case (2) 
+            gnew = g - code_dt * (1.5*gexp_1 - 0.5*gexp_2)
+        case default
+            ! code_dt is already in the AB3 coeffs
+            gnew = g - (c0*gexp_1 + c1*gexp_2 + c2*gexp_3)
+        end select
     else
-        trigger_timer_aminv2 = .false.
-    end if
-    if(present(trigger_interp_opt)) then
-        trigger_timer_interp2 = trigger_interp_opt
-    else
-        trigger_timer_interp2 = .false.
-    end if
-    ! endNDCTESTtime
+        ! NDCTESTtime
+        if(present(trigger_aminv_opt)) then
+            trigger_timer_aminv2 = trigger_aminv_opt
+        else
+            trigger_timer_aminv2 = .false.
+        end if
+        if(present(trigger_interp_opt)) then
+            trigger_timer_interp2 = trigger_interp_opt
+        else
+            trigger_timer_interp2 = .false.
+        end if
+        ! endNDCTESTtime
 
-    modep = 0
-    if (present(mode)) modep = mode
+        modep = 0
+        if (present(mode)) modep = mode
 
-    ! NDCQUEST: do collisions need the full phi[it+1]? Because in the explicit scheme, the second
-    ! GK solve is done with phi[it+1] containing phistar[it] instead of phistar[it+1].
-    ! If indeed they do need the full phi, there might be a problem: computing phistar[it+1]
-    ! requires the full g[it+1] ...
-    if (istep.eq.0 .or. .not.cllc) then
-!CMR do the usual LC when computing response matrix
-       !Calculate the explicit terms
-       call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
-         phi, apar, bpar, istep, bkdiff(1))
-       call debug_message(verb, &
-        'dist_fn::timeadv calculated nonlinear term')
-       if(reset .and. immediate_reset) return !Return if resetting
-       !Solve for gnew
-       call invert_rhs (phi, apar, bpar, phinew, aparnew, bparnew, istep)
-       call debug_message(verb, &
-        'dist_fn::timeadv calculated rhs')
+        ! NDCQUEST: do collisions need the full phi[it+1]? Because in the explicit scheme, the second
+        ! GK solve is done with phi[it+1] containing phistar[it] instead of phistar[it+1].
+        ! If indeed they do need the full phi, there might be a problem: computing phistar[it+1]
+        ! requires the full g[it+1] ...
+        if (istep.eq.0 .or. .not.cllc) then
+    !CMR do the usual LC when computing response matrix
+           !Calculate the explicit terms
+           call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
+             phi, apar, bpar, istep, bkdiff(1))
+           call debug_message(verb, &
+            'dist_fn::timeadv calculated nonlinear term')
+           if(reset .and. immediate_reset) return !Return if resetting
+           !Solve for gnew
+           call invert_rhs (phi, apar, bpar, phinew, aparnew, bparnew, istep)
+           call debug_message(verb, &
+            'dist_fn::timeadv calculated rhs')
 
-       !Add hyper terms (damping)
-       call hyper_diff (gnew, phinew)
-       call debug_message(verb, &
-        'dist_fn::timeadv calculated hypviscosity')
-       !Add collisions
-       if( .not. split_collisions) then
-         call vspace_derivatives (gnew, g, g0, phi, bpar, phinew, bparnew, modep)
-         call debug_message(verb, &
-          'dist_fn::timeadv calculated collisions etc')
-       end if
-    else if (istep.eq.1 .and. istep.ne.istep_last) then
-!CMR on first half step at istep=1 do CL with all redists
-       if( .not. split_collisions) then
-         call vspace_derivatives (gnew, g, g0, phi, bpar, phinew, bparnew, modep)
-       end if
-       !Calculate the explicit terms
-       call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
-         phi, apar, bpar, istep, bkdiff(1))
-       if(reset) return !Return if resetting
-       !Solve for gnew
-       call invert_rhs (phi, apar, bpar, phinew, aparnew, bparnew, istep)
-       !Add hyper terms (damping)
-       call hyper_diff (gnew, phinew)
-    else if (istep.ne.istep_last) then
-!CMR on first half step do CL with all redists without gtoc redist
-       if( .not. split_collisions) then
-         call vspace_derivatives (gnew, g, g0, phi, bpar, phinew, bparnew, modep,gtoc=.false.)
-       end if
-       !Calculate the explicit terms
-       call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
-         phi, apar, bpar, istep, bkdiff(1))
-       if(reset) return !Return if resetting
-       !Solve for gnew
-       call invert_rhs (phi, apar, bpar, phinew, aparnew, bparnew, istep)
-       !Add hyper terms (damping)
-       call hyper_diff (gnew, phinew)
-    else if (istep.eq.istep_last) then
-!CMR on second half of all timesteps do LC without ctog redist
-       !Calculate the explicit terms 
-       !NB following call should be unnecessary as NL terms not added on second
-       !    half of istep: keeping for now as may be needed by some code
-       call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
-         phi, apar, bpar, istep, bkdiff(1))
-       if(reset) return !Return if resetting
+           !Add hyper terms (damping)
+           call hyper_diff (gnew, phinew)
+           call debug_message(verb, &
+            'dist_fn::timeadv calculated hypviscosity')
+           !Add collisions
+           if( .not. split_collisions) then
+             call vspace_derivatives (gnew, g, g0, phi, bpar, phinew, bparnew, modep)
+             call debug_message(verb, &
+              'dist_fn::timeadv calculated collisions etc')
+           end if
+        else if (istep.eq.1 .and. istep.ne.istep_last) then
+    !CMR on first half step at istep=1 do CL with all redists
+           if( .not. split_collisions) then
+             call vspace_derivatives (gnew, g, g0, phi, bpar, phinew, bparnew, modep)
+           end if
+           !Calculate the explicit terms
+           call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
+             phi, apar, bpar, istep, bkdiff(1))
+           if(reset) return !Return if resetting
+           !Solve for gnew
+           call invert_rhs (phi, apar, bpar, phinew, aparnew, bparnew, istep)
+           !Add hyper terms (damping)
+           call hyper_diff (gnew, phinew)
+        else if (istep.ne.istep_last) then
+    !CMR on first half step do CL with all redists without gtoc redist
+           if( .not. split_collisions) then
+             call vspace_derivatives (gnew, g, g0, phi, bpar, phinew, bparnew, modep,gtoc=.false.)
+           end if
+           !Calculate the explicit terms
+           call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
+             phi, apar, bpar, istep, bkdiff(1))
+           if(reset) return !Return if resetting
+           !Solve for gnew
+           call invert_rhs (phi, apar, bpar, phinew, aparnew, bparnew, istep)
+           !Add hyper terms (damping)
+           call hyper_diff (gnew, phinew)
+        else if (istep.eq.istep_last) then
+    !CMR on second half of all timesteps do LC without ctog redist
+           !Calculate the explicit terms 
+           !NB following call should be unnecessary as NL terms not added on second
+           !    half of istep: keeping for now as may be needed by some code
+           call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
+             phi, apar, bpar, istep, bkdiff(1))
+           if(reset) return !Return if resetting
 
-       !Solve for gnew
-       call invert_rhs (phi, apar, bpar, phinew, aparnew, bparnew, istep)
-       !Add hyper terms (damping)
-       call hyper_diff (gnew, phinew)
-       if( .not. split_collisions) then
-         call vspace_derivatives (gnew, g, g0, phi, bpar, phinew, bparnew, modep, ctog=.false.)
-       end if
-    endif
+           !Solve for gnew
+           call invert_rhs (phi, apar, bpar, phinew, aparnew, bparnew, istep)
+           !Add hyper terms (damping)
+           call hyper_diff (gnew, phinew)
+           if( .not. split_collisions) then
+             call vspace_derivatives (gnew, g, g0, phi, bpar, phinew, bparnew, modep, ctog=.false.)
+           end if
+        endif
 
-    !Enforce parity if desired (also performed in invert_rhs, but this is required
-    !as collisions etc. may break parity?)
-    if (def_parity) call enforce_parity(parity_redist)
-      
-    istep_last=istep
+        !Enforce parity if desired (also performed in invert_rhs, but this is required
+        !as collisions etc. may break parity?)
+        if (def_parity) call enforce_parity(parity_redist)
+          
+        istep_last=istep
+    end if ! NDCTESTnlfelix
 
   end subroutine timeadv
 
@@ -4436,13 +4474,12 @@ endif
     !logical, save :: exb_first = .true.
     complex , dimension(-ntgrid:ntgrid) :: z
     character(130) :: str
-    real :: first_jump_fac=0. ! NDCTESTnl
-    ! NDCTESTnlplot
-    logical :: nlplot=.true.
+    ! NDCTESTremap_plot
+    logical :: remap_plot_shear=.false.
     real :: alpha_x, alpha_y
     real :: dky
     integer, dimension(:), allocatable :: mycount
-    ! endNDCTESTnlplot
+    ! endNDCTESTremap_plot
 
     integer :: ig=0 ! NDCTEST
 
@@ -4518,16 +4555,8 @@ endif
     if ( box .or. shat .eq. 0.0 ) then
        do ik=1, naky
           kx_shift(ik) = kx_shift(ik) - aky(ik)*g_exb*g_exbfac*gdt*tunits(ik)
-          ! NDCTESTnlplot: uncomment next line, delete the rest
           jump(ik) = nint(kx_shift(ik)/dkx)
-          !if(g_exb>0.) then
-          !    jump(ik) = ceiling(kx_shift(ik)/dkx)
-          !else
-          !    jump(ik) = floor(kx_shift(ik)/dkx)
-          !end if
-          ! endNDCTESTnlplot
           kx_shift(ik) = kx_shift(ik) - jump(ik)*dkx
-          ! write(*,*) "jump(",ik,") = ", jump(ik) ! NDCTEST
           ! In flow-shear cases, kx_shift_old is kx_shift at the previous time-step with ExB jumps taken into account, ie:
           ! kx_shift_old(ik) is kx*[it]-kxbar[it+1] -- NDC 02/2018
           ! NDCTESTkxshift
@@ -4538,20 +4567,14 @@ endif
 
           end if
           ! endNDCTESTkxshift
-              
-          ! NDCTESTnl: move the follwing into a flowshear if statement and remove first_jump_fac
-          if(t_last_jump(ik)==0. .and. jump(ik)/=0) then
-              first_jump_fac = 0.
-          else
-              first_jump_fac = 0.
+          
+          ! NDCTESTnl 
+          ! NDCTESTremap_plot: in if, remove last logical
+          if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. (.not. mixed_flowshear)) then
+              t_last_jump(ik) = t_last_jump(ik) + abs(jump(ik))*remap_period(ik)*g_exbfac ! NDCTEST: need gg_exbfac ?
           end if
-          t_last_jump(ik) = t_last_jump(ik) + (abs(jump(ik))-0.5*first_jump_fac)*remap_period(ik)*g_exbfac
           ! endNDCTESTnl
        end do
-       !do ig = -ntgrid,ntgrid
-       !   write(*,*) theta(ig) ! NDCTEST
-       !   write(*,*) phi(ig,1,2) ! NDCTEST
-       !end do
     else
        do ik=1, naky
           theta0_shift(ik) = theta0_shift(ik) - g_exb*g_exbfac*gdt/shat*tunits(ik)
@@ -4739,17 +4762,17 @@ endif
     end if
     
     if (box .or. shat .eq. 0.0) then
-       ! NDCTESTnlplot
-       if(nlplot) then
+        ! NDCTESTremap_plot: if only plotting Gaussian phi, we know what to insert
+       if(remap_plot_shear) then
           dky = aky(2)-aky(1)
-          alpha_x = 1./64. * (twopi/dkx)**2 ! -> exp(-x**2/(Lx/4)**2)
-          alpha_y = 1./256. * (twopi/dky)**2 ! -> exp(-y**2/(Ly/8)**2)
+          alpha_x = 1./64. * (twopi/dkx)**2
+          alpha_y = 1./256. * (twopi/dky)**2
           if(.not. allocated(mycount)) then
               allocate(mycount(naky))
               mycount = 0
           end if
        end if
-       ! endNDCTESTnlplot
+       ! endNDCTESTremap_plot
        do ik = naky, 2, -1
           if (jump(ik) < 0) then
              if (fphi > epsilon(0.0)) then
@@ -4757,13 +4780,13 @@ endif
                    phi(:,ikx_indexed(it),ik) = phi(:,ikx_indexed(it-jump(ik)),ik)
                 end do
                 do it = ntheta0 + jump(ik) + 1, ntheta0
-                   ! NDCTESTnlplot
-                   if(nlplot) then
+                   ! NDCTESTremap_plot
+                   if(remap_plot_shear) then
                        phi(:,ikx_indexed(it),ik) = exp(-1.*alpha_x*((akx(ikx_indexed(it))-(jump(ik)+mycount(ik))*dkx)**2))*exp(-1.*alpha_y*(aky(ik)**2))
                    else
                        phi(:,ikx_indexed(it),ik) = 0.
                    end if
-                   ! endNDCTESTnlplot
+                   ! endNDCTESTremap_plot
                    ! NDCTEST
                    !phi(:,ikx_indexed(it),ik) = phi(-ntgrid,ikx_indexed(ntheta0+jump(ik)),ik)
                 end do
@@ -4833,11 +4856,11 @@ endif
                    enddo
                 enddo
              enddo
-             ! NDCTESTnlplot
-             if(nlplot) then
+             ! NDCTESTremap_plot
+             if(remap_plot_shear) then
                  mycount(ik) = mycount(ik) + jump(ik)
              end if
-             ! endNDCTESTnlplot
+             ! endNDCTESTremap_plot
           endif
 
           if (jump(ik) > 0) then 
@@ -4846,13 +4869,13 @@ endif
                    phi(:,ikx_indexed(it),ik) = phi(:,ikx_indexed(it-jump(ik)),ik)
                 end do
                 do it = jump(ik), 1, -1
-                   ! NDCTESTnlplot
-                   if(nlplot) then
+                   ! NDCTESTremap_plot
+                   if(remap_plot_shear) then
                        phi(:,ikx_indexed(it),ik) = exp(-1.*alpha_x*((akx(ikx_indexed(it))-(jump(ik)+mycount(ik))*dkx)**2))*exp(-1.*alpha_y*(aky(ik)**2))
                    else
                        phi(:,ikx_indexed(it),ik) = 0.
                    end if
-                   ! endNDCTESTnlplot
+                   ! endNDCTESTremap_plot
                    ! NDCTEST
                    !phi(:,ikx_indexed(it),ik) = phi(ntgrid,ikx_indexed(jump(ik)+1),ik)
                 end do
@@ -4922,11 +4945,11 @@ endif
                    enddo
                 enddo
              enddo
-             ! NDCTESTnlpot
-             if(nlplot) then
+             ! NDCTESTremap_plot
+             if(remap_plot_shear) then
                  mycount(ik) = mycount(ik) + jump(ik)
              end if
-             ! endNDCTESTnlpot
+             ! endNDCTESTremap_plot
           endif
        enddo
 

@@ -321,14 +321,14 @@ contains
     use theta_grid, only: ntgrid, kxfac
     use gs2_layouts, only: g_lo, ik_idx, it_idx
     use gs2_layouts, only: accelx_lo, yxf_lo, &
-        ie_idx,il_idx,is_idx,isign_idx,ig_idx ! NDCTESTnlplot
+        ie_idx,il_idx,is_idx,isign_idx,ig_idx ! NDCTESTremap_plot
     use dist_fn_arrays, only: g, g_adjust, &
         t_last_jump ! NDCTESTnl
     use species, only: spec
     use gs2_transforms, only: transform2, inverse2
     use run_parameters, only: fapar, fbpar, fphi, reset, immediate_reset
-    use kt_grids, only: aky, akx
-    !use kt_grids, only: ny ! NDCTESTnlplot
+    use kt_grids, only: aky, akx, &
+        ny ! NDCTESTremap_plot
     use gs2_time, only: save_dt_cfl, check_time_step_too_large
     use constants, only: zi
     use unit_tests, only: debug_message
@@ -340,9 +340,13 @@ contains
     real :: max_vel, zero
     real :: dt_cfl
     integer, parameter :: verb = 4
-    !integer :: ie,il,isgn,iy, iyxf ! NDCTESTnlplot
 
     integer :: iglo, ik, it, is, ig, ia
+    ! NDCTESTremap_plot
+    logical :: is_open
+    logical :: remap_plot_nl = .true.
+    integer :: iy,iyxf,ie,il,isgn
+    ! endNDCTESTremap_plot
     
     call debug_message(verb, 'nonlinear_terms::add_nl starting')
 
@@ -365,22 +369,6 @@ contains
        call transform2 (g1, aba, ia)
     else
        call transform2 (g1, ba)
-       ! NDCTESTnlplot
-       !do iy = 1, ny
-       !    do iyxf = yxf_lo%llim_proc, yxf_lo%ulim_proc
-       !        it=it_idx(yxf_lo,iyxf)
-       !        ie=ie_idx(yxf_lo,iyxf)
-       !        il=il_idx(yxf_lo,iyxf)
-       !        is=is_idx(yxf_lo,iyxf)
-       !        ig=ig_idx(yxf_lo,iyxf)
-       !        isgn=isign_idx(yxf_lo,iyxf)
-       !        if(ie==4 .and. il==4 .and. ig==4) then
-       !            !write(83,"(I2,I2,I2,I2,I2)") it,iy,ig,isgn,ie,il,is ! NDCTESTnlplot
-       !            write(*,*) ba(iy,iyxf) ! NDCTESTnlplot
-       !        end if
-       !    end do
-       !end do
-       ! endNDCTESTnlplot
     end if
 
     call debug_message(verb, 'nonlinear_terms::add_nl calculated dphi/dx')
@@ -508,10 +496,32 @@ contains
     if(immediate_reset)then
        call check_time_step_too_large(reset)
 
+       ! NDCTESTremap_plot: shout if dt gets reset, we don't want this
+       if(reset .and. remap_plot_nl) write(*,*) 'TIME STEP IS TOO LARGE !'
+
        !If we have violated cfl then return immediately
        if(reset)return
     endif
     !write (*,*) 'didnt return', iproc
+
+    ! NDCTESTremap_plot: writing the nonlinear term to a file
+    inquire(unit=83,opened=is_open)
+    if(remap_plot_nl .and. is_open) then
+        do iy = 1, ny
+            do iyxf = yxf_lo%llim_proc, yxf_lo%ulim_proc
+                it=it_idx(yxf_lo,iyxf)
+                ie=ie_idx(yxf_lo,iyxf)
+                il=il_idx(yxf_lo,iyxf)
+                is=is_idx(yxf_lo,iyxf)
+                ig=ig_idx(yxf_lo,iyxf)
+                isgn=isign_idx(yxf_lo,iyxf)
+                if(ie==1 .and. il==1 .and. is==1 .and. isgn==1 .and. ig==1) then
+                    write(83,"(I0,A,I0,A,E14.7)") it," ",iy," ",bracket(iy,iyxf)
+                end if
+            end do
+        end do
+    end if
+    ! endNDCTESTremap_plot
 
     !Transform NL source back to spectral space
     if (accelerated) then

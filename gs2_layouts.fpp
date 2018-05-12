@@ -4001,6 +4001,9 @@ contains
     integer, intent (in) :: ntgrid, naky, ntheta0, nlambda, negrid, nspec, nx
     integer :: nprocset, ngroup, nblock, ntgridtotal, nsign
     real :: unbalanced_amount
+    ! NDCTESTremap_plot
+    logical :: remap_plot_shear = .false.
+    ! endNDCTESTremap_plot
 
     !write (*,*) 'INIT_X_TR', initialized_x_transform
     if (initialized_x_transform) return
@@ -4014,12 +4017,21 @@ contains
     xxf_lo%nsign = nsign
     xxf_lo%naky = naky
     xxf_lo%ntheta0 = ntheta0
-    !if (nx > ntheta0) then ! NDCTESTnlplot uncomment
-    if (nx >= ntheta0) then ! NDCTESTnlplot delete
-       xxf_lo%nx = nx
+    ! NDCTESTremap_plot: remove first case in if
+    if(remap_plot_shear) then
+        if (nx >= ntheta0) then
+           xxf_lo%nx = nx
+        else
+           xxf_lo%nx = (3*ntheta0+1)/2
+        end if
     else
-       xxf_lo%nx = (3*ntheta0+1)/2
+        if (nx > ntheta0) then
+           xxf_lo%nx = nx
+        else
+           xxf_lo%nx = (3*ntheta0+1)/2
+        end if
     end if
+    ! endNDCTESTremap_plot
     xxf_lo%nadd = xxf_lo%nx - ntheta0
     xxf_lo%nlambda = nlambda
     xxf_lo%negrid = negrid
@@ -4981,22 +4993,43 @@ contains
     integer, intent (in) :: nx, ny
     integer :: nnx, nny, ngroup, nprocset, nblock, ntgridtotal, nsign
     real :: unbalanced_amount
+    ! NDCTESTremap_plot
+    logical :: remap_plot_shear = .false.
+    ! endNDCTESTremap_plot
 
     if (initialized_y_transform) return
     initialized_y_transform = .true.
-
-    !if (nx > ntheta0) then ! NDCTESTnlplot uncomment
-    if (nx >= ntheta0) then ! NDCTESTnlplot delete
-       nnx = nx
+    
+    ! NDCTESTremap_plot: remove first case in if
+    if(remap_plot_shear) then
+        if (nx >= ntheta0) then
+           nnx = nx
+        else
+           nnx = (3*ntheta0+1)/2
+        end if
     else
-       nnx = (3*ntheta0+1)/2
+        if (nx > ntheta0) then
+           nnx = nx
+        else
+           nnx = (3*ntheta0+1)/2
+        end if
     end if
-    !if (ny > naky) then ! NDCTESTnlplot uncomment
-    if (ny >= naky) then ! NDCTESTnlplot delete
-       nny = ny
+    ! endNDCTESTremap_plot
+    ! NDCTESTremap_plot: remove first case in if
+    if(remap_plot_shear) then
+        if (ny >= naky) then
+           nny = ny
+        else
+           nny = 3*naky
+        end if
     else
-       nny = 3*naky
+        if (ny > naky) then
+           nny = ny
+        else
+           nny = 3*naky
+        end if
     end if
+    ! endNDCTESTremap_plot
 
     yxf_lo%iproc = iproc
     yxf_lo%ntgrid = ntgrid

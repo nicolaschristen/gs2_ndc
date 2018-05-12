@@ -549,6 +549,9 @@ contains
     use constants, only: pi
     use mp, only: mp_abort, proc0
     implicit none
+    ! NDCTESTremap_plot
+    logical :: remap_plot_shear = .false.
+    ! endNDCTESTremap_plot
 
     call init_parameters_box
 
@@ -581,10 +584,16 @@ contains
     if (jtwist < 0) jtwist = max(int(2.0*pi*shat + 0.5),1)
 
     if (ly == 0.) ly = 2.0*pi*y0
-    !if (naky == 0) naky = (ny-1)/3 + 1 ! NDCTESTnlplot: uncomment
-    if (naky == 0) naky = (ny-1)/2 + 1 ! NDCTESTnlplot: delete
-    !if (ntheta0 == 0) ntheta0 = 2*((nx-1)/3) + 1 ! NDCTESTnlplot: uncomment
-    if (ntheta0 == 0) ntheta0 = nx ! NDCTESTnlplot: delete
+    if(remap_plot_shear) then
+        if (naky == 0) naky = (ny-1)/2 + 1 ! NDCTESTremap_plot: delete
+    else
+        if (naky == 0) naky = (ny-1)/3 + 1 ! NDCTESTremap_plot: keep
+    end if
+    if(remap_plot_shear) then
+        if (ntheta0 == 0) ntheta0 = nx ! NDCTESTremap_plot: delete
+    else
+        if (ntheta0 == 0) ntheta0 = 2*((nx-1)/3) + 1 ! NDCTESTremap_plot: keep
+    end if
     if (rtwist == 0.) rtwist = real(jtwist)
     if (nkpolar == 0) nkpolar = int(real(naky-1.)*sqrt(2.))
 
@@ -597,8 +606,11 @@ contains
       if (proc0) write (error_unit(), *) "INFO: ny set from naky"
       ny = (naky - 1)*  3 + 1
     else if (naky /= (ny-1)/3 + 1) then
-      if (proc0) write (error_unit(), *) "ERROR: naky and ny both set and inconsistent... set one or the other"
-      !call mp_abort("ERROR: naky and ny both set and inconsistent... set one or the other") ! NDCTESTnlplot uncomment
+      ! NDCTESTremap_plot: remove if statement
+      if(.not. remap_plot_shear) then
+          if (proc0) write (error_unit(), *) "ERROR: naky and ny both set and inconsistent... set one or the other"
+          call mp_abort("ERROR: naky and ny both set and inconsistent... set one or the other")
+      end if
     end if
     if (nx == 0) then 
       if (proc0) write (error_unit(), *) "INFO: nx set from ntheta0"
@@ -607,8 +619,11 @@ contains
       end if
       nx = ((ntheta0 - 1) /  2) * 3 + 1
     else if (ntheta0 /= 2*((nx-1)/3) + 1) then
-      if (proc0) write (error_unit(), *) "ERROR: ntheta0 and nx both set and inconsistent... set one or the other"
-      !call mp_abort("") ! NDCTESTnlplot: uncomment
+      ! NDCTESTremap_plot: remove if statement
+      if(.not. remap_plot_shear) then
+          if (proc0) write (error_unit(), *) "ERROR: ntheta0 and nx both set and inconsistent... set one or the other"
+          call mp_abort("")
+      end if
     end if
 
     
