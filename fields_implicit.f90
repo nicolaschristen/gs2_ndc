@@ -119,7 +119,7 @@ contains
     implicit none
 
     logical :: debug=.false.
-    logical :: remap_plot=.true. ! NDCTESTremap_plot
+    logical :: remap_plot=.false. ! NDCTESTremap_plot
 
     if (initialized) return
     initialized = .true.
@@ -177,7 +177,7 @@ contains
     logical, optional :: gf_lo
     logical :: local_gf_lo
     ! NDCTESTremap_plot
-    logical :: remap_plot=.true.
+    logical :: remap_plot=.false.
     real :: dkx, dky, alpha_x, alpha_y
     integer :: ik, it,iglo
     ! endNDCTESTremap_plot
@@ -556,7 +556,7 @@ contains
     !character(len=20) :: my_format ! NDCTESTdist
     ! NDCTESTremap_plot
     logical :: remap_plot_shear=.false.
-    logical :: remap_plot_nl=.true.
+    logical :: remap_plot_nl=.false.
     integer :: iglo,iy,ix,ie,il,is,isgn,iyxf
     real, dimension(:,:), allocatable :: fft_out
     complex, dimension(:,:,:), allocatable :: phi_5d
@@ -675,6 +675,12 @@ contains
 
         end if
         
+        if(explicit_flowshear) then
+            ! NDCTESTmichaelnew: replace phi[it] and phi[it+1] by phibar[it]
+            phi = phi-phistar_old
+            phinew = phinew-phistar_old
+        end if
+            
         call debug_message(4, 'fields_implicit::advance_implicit calling timeadv 1')
             
         call timeadv (phi, apar, bpar, phinew, aparnew, bparnew, istep)
@@ -686,20 +692,10 @@ contains
         
         call debug_message(4, 'fields_implicit::advance_implicit calling getfield')
 
-        if(explicit_flowshear) then
-            ! NDCTESTmichaelnew: replace phi[it] by phibar[it] in QN equation
-            phi = phi-phistar_old
-        end if
-            
         ! NDCTESTmichaelnew: in flowshear cases, QN returns phibar[it+1]-phibar[it]
         call getfield (phinew, aparnew, bparnew)
         
-        ! NDCTESTmichaelnew: go back to total phi[it]=phibar[it]+phistar[it]
-        if(explicit_flowshear) then
-            phi = phi + phistar_old
-        end if
-
-        ! NDCTESTmichaelnew: in flowshear cases, this sets phinew=phibar[it+1]+phistar[it]
+        ! NDCTESTmichaelnew: in flowshear cases, this sets phinew=phibar[it+1]
         phinew = phinew + phi
         
         ! NDCTESTmichael
@@ -709,8 +705,8 @@ contains
         aparnew  = aparnew + apar
         bparnew  = bparnew + bpar
 
-        ! NDCQUEST: the removal is wrong for now: it is applied to phibar[it+1]+phistar[it.]
-        ! Should we apply it to phibar[it+1] and phistar[it+1] separately ? In that case there might
+        ! NDCQUEST: the removal is wrong for now: it is applied to phibar[it+1]
+        ! Should we apply it to phibar[it+1] and phistar[it+1] ? In that case there might
         ! be a problem since phistar[it+1] needs the full g[it+1] to be computed ...
         if (remove_zonal_flows_switch) call remove_zonal_flows
         
@@ -718,7 +714,7 @@ contains
         
         call timeadv (phi, apar, bpar, phinew, aparnew, bparnew, istep, diagnostics)
 
-        ! NDCTESTmichaelnew: compute phistar[it+1] and get the full phi[it+1]
+        ! NDCTESTmichaelnew: compute phistar[it+1] and get the full phi[it] and phi[it+1]
         if(explicit_flowshear) then
 
             expflow_opt = 4
@@ -737,7 +733,8 @@ contains
                 end do
             end do
             
-            phinew = phinew - phistar_old + phistar_new
+            phinew = phinew + phistar_new
+            phi = phi + phistar_old
             
             deallocate(expflow_antot, expflow_antot_tdep, dummy1, dummy2)
 

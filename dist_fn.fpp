@@ -4130,6 +4130,9 @@ endif
 
     integer :: ik ! NDCTESTnl
     real :: dkx ! NDCTESTnl
+    ! NDCTESTremap_plot
+    logical :: remap_plot = .false.
+    ! endNDCTESTremap_plot
 
 !    if (alloc) then
     if (.not. allocated(g)) then
@@ -4179,7 +4182,7 @@ endif
              allocate (kx_shift(naky))
              kx_shift = 0.
              ! NDCTESTremap_plot: in if, remove last logical
-             if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. (.not. mixed_flowshear)) then
+             if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. remap_plot) then
              ! endNDCTESTremap_plot
              !if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
                  allocate(kx_shift_old(naky))
@@ -4240,7 +4243,7 @@ endif
     integer,save :: istep_last=-1
     integer, parameter :: verb = 3
     ! NDCTESTremap_plot
-    logical :: remap_plot_nl = .true.
+    logical :: remap_plot_nl = .false.
     real :: c0,c1,c2,dt0,dt1,dt2
     ! endNDCTESTremap_plot
 
@@ -4570,7 +4573,7 @@ endif
           
           ! NDCTESTnl 
           ! NDCTESTremap_plot: in if, remove last logical
-          if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. (.not. mixed_flowshear)) then
+          if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. remap_plot_shear) then
               t_last_jump(ik) = t_last_jump(ik) + abs(jump(ik))*remap_period(ik)*g_exbfac ! NDCTEST: need gg_exbfac ?
           end if
           ! endNDCTESTnl
@@ -5237,7 +5240,7 @@ endif
     use constants, only: zi
     use job_manage, only: time_message ! NDCTESTtime
     use mp, only: proc0 ! NDCTESTtime
-    !use fields_arrays, only: phistar ! NDCTESTmichaelnew
+    use fields_arrays, only: phistar_old ! NDCTESTmichaelnew
     implicit none
     complex, dimension (-ntgrid:,:,:), intent (in) :: phi,    apar,    bpar
     complex, dimension (-ntgrid:,:,:), intent (in) :: phinew, aparnew, bparnew
@@ -5250,7 +5253,7 @@ endif
     complex, dimension (-ntgrid:ntgrid) :: phigavg, apargavg
     complex, dimension (-ntgrid:ntgrid) :: phigavgnew
     complex :: g_bd, j0phi_bd, j0phi_tdep_bd
-    !complex :: j0phistar_bd ! NDCTESTmichaelnew
+    complex :: j0phistar_bd ! NDCTESTmichaelnew
     real :: c0, c1, c2
     real :: bd, bdfac_p, bdfac_m
 
@@ -5657,6 +5660,7 @@ endif
 
              if(mixed_flowshear .or. explicit_flowshear) then
 
+                 ! NDCQUEST: the centering is consistent with wdrift. Should it be bakdif'ed?
                  vdrift_x_cent = 0.5*(vdrift_x(ig,isgn,iglo)+vdrift_x(ig+1,isgn,iglo)) ! NDCTESTmichaelnew
                  g_bd = calc_g_bd(ig,isgn,iglo,bd)
                  j0phi_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0,phi)
@@ -5676,20 +5680,20 @@ endif
              end if
 
              ! NDCTESTmichaelnew
-             !if(explicit_flowshear) then
+             if(explicit_flowshear) then
 
-             !    j0phistar_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phistar)
+                 j0phistar_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phistar_old)
 
-             !    source(ig) = source(ig) &
-             !         - zi * ( vdrift_x_cent/shat*kx_shift_old(ik) + & ! NDCTESTmichaelnew: replaced vdrift_x
-             !             2.*wdrift(ig,isgn,iglo) ) * j0phistar_bd &
-             !         - 2.*vpar(ig,isgn,iglo) * ( &
-             !             aj0_tdep%old(ig+1,iglo)*phistar(ig+1,it,ik) - aj0_tdep%old(ig,iglo)*phistar(ig,it,ik) ) &
-             !         - 2.*code_dt*zi * aky(ik)/spec(is)%stm * omprimfac * itor_over_B(ig) * vpac(ig,isgn,iglo) * g_exb * &
-             !            j0phistar_bd &
-             !         + 2.*zi * wstar(ik,ie,is) * j0phistar_bd
+                 source(ig) = source(ig) &
+                      - zi * ( vdrift_x_cent/shat*kx_shift_old(ik) + & ! NDCTESTmichaelnew: replaced vdrift_x
+                          2.*wdrift(ig,isgn,iglo) ) * j0phistar_bd &
+                      - 2.*vpar(ig,isgn,iglo) * ( &
+                          aj0_tdep%old(ig+1,iglo)*phistar_old(ig+1,it,ik) - aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik) ) &
+                      - 2.*code_dt*zi * aky(ik)/spec(is)%stm * omprimfac * itor_over_B(ig) * vpac(ig,isgn,iglo) * g_exb * &
+                         j0phistar_bd &
+                      + 2.*zi * wstar(ik,ie,is) * j0phistar_bd
 
-             !end if
+             end if
 
          end if
 

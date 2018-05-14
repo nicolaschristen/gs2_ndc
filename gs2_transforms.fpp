@@ -140,7 +140,7 @@ contains
     real :: dkx, dx ! NDCTESTnl
     integer :: ix ! NDCTESTnl
     ! NDCTESTremap_plot
-    logical :: remap_plot = .true.
+    logical :: remap_plot = .false.
     real :: dky, dy
     integer :: iy
     ! endNDCTESTremap_plot
@@ -200,39 +200,57 @@ contains
 
         if(.not. allocated(x_grid)) then
             allocate(x_grid(nx))
-            allocate(y_grid(ny)) ! NDCTESTremap_plot
+            if(remap_plot) then
+                allocate(y_grid(ny)) ! NDCTESTremap_plot
+            end if
             allocate(flowshear_phase_fac(nx,naky))
             flowshear_phase_fac = 1.
         end if
         
-        open(71,file="/home/christenl/data/gs2/flowtest/nonlin/nlfelix2/x_grid.dat",status="replace") ! NDCTESTremap_plot
+        if(remap_plot) then
+            open(71,file="/home/christenl/data/gs2/flowtest/nonlin/nlfelix2/x_grid.dat",status="replace") ! NDCTESTremap_plot
+        end if
         dkx = akx(2)-akx(1)
         dx = 1./(nx-1) * 2.*pi/dkx
 
         do ix = 1, nx/2+1
             x_grid(ix) = (ix-1)*dx
-            write(71,"(E14.7)") x_grid(ix) ! NDCTESTremap_plot
+            if(remap_plot) then
+                write(71,"(E14.7)") x_grid(ix) ! NDCTESTremap_plot
+            end if
         end do
         do ix = nx/2+2, nx
             x_grid(ix) = (ix-nx-1)*dx
-            write(71,"(E14.7)") x_grid(ix) ! NDCTESTremap_plot
+            if(remap_plot) then
+                write(71,"(E14.7)") x_grid(ix) ! NDCTESTremap_plot
+            end if
         end do
-        close(71) ! NDCTESTremap_plot
+        if(remap_plot) then
+            close(71) ! NDCTESTremap_plot
+        end if
        
         ! NDCTESTremap_plot
-        open(72,file="/home/christenl/data/gs2/flowtest/nonlin/nlfelix2/y_grid.dat",status="replace")
+        if(remap_plot) then
+            open(72,file="/home/christenl/data/gs2/flowtest/nonlin/nlfelix2/y_grid.dat",status="replace")
+        end if
         dky = aky(2)-aky(1)
         dy = 1./(ny-1) * 2.*pi/dky
 
         do iy = 1, ny/2+1
             y_grid(iy) = (iy-1)*dy
-            write(72,"(E14.7)") y_grid(iy)
+            if(remap_plot) then
+                write(72,"(E14.7)") y_grid(iy)
+            end if
         end do
         do iy = ny/2+2, ny
             y_grid(iy) = (iy-ny-1)*dy
-            write(72,"(E14.7)") y_grid(iy)
+            if(remap_plot) then
+                write(72,"(E14.7)") y_grid(iy)
+            end if
         end do
-        close(72)
+        if(remap_plot) then
+            close(72)
+        end if
         ! endNDCTESTremap_plot
 
     end if
@@ -1388,7 +1406,7 @@ contains
     integer :: ix, ik, ixxf ! NDCTESTnl
     integer :: ig,ie,il,is,isgn,it, iy, iyxf ! NDCTESTremap_plot
     logical :: remap_plot_shear =.false. ! NDCTESTremap_plot
-    logical :: remap_plot_nl =.true. ! NDCTESTremap_plot
+    logical :: remap_plot_nl =.false. ! NDCTESTremap_plot
     logical :: is_open ! NDCTESTremap_plot
 
     call debug_message(4, 'gs2_transforms::transform2_5d starting')
