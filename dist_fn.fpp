@@ -5421,24 +5421,24 @@ endif
                  end if
 
                  ! NDCTESTmichaelnew
-                 !if(explicit_flowshear) then
+                 if(explicit_flowshear) then
 
-                 !    if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
-                 !    if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
-                 !    if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
-                 !    
-                 !    j0phistar_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phistar)
+                     if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                     if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                     if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+                     
+                     j0phistar_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phistar_old)
 
-                 !    source(ig) = source(ig) &
-                 !         - zi * ( vdrift_x(ig,isgn,iglo)/shat*kx_shift_old(ik) + &
-                 !             2.*wdriftttp(ig,it,ik,ie,is,2) ) * j0phistar_bd &
-                 !         + 2.*zi * wstar(ik,ie,is) * j0phistar_bd
+                     source(ig) = source(ig) &
+                          - zi * ( vdrift_x(ig,isgn,iglo)/shat*kx_shift_old(ik) + &
+                              2.*wdriftttp(ig,it,ik,ie,is,2) ) * j0phistar_bd &
+                          + 2.*zi * wstar(ik,ie,is) * j0phistar_bd
 
-                 !    if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
-                 !    if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
-                 !    if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+                     if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                     if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                     if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
 
-                 !end if
+                 end if
 #endif             
              end if
           end do

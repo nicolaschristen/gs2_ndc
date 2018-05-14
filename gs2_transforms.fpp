@@ -232,23 +232,17 @@ contains
         ! NDCTESTremap_plot
         if(remap_plot) then
             open(72,file="/home/christenl/data/gs2/flowtest/nonlin/nlfelix2/y_grid.dat",status="replace")
-        end if
-        dky = aky(2)-aky(1)
-        dy = 1./(ny-1) * 2.*pi/dky
+            dky = aky(2)-aky(1)
+            dy = 1./(ny-1) * 2.*pi/dky
 
-        do iy = 1, ny/2+1
-            y_grid(iy) = (iy-1)*dy
-            if(remap_plot) then
+            do iy = 1, ny/2+1
+                y_grid(iy) = (iy-1)*dy
                 write(72,"(E14.7)") y_grid(iy)
-            end if
-        end do
-        do iy = ny/2+2, ny
-            y_grid(iy) = (iy-ny-1)*dy
-            if(remap_plot) then
+            end do
+            do iy = ny/2+2, ny
+                y_grid(iy) = (iy-ny-1)*dy
                 write(72,"(E14.7)") y_grid(iy)
-            end if
-        end do
-        if(remap_plot) then
+            end do
             close(72)
         end if
         ! endNDCTESTremap_plot
