@@ -5375,12 +5375,16 @@ endif
                       - anon(ie)*zi*(wdttpfac(ig,it,ik,ie,is,2)*hneoc(ig,2,iglo))*phigavg(ig) &
                       + zi*wstar(ik,ie,is)*hneoc(ig,2,iglo)*phigavg(ig)
 #else
+                      ! NDCQUEST: factors of 2 in those terms seem wrong... In the non-ttp, there are no factors because
+                      ! they're hidden in the bakdifing
                       - anon(ie)*zi*(wdriftttp_tdep%new(ig,it,ik,ie,is,2))*phigavgnew(ig) &
                       - anon(ie)*zi*(wdriftttp_tdep%old(ig,it,ik,ie,is,2))*phigavg(ig) &
                       + zi*wstar(ik,ie,is)*(phigavg(ig)+phigavgnew(ig))
 #endif             
              else
                  source(ig) &
+                      ! NDCQUEST: factors of 2 in those terms seem wrong... In the non-ttp, there are no factors because
+                      ! they're hidden in the bakdifing
                       = g(ig,2,iglo)*a(ig,2,iglo) &
 #ifdef LOWFLOW
                       - anon(ie)*zi*(wdttpfac(ig,it,ik,ie,is,2)*hneoc(ig,2,iglo))*phigavg(ig) &
@@ -5395,25 +5399,27 @@ endif
                      ! NDCQUEST: how do we check for CFL condition with new explicit terms ? Cannot add them to gexp_1 because it does not
                      ! get ExB re-mapped ... -> same issue with terms in set_source below.
 
-                     if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
-                     if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
-                     if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
-                     g_bd = calc_g_bd(ig,isgn,iglo,bd)
-                     j0phi_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0,phi)
-                     j0phi_tdep_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phi)
-                     if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
-                     if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
-                     if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+                     !if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                     !if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                     !if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+                     !g_bd = calc_g_bd(ig,isgn,iglo,bd)
+                     !j0phi_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0,phi)
+                     !j0phi_tdep_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phi)
+                     !if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                     !if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                     !if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
 
                      if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
                      if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
                      if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
-                     source(ig) = source(ig) & ! NDCQUEST: is this correct ?
-                         - zi * spec(is)%tz * vdrift_x(ig,isgn,iglo)/shat * kx_shift_old(ik) * g_bd &
+                     ! NDCQUEST: Factors of 2 here are consistent with the standard ttp terms above, but not with the non-ttp below.
+                     ! Are the ones above wrong ?
+                     source(ig) = source(ig) &
+                         - zi * spec(is)%tz * vdrift_x(ig,isgn,iglo)/shat * kx_shift_old(ik) * g(ig,2,iglo) &
                          - zi * ( vdrift_x(ig,isgn,iglo)/shat*kx_shift_old(ik) + &
-                             2.*wdriftttp(ig,it,ik,ie,is,2) ) * j0phi_tdep_bd & ! NDCTESTmichaelnew: replaced wdrift
-                         + 2.*zi * wdriftttp(ig,it,ik,ie,is,2) * j0phi_bd & ! NDCTESTmichaelnew: replaced wdrift
-                         + 2.*zi * wstar(ik,ie,is) * (j0phi_tdep_bd-j0phi_bd)
+                             2.*wdriftttp(ig,it,ik,ie,is,2) ) * aj0_tdep%old(ig,iglo)*phi(ig,it,ik) & ! NDCTESTmichaelnew: replaced wdrift
+                         + 2.*zi * wdriftttp(ig,it,ik,ie,is,2) * phigavg(ig) & ! NDCTESTmichaelnew: replaced wdrift
+                         + 2.*zi * wstar(ik,ie,is) * (aj0_tdep%old(ig,iglo)*phi(ig,it,ik)-phigavg(ig))
                      if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
                      if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
                      if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
