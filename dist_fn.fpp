@@ -112,6 +112,9 @@ module dist_fn
   public :: timer_interp_setsource ! NDCTESTtime
   public :: timer_adv_setsource ! NDCTESTtime
 
+  public :: reset_aj0_old ! NDCTESTfelix
+  public :: reset_gamtot_old ! NDCTESTfelix
+
   ! knobs
   complex, dimension (:), allocatable :: fexp ! (nspec)
   real, dimension (:), allocatable :: bkdiff  ! (nspec)
@@ -906,7 +909,8 @@ contains
   end subroutine finish_dist_fn_level_1
 
   subroutine finish_dist_fn_level_2
-    use dist_fn_arrays, only: aj0, aj1, aj0_gf, aj1_gf, aj0_tdep, gamtot_tdep
+    use dist_fn_arrays, only: aj0, aj1, aj0_gf, aj1_gf, aj0_tdep, gamtot_tdep, &
+        aj0_old, gamtot_old ! NDCTESTfelix
 
     if (.not. initialized_dist_fn_level_2) return
     initialized_dist_fn_level_2 = .false.
@@ -919,8 +923,10 @@ contains
     if (allocated(aj0_gf)) deallocate (aj0_gf, aj1_gf)
     if (allocated(aj0_tdep%old)) deallocate (aj0_tdep%old)
     if (allocated(aj0_tdep%new)) deallocate (aj0_tdep%new)
+    if (allocated(aj0_old)) deallocate (aj0_old) ! NDCTESTfelix
     if (allocated(gamtot_tdep%old)) deallocate (gamtot_tdep%old)
     if (allocated(gamtot_tdep%new)) deallocate (gamtot_tdep%new)
+    if (allocated(gamtot_old)) deallocate (gamtot_old) ! NDCTESTfelix
     if (allocated(gridfac1)) deallocate (gridfac1, gamtot, gamtot1, gamtot2)
     if (allocated(gamtot3)) deallocate (gamtot3)
     if (allocated(a)) deallocate (a, b, r, ainv)
@@ -1741,7 +1747,8 @@ contains
   end subroutine init_wstar
 
   subroutine init_bessel
-    use dist_fn_arrays, only: aj0, aj1, aj0_tdep
+    use dist_fn_arrays, only: aj0, aj1, aj0_tdep, &
+        aj0_old ! NDCTESTfelix
  !AJ
     use dist_fn_arrays, only: aj0_gf, aj1_gf
     use kt_grids, only: kperp2, naky, ntheta0, &
@@ -1817,6 +1824,13 @@ contains
         allocate(aj0_tdep%new(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
         aj0_tdep%new = aj0
     end if
+
+    ! NDCTESTfelix
+    if(explicit_flowshear) then
+        allocate(aj0_old(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
+        aj0_old = aj0
+    end if
+    ! endNDCTESTfelix
 
   end subroutine init_bessel
         
@@ -4451,10 +4465,12 @@ endif
     use kt_grids, only: akx, aky, naky, ikx, ntheta0, box, theta0, &
         implicit_flowshear, explicit_flowshear, mixed_flowshear
     use le_grids, only: negrid, nlambda
-    use species, only: nspec
+    use species, only: nspec, &
+        spec ! NDCTESTfelix
     use run_parameters, only: fphi, fapar, fbpar
     use dist_fn_arrays, only: kx_shift, kx_shift_old, theta0_shift, &
-        t_last_jump, remap_period ! NDCTESTnl
+        t_last_jump, remap_period, & ! NDCTESTnl
+        aj0, aj0_old, gamtot_old ! NDCTESTfelix
     use gs2_time, only: code_dt, code_dt_old, code_time
     use constants, only: twopi   
     use theta_grid, only: theta ! NDCTEST 
@@ -4781,6 +4797,12 @@ endif
              if (fphi > epsilon(0.0)) then
                 do it = 1, ntheta0 + jump(ik)
                    phi(:,ikx_indexed(it),ik) = phi(:,ikx_indexed(it-jump(ik)),ik)
+                   
+                   ! NDCTESTfelix: removing Felix ringing by keeping track of gamtot_old = gamtotbar[it] after an ExB remap.
+                   if(explicit_flowshear) then
+                       gamtot_old(:,ikx_indexed(it),ik) = gamtot(:,ikx_indexed(it-jump(ik)),ik)
+                   end if
+                   ! endNDCTESTfelix
                 end do
                 do it = ntheta0 + jump(ik) + 1, ntheta0
                    ! NDCTESTremap_plot
@@ -4788,6 +4810,13 @@ endif
                        phi(:,ikx_indexed(it),ik) = exp(-1.*alpha_x*((akx(ikx_indexed(it))-(jump(ik)+mycount(ik))*dkx)**2))*exp(-1.*alpha_y*(aky(ik)**2))
                    else
                        phi(:,ikx_indexed(it),ik) = 0.
+                   
+                       ! NDCTESTfelix: not needed, since these gamtot_old will be multiplying Fourier components of phi
+                       ! that have been set to zero by the remapping.
+                       if(explicit_flowshear) then
+                           gamtot_old(:,ikx_indexed(it),ik) = spec%z*spec%z*spec%dens/spec%temp
+                       end if
+                       ! endNDCTESTfelix
                    end if
                    ! endNDCTESTremap_plot
                    ! NDCTEST
@@ -4821,14 +4850,29 @@ endif
 
                          if (idx_local(g_lo, to_iglo) .and. idx_local(g_lo, from_iglo)) then
                             g0(:,:,to_iglo) = g0(:,:,from_iglo)
+                            ! NDCTESTfelix: removing Felix ringing by keeping track of aj0_old = aj0bar[it] after an ExB remap.
+                            if(explicit_flowshear) then
+                                aj0_old(:,to_iglo) = aj0(:,from_iglo)
+                            end if
+                            ! endNDCTESTfelix
                          else if (idx_local(g_lo, from_iglo)) then
                             do isgn=1, 2
                                call send (g0(:, isgn, from_iglo), proc_id (g_lo, to_iglo))
                             enddo
+                            ! NDCTESTfelix
+                            if(explicit_flowshear) then
+                                call send (aj0(:, from_iglo), proc_id (g_lo, to_iglo))
+                            end if
+                            ! endNDCTESTfelix
                          else if (idx_local(g_lo, to_iglo)) then
                             do isgn=1, 2
                                call receive (g0(:, isgn, to_iglo), proc_id (g_lo, from_iglo))
                             enddo
+                            ! NDCTESTfelix
+                            if(explicit_flowshear) then
+                                call receive (aj0_old(:, to_iglo), proc_id (g_lo, from_iglo))
+                            end if
+                            ! endNDCTESTfelix
                          endif
                       enddo
 
@@ -4854,6 +4898,11 @@ endif
                          !endif
                          
                          if (idx_local (g_lo, to_iglo)) g0(:,:,to_iglo) = 0.
+
+                         ! NDCTESTfelix: not needed, since these aj0_old will be multiplying Fourier components of phi
+                         ! that have been set to zero by the remapping.
+                         if (idx_local (g_lo, to_iglo)) aj0_old(:,to_iglo) = 0.
+                         ! endNDCTESTfelix
                       enddo
 
                    enddo
@@ -4910,14 +4959,29 @@ endif
 
                          if (idx_local(g_lo, to_iglo) .and. idx_local(g_lo, from_iglo)) then
                             g0(:,:,to_iglo) = g0(:,:,from_iglo)
+                            ! NDCTESTfelix: removing Felix ringing by keeping track of aj0_old = aj0bar[it] after an ExB remap.
+                            if(explicit_flowshear) then
+                                aj0_old(:,to_iglo) = aj0(:,from_iglo)
+                            end if
+                            ! endNDCTESTfelix
                          else if (idx_local(g_lo, from_iglo)) then
                             do isgn=1, 2
                                call send(g0(:, isgn, from_iglo), proc_id(g_lo, to_iglo))
                             enddo
+                            ! NDCTESTfelix
+                            if(explicit_flowshear) then
+                                call send (aj0(:, from_iglo), proc_id (g_lo, to_iglo))
+                            end if
+                            ! endNDCTESTfelix
                          else if (idx_local(g_lo, to_iglo)) then
                             do isgn=1, 2
                                call receive(g0(:, isgn, to_iglo), proc_id (g_lo, from_iglo))
                             enddo
+                            ! NDCTESTfelix
+                            if(explicit_flowshear) then
+                                call receive (aj0_old(:, to_iglo), proc_id (g_lo, from_iglo))
+                            end if
+                            ! endNDCTESTfelix
                          endif
                       enddo
 
@@ -4943,6 +5007,11 @@ endif
                          !endif
 
                          if (idx_local (g_lo, to_iglo)) g0(:,:,to_iglo) = 0.
+
+                         ! NDCTESTfelix: not needed, since these aj0_old will be multiplying Fourier components
+                         ! that have been set to zero by the remapping.
+                         if (idx_local (g_lo, to_iglo)) aj0_old(:,to_iglo) = 0.
+                         ! endNDCTESTfelix
                       enddo
 
                    enddo
@@ -4956,6 +5025,7 @@ endif
           endif
        enddo
 
+
        ! write(*,*) "SHIFTED" ! NDCTEST
        ! do ig = -ntgrid,ntgrid
        !    write(*,*) theta(ig)
@@ -4964,6 +5034,45 @@ endif
 
     end if
   end subroutine exb_shear
+
+  ! NDCTESTfelix: if aj0_old has been ExB remapped, reset aj0_old = aj0 at the end of the time step
+  subroutine reset_aj0_old
+
+      use gs2_layouts, only: g_lo, ik_idx
+      use dist_fn_arrays, only: aj0, aj0_old
+      
+      implicit none
+
+      integer :: iglo, ik
+
+      do iglo = g_lo%llim_proc, g_lo%ulim_proc
+          ik = ik_idx(g_lo,iglo)
+          if(jump(ik) .ne. 0) then
+              aj0_old(:,iglo)=aj0(:,iglo)
+          end if
+      end do
+  
+  end subroutine reset_aj0_old
+  ! endNDCTESTfelix
+
+  ! NDCTESTfelix: if gamtot_old has been ExB remapped, reset gamtot_old = gamtot at the end of the time step
+  subroutine reset_gamtot_old
+
+      use kt_grids, only: naky
+      use dist_fn_arrays, only: gamtot_old
+      
+      implicit none
+
+      integer :: ik
+
+      do ik = 1, naky
+          if(jump(ik) .ne. 0) then
+              gamtot_old(:,:,ik)=gamtot(:,:,ik)
+          end if
+      end do
+  
+  end subroutine reset_gamtot_old
+  ! endNDCTESTfelix
 
   !<DD>Subroutine to setup a redistribute object to be used in enforcing parity
   subroutine init_enforce_parity(redist_obj,ik_ind)
@@ -7124,7 +7233,8 @@ endif
   end subroutine ensure_single_val_fields_pass_r
 
   subroutine getan (antot, antota, antotp, expflow_opt)
-    use dist_fn_arrays, only: vpa, vperp2, aj0, aj1, gnew, aj0_tdep, g
+    use dist_fn_arrays, only: vpa, vperp2, aj0, aj1, gnew, aj0_tdep, g, &
+        aj0_old ! NDCTESTfelix
     use kt_grids, only: kperp2, implicit_flowshear, mixed_flowshear
     use species, only: nspec, spec
     use theta_grid, only: ntgrid
@@ -7158,11 +7268,11 @@ endif
                     select case(expflow_opt)
                     case(1)
                         ! NDCTESTfelix
-                        g0(ig,isgn,iglo) = (aj0_tdep%old(ig,iglo) - aj0(ig,iglo)) * g(ig,isgn,iglo) &
+                        g0(ig,isgn,iglo) = (aj0_tdep%old(ig,iglo) - aj0_old(ig,iglo)) * g(ig,isgn,iglo) &
                             + aj0(ig,iglo)*gnew(ig,isgn,iglo) ! NDCQUEST: Felix's method ringing ?
                     case(2)
                         ! NDCTESTmichael for t-indep V/(1-gamma), phistar[it]
-                        g0(ig,isgn,iglo) = aj0(ig,iglo)*g(ig,isgn,iglo)
+                        g0(ig,isgn,iglo) = aj0_old(ig,iglo)*g(ig,isgn,iglo)
                     case(3)
                         ! NDCTESTmichael for t-dep V/(1-gamma), phistar[it]
                         g0(ig,isgn,iglo) = aj0_tdep%old(ig,iglo)*g(ig,isgn,iglo)
@@ -7779,7 +7889,8 @@ endif
   end subroutine getmoms_notgc
 
   subroutine init_fieldeq
-    use dist_fn_arrays, only: aj0, aj1, vperp2, gamtot_tdep
+    use dist_fn_arrays, only: aj0, aj1, vperp2, gamtot_tdep, &
+        gamtot_old ! NDCTESTfelix
     use species, only: nspec, spec, has_electron_species
     use theta_grid, only: ntgrid
     use kt_grids, only: naky, ntheta0, aky, kperp2, &
@@ -7849,6 +7960,13 @@ endif
         allocate(gamtot_tdep%new(-ntgrid:ntgrid,ntheta0,naky))
         gamtot_tdep%new = gamtot
     end if
+
+    ! NDCTESTfelix
+    if(explicit_flowshear) then
+        allocate(gamtot_old(-ntgrid:ntgrid,ntheta0,naky))
+        gamtot_old = gamtot
+    end if
+    ! endNDCTESTfelix
     
     do iglo = g_lo%llim_proc, g_lo%ulim_proc
        ie = ie_idx(g_lo,iglo)
@@ -7949,7 +8067,8 @@ endif
     use run_parameters, only: beta, tite
     use species, only: spec, has_electron_species
     use dist_fn_arrays, only: gamtot_tdep
-    use dist_fn_arrays, only: kx_shift ! NDCTEST
+    use dist_fn_arrays, only: kx_shift, & ! NDCTEST
+        gamtot_old ! NDCTESTfelix
     use kt_grids, only: akx ! NDCTEST
     implicit none
     complex, dimension (-ntgrid:,:,:), intent (in) :: phi, apar, bpar
@@ -8007,7 +8126,7 @@ endif
            !        + (1.+sign(1.,kx_shift(ik)))/2. * abs(kx_shift(ik))/dkx * gamtot_right(:,:,ik) )
            !end do
        elseif(present(expflow_opt) .and. expflow_opt == 1) then ! NDCTESTfelix
-           fieldeq = antot + bpar*gamtot1 - gamtot_tdep%old*gridfac1*phi ! NDCQUEST: Felix's solution ringing ?
+           fieldeq = antot + bpar*gamtot1 -gamtot*gridfac1*phi - (gamtot_tdep%old*gridfac1*phi - gamtot_old*gridfac1*phi) ! NDCQUEST: Felix's solution ringing ?
        else
            fieldeq = antot + bpar*gamtot1 - gamtot*gridfac1*phi
        end if
