@@ -672,8 +672,6 @@ contains
     aparnew = 0.
     bpar = .0
     bparnew = 0.
-    phistar_old = 0. ! NDCTESTmichaelnew
-    phistar_new = 0. ! NDCTESTmichaelnew
     call debug_message(verbosity, &
       'fields::finish_fields zeroed fields')
     

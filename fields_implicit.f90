@@ -526,7 +526,6 @@ contains
     use antenna, only: antenna_amplitudes, no_driver
     use dist_fn, only: timeadv, exb_shear, collisions_advance, &
         update_kperp2_tdep, update_aj0_tdep, update_gamtot_tdep, compute_wdrift, init_invert_rhs, &
-        update_wdrift_tdep, &
         gamtot, getan ! NDCTESTmichael
     use dist_fn, only: g_exb, & ! NDCTESTremap_plot
         first_gk_solve ! NDCTESTneighb
@@ -631,7 +630,7 @@ contains
             
             if (proc0) call time_message(.false.,timer_tadv_tdep,' Tadv_tdep') ! NDCTESTtime
             
-            call update_kperp2_tdep(kx_shift)
+            call update_kperp2_tdep
             call update_aj0_tdep
             call update_gamtot_tdep
             
@@ -641,11 +640,6 @@ contains
 
         if(implicit_flowshear) then
             
-            if (proc0) call time_message(.false.,timer_tadv_wdrift,' Tadv_tdep') ! NDCTESTtime
-            
-            call update_wdrift_tdep(kx_shift)
-            
-            if (proc0) call time_message(.false.,timer_tadv_wdrift,' Tadv_tdep') ! NDCTESTtime
             if (proc0) call time_message(.false.,timer_tadv_abr,' Tadv_rhs') ! NDCTESTtime
             
             call init_invert_rhs
@@ -903,7 +897,7 @@ contains
         explicit_flowshear, akx, kperp2_tdep
     use dist_fn_arrays, only: g, kx_shift
     use dist_fn, only: M_class, N_class, i_class, &
-        update_kperp2_tdep, update_aj0_tdep, update_gamtot_tdep, update_wdrift_tdep, init_invert_rhs
+        update_kperp2_tdep, update_aj0_tdep, update_gamtot_tdep, init_invert_rhs
     use run_parameters, only: fphi, fapar, fbpar
     use gs2_layouts, only: init_fields_layouts, f_lo, init_jfields_layouts
     use prof, only: prof_entering, prof_leaving
@@ -915,6 +909,7 @@ contains
     logical :: endpoint
     real, dimension(:), allocatable :: dkx ! NDCTESTshift
     logical :: tadv_for_interp ! NDCTESTshift
+    real, dimension(naky) :: kx_shift_stored ! NDCTESTneighb
 
     call prof_entering ("init_response_matrix", "fields_implicit")
 
@@ -976,6 +971,7 @@ contains
            ! required for shifting in kx during interpolation
            allocate(dkx(naky))
            dkx = (akx(2) - akx(1))
+           kx_shift_stored = kx_shift
        end if
 
        ! In implicit implementation of flow-shear, need to compute different response
@@ -1088,15 +1084,13 @@ contains
                        if(implicit_flowshear .or. mixed_flowshear) then
                            !interp_shift_kx = -1 NDCTESTshift
                            if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
-                           call update_kperp2_tdep(0.*dkx)
+                           kx_shift = 0. ! NDCTESTneighb
+                           call update_kperp2_tdep
                            call update_aj0_tdep
                            call update_gamtot_tdep
                            if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
 
                            if(implicit_flowshear) then
-                               if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
-                               call update_wdrift_tdep(0.*dkx)
-                               if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
                                if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
                                call init_invert_rhs
                                if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
@@ -1121,15 +1115,13 @@ contains
                            !interp_shift_kx = -1 NDCTESTshift
                            ! NDCTESTshift: moving to kx-0.5*dkx
                            if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
-                           call update_kperp2_tdep(-0.5*dkx) ! NDCTEST: change factor to -1.
+                           kx_shift = -0.5*dkx ! NDCTESTneighb
+                           call update_kperp2_tdep ! NDCTEST: change factor to -1.
                            call update_aj0_tdep
                            call update_gamtot_tdep
                            if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
 
                            if(implicit_flowshear) then
-                               if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
-                               call update_wdrift_tdep(-0.5*dkx)
-                               if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
                                if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
                                call init_invert_rhs
                                if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
@@ -1152,15 +1144,13 @@ contains
 
                            ! NDCTESTshift: moving to kx+0.5*dkx
                            if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
-                           call update_kperp2_tdep(0.5*dkx) ! NDCTEST: remove factor of 0.5
+                           kx_shift = 0.5*dkx ! NDCTESTneighb
+                           call update_kperp2_tdep ! NDCTEST: remove factor of 0.5
                            call update_aj0_tdep
                            call update_gamtot_tdep
                            if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
 
                            if(implicit_flowshear) then
-                               if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
-                               call update_wdrift_tdep(0.5*dkx)
-                               if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
                                if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
                                call init_invert_rhs
                                if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
@@ -1181,15 +1171,13 @@ contains
 
                            ! NDCTESTshift: moving back to kxstar(t)
                            if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
-                           call update_kperp2_tdep(kx_shift)
+                           kx_shift = kx_shift_stored ! NDCTESTneighb
+                           call update_kperp2_tdep
                            call update_aj0_tdep
                            call update_gamtot_tdep
                            if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
                            
                            if(implicit_flowshear) then
-                               if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
-                               call update_wdrift_tdep(kx_shift)
-                               if (proc0) call time_message(.false.,timer_interp_wdrift,' bla') ! NDCTESTtime
                                if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
                                call init_invert_rhs
                                if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime

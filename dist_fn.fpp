@@ -103,7 +103,6 @@ module dist_fn
   public :: update_kperp2_tdep
   public :: update_aj0_tdep
   public :: update_gamtot_tdep
-  public :: update_wdrift_tdep
 
   public :: compute_wdrift ! NDCTESTshift
   public :: init_invert_rhs ! NDCTESTshift
@@ -179,6 +178,7 @@ module dist_fn
 #else
   real, dimension (:,:,:), allocatable :: wdrift
   real, dimension (:,:,:), allocatable :: vdrift_x
+  real, dimension (:,:,:), allocatable :: vdrift_x_cent
   ! (-ntgrid:ntgrid, 2, -g-layout-)
 #endif
 
@@ -939,7 +939,7 @@ contains
     use dist_fn_arrays, only: gnew, g
     use dist_fn_arrays, only: vpa, vpac, vpar
     use dist_fn_arrays, only: ittp
-    use dist_fn_arrays, only: vpa_gf, vperp2_gf, wdrift_tdep, wdriftttp_tdep
+    use dist_fn_arrays, only: vpa_gf, vperp2_gf
     use kt_grids, only: implicit_flowshear
     !initializing  = .true.
     if (.not. initialized_dist_fn_level_3) return
@@ -949,6 +949,7 @@ contains
     
     wdrift = 0.
     vdrift_x = 0.
+    vdrift_x_cent = 0.
     wdriftttp = 0.
     a = 0.
     b = 0.
@@ -960,10 +961,7 @@ contains
 
     if (allocated(vpa)) deallocate (vpa, vpac, vpar)
     if (allocated(ittp)) then
-        deallocate (ittp, wdrift, vdrift_x, wdriftttp)
-        if (implicit_flowshear) then
-            deallocate(wdrift_tdep%old, wdrift_tdep%new, wdriftttp_tdep%old, wdriftttp_tdep%new)
-        end if
+        deallocate (ittp, wdrift, vdrift_x, vdrift_x_cent, wdriftttp)
     end if
     if (allocated(wstar)) deallocate (wstar)
 !AJ
@@ -1254,7 +1252,7 @@ contains
   end subroutine fill_species_knobs
 
   ! Split subroutine init_wdrift because part of it is now also used to
-  ! update wdrift_tdep and wdriftttp_tdep in flowshear cases -- NDC 02/2018
+  ! update wdrift_shift and wdriftttp_shift in flowshear cases -- NDC 02/2018
   
   subroutine init_wdrift
 
@@ -1264,7 +1262,6 @@ contains
           mixed_flowshear
       use le_grids, only: negrid
       use gs2_layouts, only: g_lo
-      use dist_fn_arrays, only: wdrift_tdep, wdriftttp_tdep
       use job_manage, only: time_message ! NDCTESTtime
       use mp, only: proc0 ! NDCTESTtime
       
@@ -1278,6 +1275,7 @@ contains
       end if
       if(.not. allocated(vdrift_x)) then
           allocate(vdrift_x(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+          allocate(vdrift_x_cent(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
       end if
 
 #ifdef LOWFLOW
@@ -1285,17 +1283,6 @@ contains
 #endif
 
       call compute_wdrift(wdrift, wdriftttp)
-
-      if(implicit_flowshear) then
-          allocate (wdrift_tdep%old(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-          wdrift_tdep%old = wdrift
-          allocate (wdrift_tdep%new(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-          wdrift_tdep%new = wdrift
-          allocate (wdriftttp_tdep%old(-ntgrid:ntgrid,ntheta0,naky,negrid,nspec,2))
-          wdriftttp_tdep%old = wdriftttp
-          allocate (wdriftttp_tdep%new(-ntgrid:ntgrid,ntheta0,naky,negrid,nspec,2))
-          wdriftttp_tdep%new = wdriftttp
-      end if
 
   end subroutine init_wdrift
 
@@ -1358,6 +1345,7 @@ contains
 
     my_wdrift = 0.  ; my_wdriftttp = 0.
     vdrift_x = 0.
+    vdrift_x_cent = 0.
 #ifdef LOWFLOW
     wcurv = 0.
 #endif
@@ -1425,8 +1413,7 @@ contains
     do iglo = g_lo%llim_proc, g_lo%ulim_proc
        do ig = -ntgrid, ntgrid-1
           my_wdrift(ig,:,iglo) = 0.5*(my_wdrift(ig,:,iglo) + my_wdrift(ig+1,:,iglo))
-          ! NDCTESTmichaelnew: need uncentered version of vdrift_x for ttp get_source_term
-          !vdrift_x(ig,:,iglo) = 0.5*(vdrift_x(ig,:,iglo) + vdrift_x(ig+1,:,iglo))
+          vdrift_x_cent(ig,:,iglo) = 0.5*(vdrift_x(ig,:,iglo) + vdrift_x(ig+1,:,iglo))
 #ifdef LOWFLOW
           wcurv(ig,iglo) =  0.5*(wcurv(ig,iglo) + wcurv(ig+1,iglo))
 #endif
@@ -1440,29 +1427,6 @@ contains
     deallocate(my_kx_shift)
 
   end subroutine compute_wdrift
-
-  subroutine update_wdrift_tdep(my_kx_shift)
-
-      use dist_fn_arrays, only: wdrift_tdep, wdriftttp_tdep
-      use kt_grids, only: aky
-      use gs2_time, only: code_dt, code_dt_old
-      use run_parameters, only: tunits
-
-      implicit none
-
-      real, dimension(:), intent(in) :: my_kx_shift
-      real :: gdt
-
-      ! gdt = 0.5*(code_dt+code_dt_old) ! NDCTEST
-      gdt = code_dt
-
-      ! First old
-      call compute_wdrift(wdrift_tdep%old, wdriftttp_tdep%old, my_kx_shift+aky*g_exb*g_exbfac*gdt*tunits)
-
-      ! Then new
-      call compute_wdrift(wdrift_tdep%new, wdriftttp_tdep%new, my_kx_shift)
-
-  end subroutine update_wdrift_tdep
 
   ! NDC 11/2017
   ! Split wdrift_func into x and y parts by defining
@@ -1834,43 +1798,29 @@ contains
   ! and kperp2_tdep%new gets re-computed using kx_shift_interp instead of kx_shift.
   ! This optional argument is only required when computing shifted versions of the field-solve matrix
   ! in fields_implicit::init_response_matrix). -- NDC 02/2018
-  subroutine update_kperp2_tdep(my_kx_shift)
+  subroutine update_kperp2_tdep
       
       use theta_grid, only: ntgrid, gds21, gds22, shat
       use kt_grids, only: akx, aky, theta0, naky, ntheta0, kperp2, kperp2_tdep
-      use run_parameters, only: tunits
-      use gs2_time, only: code_dt, code_dt_old
+      use dist_fn_arrays, only: kx_shift, kx_shift_old
       
       implicit none
 
-      real, dimension(:), intent(in) :: my_kx_shift
       integer :: ik, it
-      real :: gdt
-      real :: my_kx_shift_old ! NDCTESTkxshift
-                  
-      !gdt = 0.5*(code_dt+code_dt_old)
-      gdt = code_dt ! NDCTEST
 
       do ik = 1, naky
           
           ! flowshear has no effect on kperp if ky==0
           if (aky(ik) /= 0.0) then
 
-              ! NDCTESTkxshift
-              my_kx_shift_old = my_kx_shift(ik) + aky(ik)*g_exb*g_exbfac*gdt*tunits(ik)
-
-              ! write(*,*) 'kx_shift = ', kx_shift(ik) ! NDCTEST
-              ! write(*,*) 'gds21 = ', gds21 ! NDCTEST
-              ! write(*,*) 'gds22 = ', gds22 ! NDCTEST
-
               do it = 1, ntheta0
                   
                   ! First old
                   ! NDCTESTkxshift
                   kperp2_tdep%old(:,it,ik) = kperp2(:,it,ik) + &
-                      my_kx_shift_old*my_kx_shift_old*gds22/(shat*shat) + &
-                      2.0*my_kx_shift_old*aky(ik)*gds21/shat + &
-                      2.0*my_kx_shift_old*theta0(it,ik)*aky(ik)*gds22/shat
+                      kx_shift_old(ik)*kx_shift_old(ik)*gds22/(shat*shat) + &
+                      2.0*kx_shift_old(ik)*aky(ik)*gds21/shat + &
+                      2.0*kx_shift_old(ik)*theta0(it,ik)*aky(ik)*gds22/shat
                   !kperp2_tdep%old(:,it,ik) = kperp2(:,it,ik) + &
                   !    (my_kx_shift(ik)+aky(ik)*g_exb*g_exbfac*gdt*tunits(ik))*(my_kx_shift(ik)+aky(ik)*g_exb*g_exbfac*gdt*tunits(ik))*gds22/(shat*shat) + &
                   !    2.0*(my_kx_shift(ik)+aky(ik)*g_exb*g_exbfac*gdt*tunits(ik))*aky(ik)*gds21/shat + &
@@ -1879,9 +1829,9 @@ contains
 
                   ! Then new
                   kperp2_tdep%new(:,it,ik) = kperp2(:,it,ik) + &
-                      my_kx_shift(ik)*my_kx_shift(ik)*gds22/(shat*shat) + &
-                      2.0*my_kx_shift(ik)*aky(ik)*gds21/shat + &
-                      2.0*my_kx_shift(ik)*theta0(it,ik)*aky(ik)*gds22/shat
+                      kx_shift(ik)*kx_shift(ik)*gds22/(shat*shat) + &
+                      2.0*kx_shift(ik)*aky(ik)*gds21/shat + &
+                      2.0*kx_shift(ik)*theta0(it,ik)*aky(ik)*gds22/shat
               
               end do
 
@@ -1943,9 +1893,9 @@ contains
   end subroutine update_aj0_tdep
 
   subroutine init_invert_rhs
-    use dist_fn_arrays, only: vpar, ittp, wdrift_tdep, wdriftttp_tdep
+    use dist_fn_arrays, only: vpar, ittp, kx_shift, kx_shift_old
     use species, only: spec, nspec
-    use theta_grid, only: ntgrid
+    use theta_grid, only: ntgrid, shat
     use kt_grids, only: naky, ntheta0, implicit_flowshear
     use le_grids, only: nlambda, ng2, forbid, negrid
     use constants, only: zi
@@ -1996,11 +1946,16 @@ contains
              wdttp = wdriftttp(ig,it,ik,ie,is,isgn) + wstar_neo(ig,it,ik)*spec(is)%zt
 # else
              if(implicit_flowshear) then
-                 wdold = wdrift_tdep%old(ig,isgn,iglo)
-                 wdttpold = wdriftttp_tdep%old(ig,it,ik,ie,is,isgn)
-                 wdnew = wdrift_tdep%new(ig,isgn,iglo)
-                 wdttpnew = wdriftttp_tdep%new(ig,it,ik,ie,is,isgn)
+                 wdold = wdrift(ig,isgn,iglo) &
+                     + vdrift_x_cent(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik) ! NDCTODO: should be wdrift_old
+                 wdttpold = wdriftttp(ig,it,ik,ie,is,isgn) &
+                     + vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik) ! NDCTODO: should be wdriftttp_old
+                 wdnew = wdrift(ig,isgn,iglo) &
+                     + vdrift_x_cent(ig,isgn,iglo)/(2.*shat)*kx_shift(ik)
+                 wdttpnew = wdriftttp(ig,it,ik,ie,is,isgn) &
+                     + vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift(ik)
              else
+                 ! NDCTODO: should split into old
                  wd = wdrift(ig,isgn,iglo)
                  wdttp = wdriftttp(ig,it,ik,ie,is,isgn)
              end if
@@ -5237,7 +5192,7 @@ endif
     use dist_fn_arrays, only: hneoc, vparterm, wdfac, wstarfac, wdttpfac
 #endif
     use dist_fn_arrays, only: aj0, aj1, vperp2, vpar, vpac, g, ittp, &
-        aj0_tdep, wdrift_tdep, wdriftttp_tdep, kx_shift, kx_shift_old
+        aj0_tdep, kx_shift, kx_shift_old
     use theta_grid, only: ntgrid, shat, itor_over_B
     use kt_grids, only: aky, explicit_flowshear, implicit_flowshear, mixed_flowshear
     use le_grids, only: nlambda, ng2, lmax, anon, negrid
@@ -5266,6 +5221,7 @@ endif
     real :: c0, c1, c2
     real :: bd, bdfac_p, bdfac_m
     logical :: michael_exp = .true. ! NDCTESTswitchexp
+    real :: wdold, wdnew, wdttpold, wdttpnew ! NDCTESTneighb
 
 ! try fixing bkdiff dependence
     bd = bkdiff(1)
@@ -5377,6 +5333,12 @@ endif
         source_option_switch == source_option_phiext_full) then
        if (nlambda > ng2 .and. isgn == 2) then
           do ig = -ntgrid, ntgrid-1
+             
+             wdttpold = wdriftttp(ig,it,ik,ie,is,2) &
+                 + vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik) ! NDCTODO
+             wdttpnew = wdriftttp(ig,it,ik,ie,is,2) &
+                 + vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift(ik)
+
              if (il < ittp(ig)) cycle
              if(implicit_flowshear) then
                  source(ig) &
@@ -5385,8 +5347,8 @@ endif
                       - anon(ie)*zi*(wdttpfac(ig,it,ik,ie,is,2)*hneoc(ig,2,iglo))*phigavg(ig) &
                       + zi*wstar(ik,ie,is)*hneoc(ig,2,iglo)*phigavg(ig)
 #else
-                      - anon(ie)*zi*(wdriftttp_tdep%new(ig,it,ik,ie,is,2))*phigavgnew(ig) &
-                      - anon(ie)*zi*(wdriftttp_tdep%old(ig,it,ik,ie,is,2))*phigavg(ig) &
+                      - anon(ie)*zi*wdttpnew*phigavgnew(ig) &
+                      - anon(ie)*zi*wdttpold*phigavg(ig) &
                       + zi*wstar(ik,ie,is)*(phigavg(ig)+phigavgnew(ig))
 #endif             
              else
@@ -5541,7 +5503,6 @@ endif
       implicit none
       complex :: apar_p, apar_m, phi_p, phi_m!, bpar_p !GGH added bpar_p
       complex :: phinew_p, phinew_m
-      real :: vdrift_x_cent ! NDCTESTmichaelnew
 
 
 !CMR, 4/8/2011:
@@ -5619,12 +5580,17 @@ endif
          ! Should vpac and vpar be bakdif'ed instead of centered ?
          if(implicit_flowshear) then
 
+             wdold = wdrift(ig,isgn,iglo) &
+                 + vdrift_x_cent(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik) ! NDCTODO
+             wdnew = wdrift(ig,isgn,iglo) &
+                 + vdrift_x_cent(ig,isgn,iglo)/(2.*shat)*kx_shift(ik)
+
              source(ig) = anon(ie)*(-2.0*vpar(ig,isgn,iglo)*(phi_m+phinew_m) &
                   -spec(is)%zstm*vpac(ig,isgn,iglo) &
                   *((aj0(ig+1,iglo) + aj0(ig,iglo))*0.5*apar_m  &
                   + D_res(it,ik)*apar_p) &
-                  -zi*wdrift_tdep%old(ig,isgn,iglo)*phi_p &
-                  -zi*wdrift_tdep%new(ig,isgn,iglo)*phinew_p ) &
+                  -zi*wdold*phi_p &
+                  -zi*wdnew*phinew_p ) &
                   + zi*(wstar(ik,ie,is) &
                   + vpac(ig,isgn,iglo)*code_dt*wunits(ik)*ufac(ie,is) &
                   -2.0*omprimfac*vpac(ig,isgn,iglo)*code_dt*wunits(ik)*g_exb*itor_over_B(ig)/spec(is)%stm) &
@@ -5670,15 +5636,13 @@ endif
 
              if(mixed_flowshear .or. explicit_flowshear) then
 
-                 ! NDCQUEST: the centering is consistent with wdrift. Should it be bakdif'ed?
-                 vdrift_x_cent = 0.5*(vdrift_x(ig,isgn,iglo)+vdrift_x(ig+1,isgn,iglo)) ! NDCTESTmichaelnew
                  g_bd = calc_g_bd(ig,isgn,iglo,bd)
                  j0phi_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0,phi)
                  j0phi_tdep_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phi)
 
                  source(ig) = source(ig) &
-                      - zi * spec(is)%tz * vdrift_x_cent/shat * kx_shift_old(ik) * g_bd & ! NDCTESTmichaelnew: replaced vdrift_x
-                      - zi * ( vdrift_x_cent/shat*kx_shift_old(ik) + & ! NDCTESTmichaelnew: replaced vdrift_x
+                      - zi * spec(is)%tz * vdrift_x_cent(ig,isgn,iglo)/shat * kx_shift_old(ik) * g_bd & ! NDCTESTmichaelnew: replaced vdrift_x
+                      - zi * ( vdrift_x_cent(ig,isgn,iglo)/shat*kx_shift_old(ik) + & ! NDCTESTmichaelnew: replaced vdrift_x
                           2.*wdrift(ig,isgn,iglo) ) * j0phi_tdep_bd &
                       + 2.*zi * wdrift(ig,isgn,iglo) * j0phi_bd &
                       - 2.*vpar(ig,isgn,iglo) * ( (aj0_tdep%old(ig+1,iglo)-aj0(ig+1,iglo))*phi(ig+1,it,ik) - &
@@ -5695,7 +5659,7 @@ endif
                  j0phistar_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phistar_old)
 
                  source(ig) = source(ig) &
-                      - zi * ( vdrift_x_cent/shat*kx_shift_old(ik) + & ! NDCTESTmichaelnew: replaced vdrift_x
+                      - zi * ( vdrift_x_cent(ig,isgn,iglo)/shat*kx_shift_old(ik) + & ! NDCTESTmichaelnew: replaced vdrift_x
                           2.*wdrift(ig,isgn,iglo) ) * j0phistar_bd &
                       - 2.*vpar(ig,isgn,iglo) * ( &
                           aj0_tdep%old(ig+1,iglo)*phistar_old(ig+1,it,ik) - aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik) ) &
@@ -6857,6 +6821,7 @@ endif
     use species, only: spec
     use spfunc, only: j0, j1
     use kt_grids, only: kperp2, kperp2_tdep, explicit_flowshear, implicit_flowshear, mixed_flowshear
+    use fields_arrays, only: phistar_old
 
     implicit none
     complex, dimension (-ntgrid:,:,:), intent (in) :: phi,    apar,    bpar
@@ -6876,6 +6841,11 @@ endif
     integer :: ie, is, itl, itr
     complex :: adjl, adjr, dadj
     real :: vperp2left, vperp2right, argl, argr, aj0l, aj0r, aj1l, aj1r
+    ! NDCTESTneighb
+    real :: kperp2_l, kperp2_r
+    complex :: phi_l, phi_r
+    ! endNDCTESTneighb
+    logical :: michael_exp = .true. ! NDCTESTswitchexp
 
 
     do iglo = g_lo%llim_proc, g_lo%ulim_proc
@@ -6902,6 +6872,50 @@ endif
        do iglo = g_lo%llim_proc, g_lo%ulim_proc
           ik = ik_idx(g_lo,iglo)
           it = it_idx(g_lo,iglo)
+          
+          itl=get_leftmost_it(it,ik)
+          itr=get_rightmost_it(it,ik)
+    
+          ! NDCTESTneighb
+          if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+
+              if(first_gk_solve) then
+                  kperp2_l = kperp2_tdep%old(-ntgrid,itl,ik)
+                  kperp2_r = kperp2_tdep%old(ntgrid,itr,ik)
+
+                  if(explicit_flowshear .and. michael_exp) then
+                      phi_l = phinew(-ntgrid,itl,ik) + phistar_old(-ntgrid,itl,ik)
+                      phi_r = phinew(ntgrid,itr,ik) + phistar_old(ntgrid,itr,ik)
+                  else
+                      phi_l = phinew(-ntgrid,itl,ik)
+                      phi_r = phinew(ntgrid,itr,ik)
+                  end if
+              else
+                  kperp2_l = kperp2_tdep%new(-ntgrid,itl,ik)
+                  kperp2_r = kperp2_tdep%new(ntgrid,itr,ik)
+
+                  if(explicit_flowshear .and. michael_exp) then
+                      ! NDCQUEST: the two next lines are wrong. For the second GK-solve, we should be adding 
+                      ! phistar_new to store the full phi[it+1] in phinew. But we do not know phistar_new
+                      ! until we know the full g[it+1], so approximate to phistar_old.
+                      ! I suspect this has very little impact on solutions.
+                      phi_l = phinew(-ntgrid,itl,ik) + phistar_old(-ntgrid,itl,ik)
+                      phi_r = phinew(ntgrid,itr,ik) + phistar_old(ntgrid,itr,ik)
+                  else
+                      phi_l = phinew(-ntgrid,itl,ik)
+                      phi_r = phinew(ntgrid,itr,ik)
+                  end if
+              end if
+
+          else
+
+              kperp2_l = kperp2(-ntgrid,itl,ik)
+              kperp2_r = kperp2(ntgrid,itr,ik)
+              phi_l = phinew(-ntgrid,itl,ik)
+              phi_r = phinew(ntgrid,itr,ik)
+
+          end if
+          ! endNDCTESTneighb
 
           ncell = r_links(ik, it) + l_links(ik, it) + 1
           if (ncell == 1) cycle
@@ -6920,17 +6934,8 @@ endif
 !      
              vperp2left = bmag(-ntgrid)*al(il)*energy(ie)
              vperp2right = bmag(ntgrid)*al(il)*energy(ie)
-             itl=get_leftmost_it(it,ik)
-             itr=get_rightmost_it(it,ik)
-             if (explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-                argl = spec(is)%bess_fac*spec(is)%smz*sqrt( &
-                    energy(ie)*al(il)/bmag(-ntgrid)*kperp2_tdep%new(-ntgrid,itl,ik) )
-                argr = spec(is)%bess_fac*spec(is)%smz*sqrt( &
-                    energy(ie)*al(il)/bmag(ntgrid)*kperp2_tdep%new(ntgrid,itr,ik))
-             else
-                argl = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(-ntgrid)*kperp2(-ntgrid,itl,ik))
-                argr = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ntgrid)*kperp2(ntgrid,itr,ik))
-             end if
+             argl = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(-ntgrid)*kperp2_l)
+             argr = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ntgrid)*kperp2_r)
              aj0l = j0(argl)
              aj0r = j0(argr)
              aj1l = j1(argl)
@@ -6938,11 +6943,11 @@ endif
 
              adjl = anon(ie)*2.0*vperp2left*aj1l &
               *bparnew(-ntgrid,itl,ik)*fbpar &
-              + spec(is)%z*anon(ie)*phinew(-ntgrid,itl,ik)*aj0l &
+              + spec(is)%z*anon(ie)*phi_l*aj0l &
               /spec(is)%temp*fphi
              adjr = anon(ie)*2.0*vperp2right*aj1r &
               *bparnew(ntgrid,itr,ik)*fbpar &
-              + spec(is)%z*anon(ie)*phinew(ntgrid,itr,ik)*aj0r &
+              + spec(is)%z*anon(ie)*phi_r*aj0r &
               /spec(is)%temp*fphi
              dadj = adjl-adjr
 

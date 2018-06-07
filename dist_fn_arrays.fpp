@@ -21,8 +21,6 @@ module dist_fn_arrays
   public :: kx_shift_old
   public :: aj0_tdep
   public :: gamtot_tdep
-  public :: wdrift_tdep
-  public :: wdriftttp_tdep
   public :: t_last_jump ! NDCTESTnl
   public :: remap_period ! NDCTESTnl
   
@@ -76,20 +74,6 @@ module dist_fn_arrays
 
   type(gamtot_tdep_type) :: gamtot_tdep
 
-  type :: wdrift_tdep_type
-      real, dimension (:,:,:), allocatable :: old
-      real, dimension (:,:,:), allocatable :: new
-  end type wdrift_tdep_type
-
-  type(wdrift_tdep_type) :: wdrift_tdep
-
-  type :: wdriftttp_tdep_type
-      real, dimension (:,:,:,:,:,:), allocatable :: old
-      real, dimension (:,:,:,:,:,:), allocatable :: new
-  end type wdriftttp_tdep_type
-
-  type(wdriftttp_tdep_type) :: wdriftttp_tdep
-  
   real, dimension(:), allocatable :: kx_shift_old
 
   real, dimension(:), allocatable :: t_last_jump ! NDCTESTnl
