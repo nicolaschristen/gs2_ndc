@@ -352,6 +352,7 @@ contains
     real :: dkx
     integer :: ig_nosum, it_nosum = 0 ! NDCTEST
     integer :: expflow_opt
+    logical :: michael_exp = .false. ! NDCTESTswitchexp
 
     if (proc0) call time_message(.false.,time_field,' Field Solver')
 
@@ -408,11 +409,14 @@ contains
     ! Modified field equation for explicit flowshear implementation
     ! necessary to make aminv time independent. -- NDC 02/2018
     if(explicit_flowshear) then
-        ! NDCTESTfelix
-        !expflow_opt = 1
-        !call get_field_vector (fl, phi, apar, bpar, expflow_opt)
-        ! NDCTESTmichael
-        call get_field_vector (fl, phi, apar, bpar)
+        if(michael_exp) then
+            ! NDCTESTmichael
+            call get_field_vector (fl, phi, apar, bpar)
+        else
+            ! NDCTESTfelix
+            expflow_opt = 1
+            call get_field_vector (fl, phi, apar, bpar, expflow_opt)
+        end if
     else
         call get_field_vector (fl, phi, apar, bpar)
     end if
@@ -562,6 +566,7 @@ contains
     complex, dimension(:,:,:), allocatable :: phi_5d
     character(5) :: istep_str
     ! endNDCTESTremap_plot
+    logical :: michael_exp = .false. ! NDCTESTswitchexp
     
     ! NDCTESTremap_plot
     if(remap_plot_shear .or. remap_plot_nl) then
@@ -649,7 +654,7 @@ contains
         end if
 
         ! NDCTESTmichaelnew: compute phistar[it]
-        if(explicit_flowshear) then
+        if(explicit_flowshear .and. michael_exp) then
 
             !deallocate is further down in this subroutine
             allocate(expflow_antot(-ntgrid:ntgrid,ntheta0,naky))
@@ -675,7 +680,7 @@ contains
 
         end if
         
-        if(explicit_flowshear) then
+        if(explicit_flowshear .and. michael_exp) then
             ! NDCTESTmichaelnew: replace phi[it] and phi[it+1] by phibar[it]
             phi = phi-phistar_old
             phinew = phinew-phistar_old
@@ -715,7 +720,7 @@ contains
         call timeadv (phi, apar, bpar, phinew, aparnew, bparnew, istep, diagnostics)
 
         ! NDCTESTmichaelnew: compute phistar[it+1] and get the full phi[it] and phi[it+1]
-        if(explicit_flowshear) then
+        if(explicit_flowshear .and. michael_exp) then
 
             expflow_opt = 4
             call getan(expflow_antot, dummy1, dummy2, expflow_opt)

@@ -5256,6 +5256,7 @@ endif
     complex :: j0phistar_bd ! NDCTESTmichaelnew
     real :: c0, c1, c2
     real :: bd, bdfac_p, bdfac_m
+    logical :: michael_exp = .false. ! NDCTESTswitchexp
 
 ! try fixing bkdiff dependence
     bd = bkdiff(1)
@@ -5423,7 +5424,7 @@ endif
                  end if
 
                  ! NDCTESTmichaelnew
-                 if(explicit_flowshear) then
+                 if(explicit_flowshear .and. michael_exp) then
 
                      if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
                      if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
@@ -5680,7 +5681,7 @@ endif
              end if
 
              ! NDCTESTmichaelnew
-             if(explicit_flowshear) then
+             if(explicit_flowshear .and. michael_exp) then
 
                  j0phistar_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phistar_old)
 
