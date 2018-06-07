@@ -446,7 +446,8 @@ contains
 
   subroutine allocate_arrays
     use theta_grid, only: ntgrid
-    use kt_grids, only: naky, ntheta0
+    use kt_grids, only: naky, ntheta0, &
+        explicit_flowshear ! NDCTESTmichaelnew
     use antenna, only: no_driver
     use fields_arrays, only: phi, apar, bpar, phinew, aparnew, bparnew, apar_ext, &
         phistar_old, phistar_new ! NDCTESTmichaelnew
@@ -454,6 +455,7 @@ contains
     use unit_tests, only: debug_message
     implicit none
     integer, parameter :: verb=3
+    logical :: michael_exp = .true. ! NDCTESTswitchexp
 
     if (.not. allocated(phi)) then
        call debug_message(verb, 'fields::allocate_arrays allocating')
@@ -463,8 +465,10 @@ contains
        allocate (  phinew (-ntgrid:ntgrid,ntheta0,naky))
        allocate ( aparnew (-ntgrid:ntgrid,ntheta0,naky))
        allocate (bparnew (-ntgrid:ntgrid,ntheta0,naky))
-       allocate ( phistar_old (-ntgrid:ntgrid,ntheta0,naky)) ! NDCTESTmichaelnew
-       allocate ( phistar_new (-ntgrid:ntgrid,ntheta0,naky)) ! NDCTESTmichaelnew
+       if(explicit_flowshear .and. michael_exp) then
+           allocate ( phistar_old (-ntgrid:ntgrid,ntheta0,naky)) ! NDCTESTmichaelnew
+           allocate ( phistar_new (-ntgrid:ntgrid,ntheta0,naky)) ! NDCTESTmichaelnew
+       end if
        if(fieldopt_switch .eq. fieldopt_gf_local) then
           !AJ It should be possible to reduce the size of these by only allocating them
           !AJ the extend of it and ik in gf_lo.  However, it would need to be done carefully 
@@ -484,8 +488,10 @@ contains
     phi = 0.; phinew = 0.
     apar = 0.; aparnew = 0.
     bpar = 0.; bparnew = 0.
-    phistar_old = 0. ! NDCTESTmichaelnew
-    phistar_new = 0. ! NDCTESTmichaelnew
+    if(explicit_flowshear .and. michael_exp) then
+        phistar_old = 0. ! NDCTESTmichaelnew
+        phistar_new = 0. ! NDCTESTmichaelnew
+    end if
     if(fieldopt_switch .eq. fieldopt_gf_local) then
        gf_phi = 0.; gf_phinew = 0.
        gf_apar = 0.; gf_aparnew = 0.

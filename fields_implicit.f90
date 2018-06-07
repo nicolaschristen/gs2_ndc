@@ -352,7 +352,7 @@ contains
     real :: dkx
     integer :: ig_nosum, it_nosum = 0 ! NDCTEST
     integer :: expflow_opt
-    logical :: michael_exp = .false. ! NDCTESTswitchexp
+    logical :: michael_exp = .true. ! NDCTESTswitchexp
 
     if (proc0) call time_message(.false.,time_field,' Field Solver')
 
@@ -528,7 +528,8 @@ contains
         update_kperp2_tdep, update_aj0_tdep, update_gamtot_tdep, compute_wdrift, init_invert_rhs, &
         update_wdrift_tdep, &
         gamtot, getan ! NDCTESTmichael
-    use dist_fn, only: g_exb ! NDCTESTremap_plot
+    use dist_fn, only: g_exb, & ! NDCTESTremap_plot
+        first_gk_solve ! NDCTESTneighb
     use dist_fn_arrays, only: g, gnew, kx_shift, theta0_shift, &
         gamtot_tdep ! NDCTESTmichael
     use unit_tests, only: debug_message
@@ -566,7 +567,7 @@ contains
     complex, dimension(:,:,:), allocatable :: phi_5d
     character(5) :: istep_str
     ! endNDCTESTremap_plot
-    logical :: michael_exp = .false. ! NDCTESTswitchexp
+    logical :: michael_exp = .true. ! NDCTESTswitchexp
     
     ! NDCTESTremap_plot
     if(remap_plot_shear .or. remap_plot_nl) then
@@ -687,8 +688,15 @@ contains
         end if
             
         call debug_message(4, 'fields_implicit::advance_implicit calling timeadv 1')
-            
+        
+        ! To apply g_wesson=0 at the boundary correctly in flow shear cases (see dist_fn::invert_rhs_1),
+        ! we need to know whether we are solving the GK equation for the first time in this time step or not.
+        ! NDC 06/18
+        first_gk_solve = .true.
+
         call timeadv (phi, apar, bpar, phinew, aparnew, bparnew, istep)
+        
+        first_gk_solve = .false.    
             
         call debug_message(4, 'fields_implicit::advance_implicit called timeadv 1')
         if(reset) return !Return is resetting

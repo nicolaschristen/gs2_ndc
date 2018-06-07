@@ -111,6 +111,10 @@ module dist_fn
   public :: timer_aminv_setsource ! NDCTESTtime
   public :: timer_interp_setsource ! NDCTESTtime
   public :: timer_adv_setsource ! NDCTESTtime
+  
+  ! NDCTESTneighb
+  public :: first_gk_solve
+  ! endNDCTESTneighb
 
   ! knobs
   complex, dimension (:), allocatable :: fexp ! (nspec)
@@ -306,6 +310,11 @@ module dist_fn
   real :: timer_adv_setsource(2) = 0. ! NDCTESTtime
   logical :: trigger_timer_aminv2 ! NDCTESTtime
   logical :: trigger_timer_interp2 ! NDCTESTtime
+    
+  ! NDCTESTneighb
+  ! Set to false so that BC in dist_fn::invert_rhs_1 for response matrices uses tdep%new
+  logical :: first_gk_solve = .false.
+  ! endNDCTESTneighb
 
 contains
 
@@ -5256,7 +5265,7 @@ endif
     complex :: j0phistar_bd ! NDCTESTmichaelnew
     real :: c0, c1, c2
     real :: bd, bdfac_p, bdfac_m
-    logical :: michael_exp = .false. ! NDCTESTswitchexp
+    logical :: michael_exp = .true. ! NDCTESTswitchexp
 
 ! try fixing bkdiff dependence
     bd = bkdiff(1)
@@ -6439,6 +6448,7 @@ endif
     use prof, only: prof_entering, prof_leaving
     use run_parameters, only: fbpar, fphi, ieqzip
     use species, only: spec
+    use fields_arrays, only: phistar_old ! NDCTESTneighb
     implicit none
     complex, dimension (-ntgrid:,:,:), intent (in) :: phi,    apar,    bpar
     complex, dimension (-ntgrid:,:,:), intent (in) :: phinew, aparnew, bparnew
@@ -6454,6 +6464,11 @@ endif
     complex :: adjleft, adjright
     logical :: use_pass_homog, speriod_flag
     integer :: ntgl, ntgr
+    logical :: michael_exp = .true. ! NDCTESTswitchexp
+    ! NDCTESTneighb
+    real :: aj0_l, aj0_r
+    complex :: phi_l, phi_r
+    ! endNDCTESTneighb
           
 !    call prof_entering ("invert_rhs_1", "dist_fn")
 
@@ -6511,6 +6526,47 @@ endif
 
     ! gnew is the inhomogeneous solution
     gnew(:,:,iglo) = 0.0
+    
+    ! NDCTESTneighb
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+
+        if(first_gk_solve) then
+            aj0_l = aj0_tdep%old(-ntgrid,iglo)
+            aj0_r = aj0_tdep%old(ntgrid,iglo)
+
+            if(explicit_flowshear .and. michael_exp) then
+                phi_l = phinew(-ntgrid,it,ik) + phistar_old(-ntgrid,it,ik)
+                phi_r = phinew(ntgrid,it,ik) + phistar_old(ntgrid,it,ik)
+            else
+                phi_l = phinew(-ntgrid,it,ik)
+                phi_r = phinew(ntgrid,it,ik)
+            end if
+        else
+            aj0_l = aj0_tdep%new(-ntgrid,iglo)
+            aj0_r = aj0_tdep%new(ntgrid,iglo)
+
+            if(explicit_flowshear .and. michael_exp) then
+                ! NDCQUEST: the two next lines are wrong. For the second GK-solve, we should be adding 
+                ! phistar_new to store the full phi[it+1] in phinew. But we do not know phistar_new
+                ! until we know the full g[it+1], so approximate to phistar_old.
+                ! I suspect this has very little impact on solutions.
+                phi_l = phinew(-ntgrid,it,ik) + phistar_old(-ntgrid,it,ik)
+                phi_r = phinew(ntgrid,it,ik) + phistar_old(ntgrid,it,ik)
+            else
+                phi_l = phinew(-ntgrid,it,ik)
+                phi_r = phinew(ntgrid,it,ik)
+            end if
+        end if
+
+    else
+
+        aj0_l = aj0(-ntgrid,iglo)
+        aj0_r = aj0(ntgrid,iglo)
+        phi_l = phinew(-ntgrid,it,ik)
+        phi_r = phinew(ntgrid,it,ik)
+
+    end if
+    ! endNDCTESTneighb
 
 !CMR, 18/4/2012:
 ! What follows is a selectable improved parallel bc for passing particles.
@@ -6524,33 +6580,19 @@ endif
           !Only apply the new boundary condition to the leftmost
           !cell for sign going from left to right
           if (l_links(ik,it) .eq. 0) then
-             if (explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-                adjleft = anon(ie)*2.0*vperp2(-ntgrid,iglo)*aj1(-ntgrid,iglo) &
-                     *bparnew(-ntgrid,it,ik)*fbpar &
-                     + spec(is)%z*anon(ie)*phinew(-ntgrid,it,ik)*aj0_tdep%new(-ntgrid,iglo) &
-                     /spec(is)%temp*fphi
-             else
-                adjleft = anon(ie)*2.0*vperp2(-ntgrid,iglo)*aj1(-ntgrid,iglo) &
-                     *bparnew(-ntgrid,it,ik)*fbpar &
-                     + spec(is)%z*anon(ie)*phinew(-ntgrid,it,ik)*aj0(-ntgrid,iglo) &
-                     /spec(is)%temp*fphi
-             end if
+             adjleft = anon(ie)*2.0*vperp2(-ntgrid,iglo)*aj1(-ntgrid,iglo) &
+                  *bparnew(-ntgrid,it,ik)*fbpar &
+                  + spec(is)%z*anon(ie)*phi_l*aj0_l &
+                  /spec(is)%temp*fphi
              gnew(-ntgrid,1,iglo) = gnew(-ntgrid,1,iglo) - adjleft
           end if
           !Only apply the new boundary condition to the rightmost
           !cell for sign going from right to left
           if (r_links(ik,it) .eq. 0) then
-             if (explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-                adjright = anon(ie)*2.0*vperp2(ntgrid,iglo)*aj1(ntgrid,iglo) &
-                     *bparnew(ntgrid,it,ik)*fbpar &
-                     + spec(is)%z*anon(ie)*phinew(ntgrid,it,ik)*aj0_tdep%new(ntgrid,iglo) &
-                     /spec(is)%temp*fphi
-             else
-                adjright = anon(ie)*2.0*vperp2(ntgrid,iglo)*aj1(ntgrid,iglo) &
-                     *bparnew(ntgrid,it,ik)*fbpar &
-                     + spec(is)%z*anon(ie)*phinew(ntgrid,it,ik)*aj0(ntgrid,iglo) &
-                     /spec(is)%temp*fphi
-             end if
+             adjright = anon(ie)*2.0*vperp2(ntgrid,iglo)*aj1(ntgrid,iglo) &
+                  *bparnew(ntgrid,it,ik)*fbpar &
+                  + spec(is)%z*anon(ie)*phi_r*aj0_r &
+                  /spec(is)%temp*fphi
              gnew(ntgrid,2,iglo) = gnew(ntgrid,2,iglo) - adjright
          end if
        endif
@@ -6777,25 +6819,14 @@ endif
       complex :: adjl, adjr, dadj
 
       if (il .eq. ng2+1) then
-         if (explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then 
-            adjl = anon(ie)*2.0*vperp2(ntgl,iglo)*aj1(ntgl,iglo) &
-                 *bparnew(ntgl,it,ik)*fbpar &
-                 + spec(is)%z*anon(ie)*phinew(ntgl,it,ik)*aj0_tdep%new(ntgl,iglo) &
-                 /spec(is)%temp*fphi
-            adjr = anon(ie)*2.0*vperp2(ntgr,iglo)*aj1(ntgr,iglo) &
-                 *bparnew(ntgr,it,ik)*fbpar &
-                 + spec(is)%z*anon(ie)*phinew(ntgr,it,ik)*aj0_tdep%new(ntgr,iglo) &
-                 /spec(is)%temp*fphi
-         else
-            adjl = anon(ie)*2.0*vperp2(ntgl,iglo)*aj1(ntgl,iglo) &
-                 *bparnew(ntgl,it,ik)*fbpar &
-                 + spec(is)%z*anon(ie)*phinew(ntgl,it,ik)*aj0(ntgl,iglo) &
-                 /spec(is)%temp*fphi
-            adjr = anon(ie)*2.0*vperp2(ntgr,iglo)*aj1(ntgr,iglo) &
-                 *bparnew(ntgr,it,ik)*fbpar &
-                 + spec(is)%z*anon(ie)*phinew(ntgr,it,ik)*aj0(ntgr,iglo) &
-                 /spec(is)%temp*fphi
-         end if
+         adjl = anon(ie)*2.0*vperp2(ntgl,iglo)*aj1(ntgl,iglo) &
+              *bparnew(ntgl,it,ik)*fbpar &
+              + spec(is)%z*anon(ie)*phi_l*aj0_l &
+              /spec(is)%temp*fphi
+         adjr = anon(ie)*2.0*vperp2(ntgr,iglo)*aj1(ntgr,iglo) &
+              *bparnew(ntgr,it,ik)*fbpar &
+              + spec(is)%z*anon(ie)*phi_r*aj0_r &
+              /spec(is)%temp*fphi
          dadj = adjl-adjr
       else 
          dadj = cmplx(0.0,0.0)
