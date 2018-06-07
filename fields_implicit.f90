@@ -523,12 +523,10 @@ contains
     use dist_fn, only: timeadv, exb_shear, collisions_advance, &
         update_kperp2_tdep, update_aj0_tdep, update_gamtot_tdep, compute_wdrift, init_invert_rhs, &
         update_wdrift_tdep, &
-        gamtot, getan, & ! NDCTESTmichael
-        reset_aj0_old, reset_gamtot_old ! NDCTESTfelix
+        gamtot, getan ! NDCTESTmichael
     use dist_fn, only: g_exb ! NDCTESTremap_plot
     use dist_fn_arrays, only: g, gnew, kx_shift, theta0_shift, &
-        gamtot_tdep, & ! NDCTESTmichael
-        gamtot_old ! NDCTESTfelix
+        gamtot_tdep ! NDCTESTmichael
     use unit_tests, only: debug_message
     use mp, only: iproc
     use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear, &
@@ -669,7 +667,7 @@ contains
                 do it = 1,ntheta0
                     do ik = 1,naky
                         if(aky(ik)/=0.) then
-                            phistar_old(ig,it,ik) = 1./gamtot_tdep%old(ig,it,ik)*expflow_antot_tdep(ig,it,ik)-1./gamtot_old(ig,it,ik)*expflow_antot(ig,it,ik)
+                            phistar_old(ig,it,ik) = 1./gamtot_tdep%old(ig,it,ik)*expflow_antot_tdep(ig,it,ik)-1./gamtot(ig,it,ik)*expflow_antot(ig,it,ik)
                         end if
                     end do
                 end do
@@ -746,14 +744,6 @@ contains
 
         ! Advance collisions, if separate from timeadv
         call collisions_advance (phi, bpar, phinew, aparnew, bparnew, istep, diagnostics)
-
-        ! NDCTESTfelix: if aj0_old & gamtot_old have been ExB remapped, reset them to
-        ! aj0_old = aj0 & gamtot_old = gamtot at the end of the time step
-        if(explicit_flowshear) then
-            call reset_aj0_old
-            call reset_gamtot_old
-        end if
-        ! endNDCTESTfelix
 
     end if ! NDCTESTremap_plot: remove end if
 

@@ -21,12 +21,10 @@ module dist_fn_arrays
   public :: kx_shift_old
   public :: aj0_tdep
   public :: gamtot_tdep
-  public :: gamtot_old ! NDCTESTfelix
   public :: wdrift_tdep
   public :: wdriftttp_tdep
   public :: t_last_jump ! NDCTESTnl
   public :: remap_period ! NDCTESTnl
-  public :: aj0_old ! NDCTESTfelix
   
   ! dist fn
   complex, dimension (:,:,:), allocatable :: g, gnew, g_restart_tmp
@@ -43,7 +41,7 @@ module dist_fn_arrays
 
   real, dimension (:,:), allocatable :: vperp2, aj0, aj1
   ! (-ntgrid:ntgrid, -g-layout-)
-  
+
 !AJ
   real, dimension (:,:,:,:,:), allocatable :: aj0_gf, aj1_gf
 
@@ -96,9 +94,6 @@ module dist_fn_arrays
 
   real, dimension(:), allocatable :: t_last_jump ! NDCTESTnl
   real, dimension(:), allocatable :: remap_period ! NDCTESTnl
-  
-  real, dimension(:,:,:), allocatable :: gamtot_old ! NDCTESTfelix
-  real, dimension(:,:), allocatable :: aj0_old ! NDCTESTfelix
 
   
 contains
