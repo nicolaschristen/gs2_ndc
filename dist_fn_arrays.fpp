@@ -23,6 +23,10 @@ module dist_fn_arrays
   public :: gamtot_tdep
   public :: t_last_jump ! NDCTESTnl
   public :: remap_period ! NDCTESTnl
+  ! NDCTESTneighb
+  public :: jump
+  public :: last_jump
+  ! endNDCTESTneighb
   
   ! dist fn
   complex, dimension (:,:,:), allocatable :: g, gnew, g_restart_tmp
@@ -79,6 +83,10 @@ module dist_fn_arrays
   real, dimension(:), allocatable :: t_last_jump ! NDCTESTnl
   real, dimension(:), allocatable :: remap_period ! NDCTESTnl
 
+  ! NDCTESTneighb
+  integer, dimension(:), allocatable :: jump
+  integer, dimension(:), allocatable :: last_jump
+  ! endNDCTESTneighb
   
 contains
 

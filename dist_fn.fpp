@@ -224,7 +224,7 @@ module dist_fn
 !  real, dimension (:,:,:), allocatable :: sq
 
   ! exb shear
-  integer, dimension(:), allocatable :: jump, ikx_indexed
+  integer, dimension(:), allocatable :: ikx_indexed
 
   ! set_source
   real, dimension(:,:), allocatable :: ufac
@@ -862,6 +862,7 @@ contains
     use lowflow, only: finish_lowflow_terms
     use dist_fn_arrays, only: hneoc, vparterm, wdfac, wstarfac, wdttpfac
 #endif
+    use dist_fn_arrays, only: jump ! NDCTESTneighb
     implicit none
     if (.not. initialized_dist_fn_level_1) return
     initialized_dist_fn_level_1 = .false.
@@ -4082,7 +4083,8 @@ endif
         akx, aky ! NDCTESTnl
     use theta_grid, only: ntgrid, shat
     use dist_fn_arrays, only: g, gnew, &
-        t_last_jump, remap_period ! NDCTESTnl
+        t_last_jump, remap_period, & ! NDCTESTnl
+        jump ! NDCTESTneighb
     use dist_fn_arrays, only: kx_shift, kx_shift_old, theta0_shift   ! MR
     use gs2_layouts, only: g_lo
     use run_parameters, only: fapar
@@ -4142,6 +4144,14 @@ endif
           save_h = .false.
        endif
        if (abs(g_exb*g_exbfac) > epsilon(0.)) then           ! MR 
+
+          ! NDCTESTneighb
+          if(.not. allocated(jump)) then
+              allocate(jump(naky))
+              jump = 0
+          end if
+          ! endNDCTESTneighb
+
           if (box .or. shat .eq. 0.0) then
              allocate (kx_shift(naky))
              kx_shift = 0.
@@ -4413,12 +4423,15 @@ endif
     use theta_grid, only: ntgrid, ntheta, shat
     use file_utils, only: error_unit
     use kt_grids, only: akx, aky, naky, ikx, ntheta0, box, theta0, &
-        implicit_flowshear, explicit_flowshear, mixed_flowshear
+        implicit_flowshear, explicit_flowshear, mixed_flowshear, &
+        compute_akx_shift, & ! NDCTESTneighb
+        akx_shift ! NDCTEST
     use le_grids, only: negrid, nlambda
     use species, only: nspec
     use run_parameters, only: fphi, fapar, fbpar
     use dist_fn_arrays, only: kx_shift, kx_shift_old, theta0_shift, &
-        t_last_jump, remap_period ! NDCTESTnl
+        t_last_jump, remap_period, & ! NDCTESTnl
+        jump, last_jump ! NDCTESTneighb
     use gs2_time, only: code_dt, code_dt_old, code_time
     use constants, only: twopi   
     use theta_grid, only: theta ! NDCTEST 
@@ -4447,6 +4460,9 @@ endif
     real :: dky
     integer, dimension(:), allocatable :: mycount
     ! endNDCTESTremap_plot
+    ! NDCTESTneighb
+    logical :: compute_shifted_vars = .false.
+    ! endNDCTESTneighb
 
     integer :: ig=0 ! NDCTEST
 
@@ -4459,9 +4475,13 @@ endif
     ! Initialize kx_shift, jump, idx_indexed
     if (exb_first) then
        exb_first = .false.
-       allocate (jump(naky)) 
-       jump = 0
        if (box .or. shat .eq. 0.0) then
+
+          ! NDCTESTneighb
+          allocate(last_jump(naky))
+          last_jump = 0
+          ! endNDCTESTneighb
+
           allocate (ikx_indexed(ntheta0))
           itmin = minloc (ikx)
           
@@ -4516,11 +4536,16 @@ endif
     !end if
     ! endNDCTESTkxshift
 
+    compute_shifted_vars = .false.
+
 ! kx_shift is a function of time.   Update it here:  
 ! MR, 2007: kx_shift array gets saved in restart file
 ! CMR, 5/10/2010: multiply timestep by tunits(ik) for wstar_units=.true. 
     if ( box .or. shat .eq. 0.0 ) then
        do ik=1, naky
+          
+          kx_shift_old(ik) = kx_shift(ik) ! NDCTESTneighb
+
           kx_shift(ik) = kx_shift(ik) - aky(ik)*g_exb*g_exbfac*gdt*tunits(ik)
           jump(ik) = nint(kx_shift(ik)/dkx)
           kx_shift(ik) = kx_shift(ik) - jump(ik)*dkx
@@ -4530,7 +4555,24 @@ endif
           if(implicit_flowshear .or. explicit_flowshear .or. mixed_flowshear) then
               
               !kx_shift_old(ik) = kx_shift_old(ik) - jump(ik)*dkx
-              kx_shift_old(ik) = kx_shift(ik) + aky(ik)*g_exb*g_exbfac*gdt*tunits(ik) ! undo last time-step
+              !kx_shift_old(ik) = kx_shift(ik) + aky(ik)*g_exb*g_exbfac*gdt*tunits(ik) ! undo last time-step
+
+              ! NDCTESTneighb
+              ! For one of the ky's, kx's jump by a different amount than they did
+              ! last time they jumped. So shifted quantities used to store nearest
+              ! neighbours at time-ste it have to be re-computed.
+              ! NDC 06/18
+              if(jump(ik)/=0 .and. jump(ik)/=last_jump(ik)) then
+                  compute_shifted_vars = .true.
+
+                  ! Some shifted quantities can be updated here,
+                  ! for every ky individually, others (e.g. gamtot)
+                  ! have to be recomputed for all ky's together later on.
+                  call compute_akx_shift(ik,jump(ik))
+
+                  last_jump(ik) = jump(ik)
+              end if
+              ! endNDCTESTneighb
 
           end if
           ! endNDCTESTkxshift
@@ -4927,6 +4969,14 @@ endif
        ! end do
 
     end if
+    !NDCTEST
+    write(*,*) "==================================="
+    write(*,*) akx
+    write(*,*) "-----------------------------------"
+    write(*,*) akx_shift(:,1)
+    write(*,*) akx_shift(:,2)
+    write(*,*) akx_shift(:,3)
+    !endNDCTEST
   end subroutine exb_shear
 
   !<DD>Subroutine to setup a redistribute object to be used in enforcing parity

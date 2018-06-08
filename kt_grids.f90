@@ -852,6 +852,11 @@ module kt_grids
   public :: mixed_flowshear
   public :: interp_before ! NDCTEST
   public :: kperp2_tdep
+  
+  ! NDCTESTneighb
+  public :: akx_shift
+  public :: compute_akx_shift
+  ! endNDCTESTneighb
 
   logical, dimension(:,:), allocatable :: kwork_filter
   real, dimension (:,:,:), allocatable :: kperp2
@@ -885,6 +890,10 @@ module kt_grids
   logical :: kp2init=.false.
   logical :: nml_exist
   logical :: parameters_read = .false.
+  
+  ! NDCTESTneighb
+  real, dimension(:,:), allocatable :: akx_shift
+  ! endNDCTESTneighb
 
 contains
 
@@ -925,6 +934,25 @@ contains
     parameters_read = .false.
   end subroutine finish_kt_grids_parameters
 
+  ! NDCTESTneighb
+  subroutine compute_akx_shift(ik,myjump)
+      
+      implicit none
+
+      integer, intent(in) :: ik
+      integer, intent(in) :: myjump
+      real :: dkx
+      integer :: it
+
+      dkx = akx(2)-akx(1)
+
+      do it = 1, ntheta0
+          akx_shift(it,ik) = akx(it) - myjump*dkx
+      end do
+
+  end subroutine compute_akx_shift
+  ! endNDCTESTneighb
+
   subroutine set_overrides(grids_ov)
     use overrides, only: kt_grids_overrides_type
     use kt_grids_box, only: box_set_overrides
@@ -953,6 +981,7 @@ contains
     use mp, only: proc0, broadcast
     use kt_grids_box, only: box_get_flowshear_flags
     implicit none
+    integer :: ik
 
     if (initialized) return
     initialized = .true.
@@ -1001,6 +1030,15 @@ contains
     call broadcast (implicit_flowshear)
     call broadcast (mixed_flowshear)
     call broadcast (interp_before) ! NDCTEST
+    
+    ! NDCTESTneighb
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+        allocate(akx_shift(ntheta0,naky))
+        do ik = 1,naky
+            akx_shift(:,ik) = akx
+        end do
+    end if
+    ! endNDCTESTneighb
 
     call init_kperp2
     
@@ -1158,6 +1196,10 @@ contains
     if (allocated(aky)) deallocate (akx, aky, theta0, ikx, iky)
     if (allocated(kwork_filter)) deallocate(kwork_filter)
     if (allocated(kperp2)) deallocate(kperp2)
+
+    ! NDCTESTneighb
+    if (allocated(akx_shift)) deallocate(akx_shift)
+    ! endNDCTESTneighb
 
     if(allocated(kperp2_tdep%old)) deallocate(kperp2_tdep%old)
     if(allocated(kperp2_tdep%new)) deallocate(kperp2_tdep%new)
