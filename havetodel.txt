@@ -1,0 +1,9 @@
+source(ig) = anon(ie)*(-2.0*vpar(ig,isgn,iglo)*phigavg_diff &
+     -spec(is)%zstm*vpac(ig,isgn,iglo) &
+     *((aj0(ig+1,iglo) + aj0(ig,iglo))*0.5*apar_m  &
+     + D_res(it,ik)*apar_p) &
+     -2.*zi*wd_phigavg_bd ) &
+     + zi*(wstar(ik,ie,is) &
+     + vpac(ig,isgn,iglo)*code_dt*wunits(ik)*ufac(ie,is) &
+     -2.0*omprimfac*vpac(ig,isgn,iglo)*code_dt*wunits(ik)*g_exb*itor_over_B(ig)/spec(is)%stm) &
+     *(phi_p + phinew_p - apar_p*spec(is)%stm*vpac(ig,isgn,iglo))

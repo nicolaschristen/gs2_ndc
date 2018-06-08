@@ -5215,19 +5215,26 @@ endif
 
     integer :: ig
     complex, dimension (-ntgrid:ntgrid) :: phigavg, apargavg
-    complex, dimension (-ntgrid:ntgrid) :: phigavgnew
-    complex :: g_bd, j0phi_bd, j0phi_tdep_bd
-    complex :: j0phistar_bd ! NDCTESTmichaelnew
     real :: c0, c1, c2
     real :: bd, bdfac_p, bdfac_m
     logical :: michael_exp = .true. ! NDCTESTswitchexp
-    real :: wdold, wdnew, wdttpold, wdttpnew ! NDCTESTneighb
+    ! NDCTESTneighb
+    complex :: g_bd, wd_phigavg_bd
+    real, dimension(-ntgrid:ntgrid) :: aj0_old, aj0_new, wdold, wdnew, wdttpold, wdttpnew
+    complex, dimension(-ntgrid:ntgrid) :: wd_phigavg, wdttp_phigavg
+    real :: bdfac_l, bdfac_r
+    ! endNDCTESTneighb
 
 ! try fixing bkdiff dependence
     bd = bkdiff(1)
 
     bdfac_p = 1.+bd*(3.-2.*real(isgn))
     bdfac_m = 1.-bd*(3.-2.*real(isgn))
+
+    ! NDCTESTneighb
+    bdfac_l = 0.5*(1.-bd*(3.-2.*real(isgn)))
+    bdfac_r = 0.5*(1.+bd*(3.-2.*real(isgn)))
+    ! endNDCTESTneighb
 
     ! NRM, 3/18/2015 
     ! calculate AB3 coefficients generalized to changing timestep
@@ -5247,16 +5254,61 @@ endif
 ! apargavg = apar J0 
 ! Both quantities are decentred in time and evaluated on || grid points
 !
+    ! NDCTESTneighb
     if(implicit_flowshear) then
-        phigavg = fexp(is)*phi(:,it,ik)*aj0_tdep%old(:,iglo)*fphi
-        phigavgnew = (1.0-fexp(is))*phinew(:,it,ik)*aj0_tdep%new(:,iglo)*fphi
+   
+        aj0_new = aj0_tdep%new(:,iglo)
+        aj0_old = aj0_tdep%old(:,iglo)
+
+        wdnew = wdrift(:,isgn,iglo) &
+            + vdrift_x_cent(:,isgn,iglo)/(2.*shat)*kx_shift(ik)
+        wdold = wdrift(:,isgn,iglo) & ! NDCTODO
+            + vdrift_x_cent(:,isgn,iglo)/(2.*shat)*kx_shift_old(ik)
+        
+        wdttpnew = wdriftttp(:,it,ik,ie,is,2) &
+            + vdrift_x(:,isgn,iglo)/(2.*shat)*kx_shift(ik)
+        wdttpold = wdriftttp(:,it,ik,ie,is,2) & ! NDCTODO
+            + vdrift_x(:,isgn,iglo)/(2.*shat)*kx_shift_old(ik)
+    
+    else if(explicit_flowshear .or. mixed_flowshear) then
+
+        aj0_new = aj0(:,iglo)
+        aj0_old = aj0(:,iglo) ! NDCTODO
+        
+        wdnew = wdrift(:,isgn,iglo)
+        wdold = wdrift(:,isgn,iglo) ! NDCTODO
+        
+        wdttpnew = wdriftttp(:,it,ik,ie,is,2)
+        wdttpold = wdriftttp(:,it,ik,ie,is,2) ! NDCTODO
+
     else
-        phigavg  = (fexp(is)*phi(:,it,ik)   + (1.0-fexp(is))*phinew(:,it,ik)) &
-                    *aj0(:,iglo)*fphi &
-                 + (fexp(is)*bpar(:,it,ik) + (1.0-fexp(is))*bparnew(:,it,ik))&
-                    *aj1(:,iglo)*fbpar*2.0*vperp2(:,iglo)*spec(is)%tz
-        phigavgnew = 0.
+        ! reproducing the old, wrong behaviour where nearest neighbours are always 
+        ! the ones from time step it+1, even in explicit terms.
+        ! NDC 06/18
+    
+        aj0_new = aj0(:,iglo)
+        aj0_old = aj0(:,iglo)
+        
+        wdnew = wdrift(:,isgn,iglo)
+        wdold = wdrift(:,isgn,iglo)
+        
+        wdttpnew = wdriftttp(:,it,ik,ie,is,2)
+        wdttpold = wdriftttp(:,it,ik,ie,is,2)
+    
     end if
+
+    phigavg = fphi * ( fexp(is)*phi(:,it,ik)*aj0_old &
+        + (1.-fexp(is))*phinew(:,it,ik)*aj0_new ) &
+        + (fexp(is)*bpar(:,it,ik) + (1.0-fexp(is))*bparnew(:,it,ik)) &
+           *aj1(:,iglo)*fbpar*2.0*vperp2(:,iglo)*spec(is)%tz
+        
+    wd_phigavg = fphi * ( fexp(is)*phi(:,it,ik)*aj0_old*wdold &
+        + (1.-fexp(is))*phinew(:,it,ik)*aj0_new*wdnew )
+        
+    wdttp_phigavg = fphi * ( fexp(is)*phi(:,it,ik)*aj0_old*wdttpold &
+        + (1.-fexp(is))*phinew(:,it,ik)*aj0_new*wdttpnew )
+    
+    ! endNDCTESTneighb
     apargavg = (fexp(is)*apar(:,it,ik)  + (1.0-fexp(is))*aparnew(:,it,ik)) &
                 *aj0(:,iglo)*fapar
 
@@ -5333,86 +5385,68 @@ endif
         source_option_switch == source_option_phiext_full) then
        if (nlambda > ng2 .and. isgn == 2) then
           do ig = -ntgrid, ntgrid-1
-             
-             wdttpold = wdriftttp(ig,it,ik,ie,is,2) &
-                 + vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik) ! NDCTODO
-             wdttpnew = wdriftttp(ig,it,ik,ie,is,2) &
-                 + vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift(ik)
 
              if (il < ittp(ig)) cycle
-             if(implicit_flowshear) then
-                 source(ig) &
-                      = g(ig,2,iglo)*a(ig,2,iglo) &
+             ! NDCQUEST: factors of 2 in those terms seem weird... In the non-ttp, there are no factors because
+             ! they're hidden in the bakdifing. Is there no factor of 2 here because how rhs is inverted for ttp ?
+             source(ig) &
+                  = g(ig,2,iglo)*a(ig,2,iglo) &
 #ifdef LOWFLOW
-                      - anon(ie)*zi*(wdttpfac(ig,it,ik,ie,is,2)*hneoc(ig,2,iglo))*phigavg(ig) &
-                      + zi*wstar(ik,ie,is)*hneoc(ig,2,iglo)*phigavg(ig)
+                  - anon(ie)*zi*(wdttpfac(ig,it,ik,ie,is,2)*hneoc(ig,2,iglo))*phigavg(ig) &
+                  + zi*wstar(ik,ie,is)*hneoc(ig,2,iglo)*phigavg(ig)
 #else
-                      - anon(ie)*zi*wdttpnew*phigavgnew(ig) &
-                      - anon(ie)*zi*wdttpold*phigavg(ig) &
-                      + zi*wstar(ik,ie,is)*(phigavg(ig)+phigavgnew(ig))
-#endif             
-             else
-                 ! NDCQUEST: factors of 2 in those terms seem weird... In the non-ttp, there are no factors because
-                 ! they're hidden in the bakdifing. Is there no factor of 2 here because how rhs is inverted for ttp ?
-                 source(ig) &
-                      = g(ig,2,iglo)*a(ig,2,iglo) &
-#ifdef LOWFLOW
-                      - anon(ie)*zi*(wdttpfac(ig,it,ik,ie,is,2)*hneoc(ig,2,iglo))*phigavg(ig) &
-                      + zi*wstar(ik,ie,is)*hneoc(ig,2,iglo)*phigavg(ig)
-#else
-                      - anon(ie)*zi*(wdriftttp(ig,it,ik,ie,is,2))*phigavg(ig) &
-                      + zi*wstar(ik,ie,is)*phigavg(ig)
+                  - anon(ie)*zi*wdttp_phigavg(ig) &
+                  + zi*wstar(ik,ie,is)*phigavg(ig)
              
-                 if(explicit_flowshear .or. mixed_flowshear) then 
+             if(explicit_flowshear .or. mixed_flowshear) then 
          
-                     ! NDCQUEST: why is ttp treated differently ?
-                     ! NDCQUEST: how do we check for CFL condition with new explicit terms ? Cannot add them to gexp_1 because it does not
-                     ! get ExB re-mapped ... -> same issue with terms in set_source below.
+                 ! NDCQUEST: why is ttp treated differently ?
+                 ! NDCQUEST: how do we check for CFL condition with new explicit terms ? Cannot add them to gexp_1 because it does not
+                 ! get ExB re-mapped ... -> same issue with terms in set_source below.
 
-                     !if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
-                     !if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
-                     !if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
-                     !g_bd = calc_g_bd(ig,isgn,iglo,bd)
-                     !j0phi_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0,phi)
-                     !j0phi_tdep_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phi)
-                     !if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
-                     !if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
-                     !if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+                 !if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                 !if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                 !if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+                 !g_bd = calc_g_bd(ig,isgn,iglo,bd)
+                 !j0phi_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0,phi)
+                 !j0phi_tdep_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phi)
+                 !if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                 !if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                 !if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
 
-                     if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
-                     if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
-                     if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
-                     source(ig) = source(ig) &
-                         - zi * spec(is)%tz * vdrift_x(ig,isgn,iglo)/(2.*shat) * kx_shift_old(ik) * g(ig,2,iglo) &
-                         - zi * ( vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik) + &
-                             wdriftttp(ig,it,ik,ie,is,2) ) * aj0_tdep%old(ig,iglo)*phi(ig,it,ik) & ! NDCTESTmichaelnew: replaced wdrift
-                         + zi * wdriftttp(ig,it,ik,ie,is,2) * phigavg(ig) & ! NDCTESTmichaelnew: replaced wdrift
-                         + zi * wstar(ik,ie,is) * (aj0_tdep%old(ig,iglo)*phi(ig,it,ik)-phigavg(ig))
-                     if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
-                     if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
-                     if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+                 if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                 if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                 if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+                 source(ig) = source(ig) &
+                     - zi * spec(is)%tz * vdrift_x(ig,isgn,iglo)/(2.*shat) * kx_shift_old(ik) * g(ig,2,iglo) &
+                     - zi * ( vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik) + &
+                         wdttpold(ig) ) * aj0_tdep%old(ig,iglo)*phi(ig,it,ik) & ! NDCTESTmichaelnew: replaced wdrift
+                     + zi * wdttpold(ig) * aj0_old(ig)*phi(ig,it,ik) &
+                     + zi * wstar(ik,ie,is) * (aj0_tdep%old(ig,iglo)-aj0_old(ig))*phi(ig,it,ik)
+                 if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                 if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                 if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
 
-                 end if
-
-                 ! NDCTESTmichaelnew
-                 if(explicit_flowshear .and. michael_exp) then
-
-                     if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
-                     if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
-                     if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
-
-                     source(ig) = source(ig) &
-                          - zi * ( vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik) + &
-                              wdriftttp(ig,it,ik,ie,is,2) ) * aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik) &
-                          + zi * wstar(ik,ie,is) * aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik)
-
-                     if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
-                     if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
-                     if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
-
-                 end if
-#endif             
              end if
+
+             ! NDCTESTmichaelnew
+             if(explicit_flowshear .and. michael_exp) then
+
+                 if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                 if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                 if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+
+                 source(ig) = source(ig) &
+                      - zi * ( vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik) + &
+                          wdttpold(ig) ) * aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik) &
+                      + zi * wstar(ik,ie,is) * aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik)
+
+                 if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                 if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                 if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+
+             end if
+#endif             
           end do
 
           if (source_option_switch == source_option_phiext_full .and. &
@@ -5501,8 +5535,12 @@ endif
     subroutine set_source
 
       implicit none
-      complex :: apar_p, apar_m, phi_p, phi_m!, bpar_p !GGH added bpar_p
-      complex :: phinew_p, phinew_m
+      complex :: apar_p, apar_m!, bpar_p !GGH added bpar_p
+      ! NDCTESTneighb
+      complex :: phigavg_diff, phigavg_bd, g_bd
+      complex :: phigavg_old_bd, phigavg_tdep_old_bd
+      complex :: phistargavg_old_bd
+      ! endNDCTESTneighb
 
 
 !CMR, 4/8/2011:
@@ -5539,14 +5577,20 @@ endif
 !CMRend
 
       do ig = -ntgrid, ntgrid-1
-         phi_p = bdfac_p*phigavg(ig+1)+bdfac_m*phigavg(ig)
-         if(implicit_flowshear) then
-             phinew_p = bdfac_p*phigavgnew(ig+1) + bdfac_m*phigavgnew(ig)
-         end if
-         phi_m = phigavg(ig+1)-phigavg(ig)
-         if(implicit_flowshear) then
-             phinew_m = phigavgnew(ig+1) - phigavgnew(ig)
-         end if
+         !phi_p = bdfac_p*phigavg(ig+1)+bdfac_m*phigavg(ig)
+         !if(implicit_flowshear) then
+         !    phinew_p = bdfac_p*phigavgnew(ig+1) + bdfac_m*phigavgnew(ig)
+         !end if
+         !phi_m = phigavg(ig+1)-phigavg(ig)
+         !if(implicit_flowshear) then
+         !    phinew_m = phigavgnew(ig+1) - phigavgnew(ig)
+         !end if
+         phigavg_diff = phigavg(ig+1)-phigavg(ig)
+         phigavg_bd = bdfac_r*phigavg(ig+1) + bdfac_l*phigavg(ig)
+         wd_phigavg_bd = fexp(is)*wdold(ig) * ( &
+             bdfac_r*aj0_old(ig+1)*phi(ig+1,it,ik) + bdfac_l*aj0_old(ig)*phi(ig,it,ik) ) &
+             + (1.-fexp(is))*wdnew(ig) * ( &
+             bdfac_r*aj0_new(ig+1)*phinew(ig+1,it,ik) + bdfac_l*aj0_new(ig)*phinew(ig,it,ik) )
          ! RN> bdfac factors seem missing for apar_p
          apar_p = apargavg(ig+1)+apargavg(ig)
          apar_m = aparnew(ig+1,it,ik)+aparnew(ig,it,ik) & 
@@ -5564,110 +5608,92 @@ endif
 !
 #ifdef LOWFLOW
 
-         source(ig) = anon(ie)*(vparterm(ig,isgn,iglo)*phi_m &
+         source(ig) = anon(ie)*(vparterm(ig,isgn,iglo)*phigavg_diff &
               -spec(is)%zstm*vpac(ig,isgn,iglo) &
               *((aj0(ig+1,iglo) + aj0(ig,iglo))*0.5*apar_m  &
               + D_res(it,ik)*apar_p) &
-              -zi*wdfac(ig,isgn,iglo)*phi_p) &
-              + zi*(wstarfac(ig,isgn,iglo) &
+              -2.*zi*wdfac(ig,isgn,iglo)*phigavg_bd) &
+              + 2.*zi*(wstarfac(ig,isgn,iglo) &
               + vpac(ig,isgn,iglo)*code_dt*wunits(ik)*ufac(ie,is) &
               -2.0*omprimfac*vpac(ig,isgn,iglo)*code_dt*wunits(ik)*g_exb*itor_over_B(ig)/spec(is)%stm) &
-              *(phi_p - apar_p*spec(is)%stm*vpac(ig,isgn,iglo))
+              *(phigavg_bd - 0.5*apar_p*spec(is)%stm*vpac(ig,isgn,iglo))
 
 #else
 
          ! NDCQUEST
          ! Should vpac and vpar be bakdif'ed instead of centered ?
-         if(implicit_flowshear) then
+         source(ig) = anon(ie)*(-2.0*vpar(ig,isgn,iglo)*phigavg_diff &
+              -spec(is)%zstm*vpac(ig,isgn,iglo) &
+              *((aj0(ig+1,iglo) + aj0(ig,iglo))*0.5*apar_m  &
+              + D_res(it,ik)*apar_p) &
+              -2.*zi*wd_phigavg_bd) &
+              + 2.*zi*(wstar(ik,ie,is) &
+              + vpac(ig,isgn,iglo)*code_dt*wunits(ik)*ufac(ie,is) &
+              -2.0*omprimfac*vpac(ig,isgn,iglo)*code_dt*wunits(ik)*g_exb*itor_over_B(ig)/spec(is)%stm) &
+              *(phigavg_bd - 0.5*apar_p*spec(is)%stm*vpac(ig,isgn,iglo))
+         
+         ! In the GK eq, operators with a time-dependence due to flowshear
+         ! are split into L_tdep = L + (L_tdep - L). The first term is treated
+         ! in the usual way and is added above this comment. The second term is 
+         ! treated explicitly and added below.
+         !
+         ! The added terms are:
+         ! - 2*code_dt * i * V_B . (k_tdep - k) * g
+         ! - 2*code_dt * i * Z*e*F0/T * (V_B+V_Cor) . k_tdep * J0_tdep * phi
+         ! + 2*code_dt * i * Z*e*F0/T * (V_B+V_Cor) . k * J0 * phi
+         ! - 2*code_dt * Z*e*F0/T * wpar * b . grad(theta) * d/dthetha [(J0_tdep - J0) * phi]
+         ! - 2*code_dt * i*c*k_alpha * m*F0/T * I*wpar/B * dOmega/dpsi * (J0_tdep - J0) * phi
+         ! - 2*code_dt * i*c*k_alpha * dF0/dpsi * (J0_tdep - J0) * phi
+         !
+         ! For more details, see notes from Nicolas Christen 11/2017
 
-             wdold = wdrift(ig,isgn,iglo) &
-                 + vdrift_x_cent(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik) ! NDCTODO
-             wdnew = wdrift(ig,isgn,iglo) &
-                 + vdrift_x_cent(ig,isgn,iglo)/(2.*shat)*kx_shift(ik)
+         ! NDCTESTtime 
+         !!g_bd = calc_g_bd(ig,isgn,iglo,bd)
+         !!j0phi_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0,phi)
+         !!j0phi_tdep_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phi)
+         !g_bd = 0.5 * (bdfac_p*g(ig+1,isgn,iglo) + bdfac_m*g(ig,isgn,iglo))
+         !j0phi_bd = fphi * 0.5 * ( bdfac_p*aj0(ig+1,iglo)*phi(ig+1,it,ik) &
+         !    + bdfac_m*aj0(ig,iglo)*phi(ig,it,ik) )
+         !j0phi_tdep_bd = fphi * 0.5 * ( bdfac_p*aj0_tdep%old(ig+1,iglo)*phi(ig+1,it,ik) &
+         !    + bdfac_m*aj0_tdep%old(ig,iglo)*phi(ig,it,ik) )
 
-             source(ig) = anon(ie)*(-2.0*vpar(ig,isgn,iglo)*(phi_m+phinew_m) &
-                  -spec(is)%zstm*vpac(ig,isgn,iglo) &
-                  *((aj0(ig+1,iglo) + aj0(ig,iglo))*0.5*apar_m  &
-                  + D_res(it,ik)*apar_p) &
-                  -zi*wdold*phi_p &
-                  -zi*wdnew*phinew_p ) &
-                  + zi*(wstar(ik,ie,is) &
-                  + vpac(ig,isgn,iglo)*code_dt*wunits(ik)*ufac(ie,is) &
-                  -2.0*omprimfac*vpac(ig,isgn,iglo)*code_dt*wunits(ik)*g_exb*itor_over_B(ig)/spec(is)%stm) &
-                  *(phi_p + phinew_p - apar_p*spec(is)%stm*vpac(ig,isgn,iglo))
+         if(mixed_flowshear .or. explicit_flowshear) then
 
-         else
-     
-             ! Source without flowshear
-             source(ig) = anon(ie)*(-2.0*vpar(ig,isgn,iglo)*phi_m &
-                  -spec(is)%zstm*vpac(ig,isgn,iglo) &
-                  *((aj0(ig+1,iglo) + aj0(ig,iglo))*0.5*apar_m  &
-                  + D_res(it,ik)*apar_p) &
-                  -zi*wdrift(ig,isgn,iglo)*phi_p) &
-                  + zi*(wstar(ik,ie,is) &
-                  + vpac(ig,isgn,iglo)*code_dt*wunits(ik)*ufac(ie,is) &
-                  -2.0*omprimfac*vpac(ig,isgn,iglo)*code_dt*wunits(ik)*g_exb*itor_over_B(ig)/spec(is)%stm) &
-                  *(phi_p - apar_p*spec(is)%stm*vpac(ig,isgn,iglo))
+             g_bd = bdfac_r*g(ig+1,isgn,iglo) + bdfac_l*g(ig,isgn,iglo)
+
+             phigavg_old_bd = bdfac_r*aj0_old(ig+1)*phi(ig+1,it,ik) &
+                 + bdfac_l*aj0_old(ig)*phi(ig,it,ik)
              
-             ! In the GK eq, operators with a time-dependence due to flowshear
-             ! are split into L_tdep = L + (L_tdep - L). The first term is treated
-             ! in the usual way and is added above this comment. The second term is 
-             ! treated explicitly and added below.
-             !
-             ! The added terms are:
-             ! - 2*code_dt * i * V_B . (k_tdep - k) * g
-             ! - 2*code_dt * i * Z*e*F0/T * (V_B+V_Cor) . k_tdep * J0_tdep * phi
-             ! + 2*code_dt * i * Z*e*F0/T * (V_B+V_Cor) . k * J0 * phi
-             ! - 2*code_dt * Z*e*F0/T * wpar * b . grad(theta) * d/dthetha [(J0_tdep - J0) * phi]
-             ! - 2*code_dt * i*c*k_alpha * m*F0/T * I*wpar/B * dOmega/dpsi * (J0_tdep - J0) * phi
-             ! - 2*code_dt * i*c*k_alpha * dF0/dpsi * (J0_tdep - J0) * phi
-             !
-             ! For more details, see notes from Nicolas Christen 11/2017
+             phigavg_tdep_old_bd = bdfac_r*aj0_tdep%old(ig+1,iglo)*phi(ig+1,it,ik) &
+                 + bdfac_l*aj0_tdep%old(ig,iglo)*phi(ig,it,ik)
 
-             ! NDCTESTtime 
-             !!g_bd = calc_g_bd(ig,isgn,iglo,bd)
-             !!j0phi_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0,phi)
-             !!j0phi_tdep_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phi)
-             !g_bd = 0.5 * (bdfac_p*g(ig+1,isgn,iglo) + bdfac_m*g(ig,isgn,iglo))
-             !j0phi_bd = fphi * 0.5 * ( bdfac_p*aj0(ig+1,iglo)*phi(ig+1,it,ik) &
-             !    + bdfac_m*aj0(ig,iglo)*phi(ig,it,ik) )
-             !j0phi_tdep_bd = fphi * 0.5 * ( bdfac_p*aj0_tdep%old(ig+1,iglo)*phi(ig+1,it,ik) &
-             !    + bdfac_m*aj0_tdep%old(ig,iglo)*phi(ig,it,ik) )
+             source(ig) = source(ig) &
+                  - zi * spec(is)%tz * vdrift_x_cent(ig,isgn,iglo)/shat * kx_shift_old(ik) * g_bd & ! NDCTESTmichaelnew: replaced vdrift_x
+                  - zi * ( vdrift_x_cent(ig,isgn,iglo)/shat*kx_shift_old(ik) + & ! NDCTESTmichaelnew: replaced vdrift_x
+                      2.*wdold(ig) ) * phigavg_tdep_old_bd &
+                  + 2.*zi * wdold(ig) * phigavg_old_bd &
+                  - 2.*vpar(ig,isgn,iglo) * ( (aj0_tdep%old(ig+1,iglo)-aj0_old(ig+1))*phi(ig+1,it,ik) - &
+                     (aj0_tdep%old(ig,iglo)-aj0_old(ig))*phi(ig,it,ik) ) &
+                  - 2.*code_dt*zi * aky(ik)/spec(is)%stm * omprimfac * itor_over_B(ig) * vpac(ig,isgn,iglo) * g_exb * &
+                     (phigavg_tdep_old_bd-phigavg_old_bd) &
+                  + 2.*zi * wstar(ik,ie,is) * (phigavg_tdep_old_bd-phigavg_old_bd)
 
-             if(mixed_flowshear .or. explicit_flowshear) then
+         end if
 
-                 g_bd = calc_g_bd(ig,isgn,iglo,bd)
-                 j0phi_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0,phi)
-                 j0phi_tdep_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phi)
+         ! NDCTESTmichaelnew
+         if(explicit_flowshear .and. michael_exp) then
 
-                 source(ig) = source(ig) &
-                      - zi * spec(is)%tz * vdrift_x_cent(ig,isgn,iglo)/shat * kx_shift_old(ik) * g_bd & ! NDCTESTmichaelnew: replaced vdrift_x
-                      - zi * ( vdrift_x_cent(ig,isgn,iglo)/shat*kx_shift_old(ik) + & ! NDCTESTmichaelnew: replaced vdrift_x
-                          2.*wdrift(ig,isgn,iglo) ) * j0phi_tdep_bd &
-                      + 2.*zi * wdrift(ig,isgn,iglo) * j0phi_bd &
-                      - 2.*vpar(ig,isgn,iglo) * ( (aj0_tdep%old(ig+1,iglo)-aj0(ig+1,iglo))*phi(ig+1,it,ik) - &
-                         (aj0_tdep%old(ig,iglo)-aj0(ig,iglo))*phi(ig,it,ik) ) &
-                      - 2.*code_dt*zi * aky(ik)/spec(is)%stm * omprimfac * itor_over_B(ig) * vpac(ig,isgn,iglo) * g_exb * &
-                         (j0phi_tdep_bd-j0phi_bd) &
-                      + 2.*zi * wstar(ik,ie,is) * (j0phi_tdep_bd-j0phi_bd)
+             phistargavg_old_bd = bdfac_r*aj0_tdep%old(ig+1,iglo)*phistar_old(ig+1,it,ik) &
+                 + bdfac_l*aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik)
 
-             end if
-
-             ! NDCTESTmichaelnew
-             if(explicit_flowshear .and. michael_exp) then
-
-                 j0phistar_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phistar_old)
-
-                 source(ig) = source(ig) &
-                      - zi * ( vdrift_x_cent(ig,isgn,iglo)/shat*kx_shift_old(ik) + & ! NDCTESTmichaelnew: replaced vdrift_x
-                          2.*wdrift(ig,isgn,iglo) ) * j0phistar_bd &
-                      - 2.*vpar(ig,isgn,iglo) * ( &
-                          aj0_tdep%old(ig+1,iglo)*phistar_old(ig+1,it,ik) - aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik) ) &
-                      - 2.*code_dt*zi * aky(ik)/spec(is)%stm * omprimfac * itor_over_B(ig) * vpac(ig,isgn,iglo) * g_exb * &
-                         j0phistar_bd &
-                      + 2.*zi * wstar(ik,ie,is) * j0phistar_bd
-
-             end if
+             source(ig) = source(ig) &
+                  - zi * ( vdrift_x_cent(ig,isgn,iglo)/shat*kx_shift_old(ik) + & ! NDCTESTmichaelnew: replaced vdrift_x
+                      2.*wdold(ig) ) * phistargavg_old_bd &
+                  - 2.*vpar(ig,isgn,iglo) * ( &
+                      aj0_tdep%old(ig+1,iglo)*phistar_old(ig+1,it,ik) - aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik) ) &
+                  - 2.*code_dt*zi * aky(ik)/spec(is)%stm * omprimfac * itor_over_B(ig) * vpac(ig,isgn,iglo) * g_exb * &
+                     phistargavg_old_bd &
+                  + 2.*zi * wstar(ik,ie,is) * phistargavg_old_bd
 
          end if
 
@@ -5761,40 +5787,40 @@ endif
 
     end subroutine set_source
   
-    ! Bakdif'ed version of J0*phi
-    function calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,my_aj0,my_phi)
-        
-        use run_parameters, only: fphi
-        use gs2_layouts, only: g_lo
-        use theta_grid, only: ntgrid
-        
-        implicit none
+    !! Bakdif'ed version of J0*phi
+    !function calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,my_aj0,my_phi)
+    !    
+    !    use run_parameters, only: fphi
+    !    use gs2_layouts, only: g_lo
+    !    use theta_grid, only: ntgrid
+    !    
+    !    implicit none
 
-        integer, intent(in) :: ig, isgn, it, ik, iglo
-        real, intent(in) :: bd
-        real, dimension(-ntgrid:,g_lo%llim_proc:), intent(in) :: my_aj0
-        complex, dimension(-ntgrid:,:,:), intent(in) :: my_phi
-        complex :: calc_j0phi_bd
+    !    integer, intent(in) :: ig, isgn, it, ik, iglo
+    !    real, intent(in) :: bd
+    !    real, dimension(-ntgrid:,g_lo%llim_proc:), intent(in) :: my_aj0
+    !    complex, dimension(-ntgrid:,:,:), intent(in) :: my_phi
+    !    complex :: calc_j0phi_bd
 
-        calc_j0phi_bd = fphi * 0.5 * ( (1+bd*(3-2*isgn))*my_aj0(ig+1,iglo)*my_phi(ig+1,it,ik) + &
-           (1-bd*(3-2*isgn))*my_aj0(ig,iglo)*my_phi(ig,it,ik) )
+    !    calc_j0phi_bd = fphi * 0.5 * ( (1+bd*(3-2*isgn))*my_aj0(ig+1,iglo)*my_phi(ig+1,it,ik) + &
+    !       (1-bd*(3-2*isgn))*my_aj0(ig,iglo)*my_phi(ig,it,ik) )
 
-    end function calc_j0phi_bd
-      
-    ! Bakdif'ed version of g
-    function calc_g_bd(ig,isgn,iglo,bd)
-        
-        use dist_fn_arrays, only: g
+    !end function calc_j0phi_bd
+    !  
+    !! Bakdif'ed version of g
+    !function calc_g_bd(ig,isgn,iglo,bd)
+    !    
+    !    use dist_fn_arrays, only: g
 
-        implicit none
+    !    implicit none
 
-        integer, intent(in) :: ig, isgn, iglo
-        real, intent(in) :: bd
-        complex :: calc_g_bd
+    !    integer, intent(in) :: ig, isgn, iglo
+    !    real, intent(in) :: bd
+    !    complex :: calc_g_bd
 
-        calc_g_bd = 0.5 * ((1+bd*(3-2*isgn))*g(ig+1,isgn,iglo) + (1-bd*(3-2*isgn))*g(ig,isgn,iglo))
+    !    calc_g_bd = 0.5 * ((1+bd*(3-2*isgn))*g(ig+1,isgn,iglo) + (1-bd*(3-2*isgn))*g(ig,isgn,iglo))
 
-    end function calc_g_bd
+    !end function calc_g_bd
 
 
   end subroutine get_source_term
