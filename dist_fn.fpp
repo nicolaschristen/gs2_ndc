@@ -916,7 +916,8 @@ contains
   end subroutine finish_dist_fn_level_1
 
   subroutine finish_dist_fn_level_2
-    use dist_fn_arrays, only: aj0, aj1, aj0_gf, aj1_gf, aj0_tdep, gamtot_tdep
+    use dist_fn_arrays, only: aj0, aj1, aj0_gf, aj1_gf, aj0_tdep, gamtot_tdep, &
+        aj0_shift, gamtot_shift ! NDCTESTneighb
 
     if (.not. initialized_dist_fn_level_2) return
     initialized_dist_fn_level_2 = .false.
@@ -934,13 +935,18 @@ contains
     if (allocated(gridfac1)) deallocate (gridfac1, gamtot, gamtot1, gamtot2)
     if (allocated(gamtot3)) deallocate (gamtot3)
     if (allocated(a)) deallocate (a, b, r, ainv)
+    ! NDCTESTneighb
+    if (allocated(aj0_shift)) deallocate (aj0_shift)
+    if (allocated(gamtot_shift)) deallocate (gamtot_shift)
+    ! endNDCTESTneighb
   end subroutine finish_dist_fn_level_2
   
   subroutine finish_dist_fn_level_3
     use dist_fn_arrays, only: gnew, g
     use dist_fn_arrays, only: vpa, vpac, vpar
     use dist_fn_arrays, only: ittp
-    use dist_fn_arrays, only: vpa_gf, vperp2_gf
+    use dist_fn_arrays, only: vpa_gf, vperp2_gf, &
+        wdrift_shift, wdriftttp_shift ! NDCTESTneighb
     use kt_grids, only: implicit_flowshear
     !initializing  = .true.
     if (.not. initialized_dist_fn_level_3) return
@@ -964,6 +970,9 @@ contains
     if (allocated(ittp)) then
         deallocate (ittp, wdrift, vdrift_x, vdrift_x_cent, wdriftttp)
     end if
+    ! NDCTESTneighb
+    if(allocated(wdrift_shift)) deallocate(wdrift_shift,wdriftttp_shift)
+    ! endNDCTESTneighb
     if (allocated(wstar)) deallocate (wstar)
 !AJ
     if (allocated(vpa_gf)) deallocate(vpa_gf, vperp2_gf)
@@ -1263,6 +1272,7 @@ contains
           mixed_flowshear
       use le_grids, only: negrid
       use gs2_layouts, only: g_lo
+      use dist_fn_arrays, only: wdrift_shift, wdriftttp_shift ! NDCTESTneighb
       use job_manage, only: time_message ! NDCTESTtime
       use mp, only: proc0 ! NDCTESTtime
       
@@ -1284,6 +1294,19 @@ contains
 #endif
 
       call compute_wdrift(wdrift, wdriftttp)
+      
+      ! NDCTESTneighb
+      ! NDCQUEST: if dt reset, do we need to recompute wdrift_shift?
+      ! (same for tdep quantities, a_shift,b_shift,...)
+      if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+          if(.not. allocated(wdrift_shift)) then
+              allocate (wdrift_shift(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+              wdrift_shift = wdrift
+              allocate (wdriftttp_shift(-ntgrid:ntgrid,ntheta0,naky,negrid,nspec,2))
+              wdriftttp_shift = wdriftttp
+          end if
+      end if
+      ! endNDCTESTneighb
 
   end subroutine init_wdrift
 
@@ -1428,6 +1451,84 @@ contains
     deallocate(my_kx_shift)
 
   end subroutine compute_wdrift
+
+  ! NDCTESTneighb
+  subroutine compute_wdrift_shift(ik)
+    
+      use species, only: nspec
+      use theta_grid, only: ntgrid
+      use kt_grids, only: akx, naky, ntheta0
+      use le_grids, only: negrid, ng2, nlambda, jend, forbid
+      use gs2_layouts, only: g_lo, ik_idx, it_idx, il_idx, ie_idx, is_idx
+      use dist_fn_arrays, only: ittp, wdrift_shift, wdriftttp_shift, jump
+      implicit none
+      integer, intent(in) :: ik
+      real, dimension(naky) :: my_kx_shift
+      integer :: ig, ik_loop, it, il, ie, is
+      integer :: iglo
+      real :: dkx
+
+      dkx = akx(2)-akx(1)
+      my_kx_shift = 0.
+      my_kx_shift(ik) = -1.*jump(ik)*dkx
+
+      ! NDCQUEST: not supporting LOWFLOW term wcurv here
+
+      do iglo = g_lo%llim_proc, g_lo%ulim_proc
+          ik_loop=ik_idx(g_lo,iglo)
+          if(ik_loop == ik) then
+              il=il_idx(g_lo,iglo)
+              ie=ie_idx(g_lo,iglo)
+              it=it_idx(g_lo,iglo)
+              is=is_idx(g_lo,iglo)
+              do ig = -ntgrid, ntgrid
+                  !CMR, 13/3/2007: isolate passing and trapped particle drift knobs
+                  if ( jend(ig) > 0 .and. jend(ig) <= nlambda .and. il >= ng2+1 .and. il <= jend(ig)) then
+                      wdrift_shift(ig,1,iglo) = wdrift_func(ig, il, ie, it, ik, my_kx_shift)*tpdriftknob
+                  else
+                      wdrift_shift(ig,1,iglo) = wdrift_func(ig, il, ie, it, ik, my_kx_shift)*driftknob
+                  endif
+                  ! add Coriolis drift to magnetic drifts
+                  wdrift_shift(ig,2,iglo) = wdrift_shift(ig,1,iglo) - wcoriolis_func(ig,il,ie,it,ik,is,my_kx_shift)
+                  wdrift_shift(ig,1,iglo) = wdrift_shift(ig,1,iglo) + wcoriolis_func(ig,il,ie,it,ik,is,my_kx_shift)
+              end do
+          end if
+      end do
+     
+      ! NDCQUEST: up to knobs, wdriftttp = wdrift. Why not use only wdrift ?
+
+      do is = 1, nspec
+          do ie = 1, negrid
+              do it = 1, ntheta0
+                  do ig = -ntgrid, ntgrid
+                      if (ittp(ig) == nlambda+1) cycle
+                      do il = ittp(ig), nlambda
+                          if (forbid(ig, il)) exit
+                          !GWH+JAB: should this be calculated only at ittp? or for each totally trapped pitch angle?
+                          ! (Orig logic: there was only one totally trapped pitch angle; now multiple ttp are allowed.
+                          wdriftttp_shift(ig,it,ik,ie,is,1) &
+                               = wdrift_func(ig,ittp(ig),ie,it,ik,my_kx_shift)*tpdriftknob
+                          !CMR:  totally trapped particle drifts also scaled by tpdriftknob 
+                          ! add Coriolis drift to magnetic drifts
+                          wdriftttp_shift(ig,it,ik,ie,is,2) = wdriftttp_shift(ig,it,ik,ie,is,1) &
+                               - wcoriolis_func(ig,il,ie,it,ik,is,my_kx_shift)
+                          wdriftttp_shift(ig,it,ik,ie,is,1) = wdriftttp_shift(ig,it,ik,ie,is,1) &
+                               + wcoriolis_func(ig,il,ie,it,ik,is,my_kx_shift)
+                      end do
+                  end do
+              end do
+          end do
+      end do
+
+      ! This should be weighted by bakdif to be completely consistent
+      do iglo = g_lo%llim_proc, g_lo%ulim_proc
+          do ig = -ntgrid, ntgrid-1
+              wdrift_shift(ig,:,iglo) = 0.5*(wdrift_shift(ig,:,iglo) + wdrift_shift(ig+1,:,iglo))
+          end do
+      end do
+
+  end subroutine compute_wdrift_shift
+  ! endNDCTESTneighb
 
   ! NDC 11/2017
   ! Split wdrift_func into x and y parts by defining
@@ -1715,7 +1816,8 @@ contains
   end subroutine init_wstar
 
   subroutine init_bessel
-    use dist_fn_arrays, only: aj0, aj1, aj0_tdep
+    use dist_fn_arrays, only: aj0, aj1, aj0_tdep, &
+        aj0_shift ! NDCTESTneighb
  !AJ
     use dist_fn_arrays, only: aj0_gf, aj1_gf
     use kt_grids, only: kperp2, naky, ntheta0, &
@@ -1790,6 +1892,11 @@ contains
         aj0_tdep%old = aj0
         allocate(aj0_tdep%new(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
         aj0_tdep%new = aj0
+
+        ! NDCTESTneighb
+        allocate(aj0_shift(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
+        aj0_shift = aj0
+        ! endNDCTESTneighb
     end if
 
   end subroutine init_bessel
@@ -1892,6 +1999,41 @@ contains
           end if
       end do
   end subroutine update_aj0_tdep
+
+  ! NDCTESTneighb
+  subroutine compute_aj0_shift(ik)
+
+      use dist_fn_arrays, only: aj0_shift
+      use kt_grids, only: kperp2_shift
+      use species, only: spec
+      use theta_grid, only: ntgrid, bmag
+      use le_grids, only: energy, al
+      use gs2_layouts, only: g_lo, ik_idx, it_idx, il_idx, ie_idx, is_idx
+      use spfunc, only: j0
+
+      implicit none
+
+      integer, intent(in) :: ik
+      integer :: ig, ik_loop, it, il, ie, is
+      integer :: iglo
+      real :: arg
+
+      do iglo = g_lo%llim_proc, g_lo%ulim_proc
+          ik_loop = ik_idx(g_lo,iglo)
+          if(ik_loop == ik) then
+              it = it_idx(g_lo,iglo)
+              il = il_idx(g_lo,iglo)
+              ie = ie_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
+              do ig = -ntgrid, ntgrid
+                 arg = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ig)*kperp2_shift(ig,it,ik))
+                 aj0_shift(ig,iglo) = j0(arg)
+              end do
+          end if
+      end do
+  
+  end subroutine compute_aj0_shift
+  ! endNDCTESTneighb
 
   subroutine init_invert_rhs
     use dist_fn_arrays, only: vpar, ittp, kx_shift, kx_shift_old
@@ -4424,8 +4566,7 @@ endif
     use file_utils, only: error_unit
     use kt_grids, only: akx, aky, naky, ikx, ntheta0, box, theta0, &
         implicit_flowshear, explicit_flowshear, mixed_flowshear, &
-        compute_akx_shift, & ! NDCTESTneighb
-        akx_shift ! NDCTEST
+        compute_akx_shift, compute_kperp2_shift ! NDCTESTneighb
     use le_grids, only: negrid, nlambda
     use species, only: nspec
     use run_parameters, only: fphi, fapar, fbpar
@@ -4569,6 +4710,9 @@ endif
                   ! for every ky individually, others (e.g. gamtot)
                   ! have to be recomputed for all ky's together later on.
                   call compute_akx_shift(ik,jump(ik))
+                  call compute_kperp2_shift(ik)
+                  call compute_aj0_shift(ik)
+                  call compute_wdrift_shift(ik)
 
                   last_jump(ik) = jump(ik)
               end if
@@ -4584,6 +4728,16 @@ endif
           end if
           ! endNDCTESTnl
        end do
+
+       ! NDCTESTneighb
+       ! Re-computing the shifted gamtot requires all ky's.
+       ! We only recompute it when, for one of the ky's, kx's
+       ! have jumped by a different amount compared to the
+       ! last time they jumped.
+       if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+           if(compute_shifted_vars) call compute_gamtot_shift
+       end if
+       ! endNDCTESTneighb
     else
        do ik=1, naky
           theta0_shift(ik) = theta0_shift(ik) - g_exb*g_exbfac*gdt/shat*tunits(ik)
@@ -4969,14 +5123,6 @@ endif
        ! end do
 
     end if
-    !NDCTEST
-    write(*,*) "==================================="
-    write(*,*) akx
-    write(*,*) "-----------------------------------"
-    write(*,*) akx_shift(:,1)
-    write(*,*) akx_shift(:,2)
-    write(*,*) akx_shift(:,3)
-    !endNDCTEST
   end subroutine exb_shear
 
   !<DD>Subroutine to setup a redistribute object to be used in enforcing parity
@@ -7892,7 +8038,8 @@ endif
   end subroutine getmoms_notgc
 
   subroutine init_fieldeq
-    use dist_fn_arrays, only: aj0, aj1, vperp2, gamtot_tdep
+    use dist_fn_arrays, only: aj0, aj1, vperp2, gamtot_tdep, &
+        gamtot_shift ! NDCTESTneighb
     use species, only: nspec, spec, has_electron_species
     use theta_grid, only: ntgrid
     use kt_grids, only: naky, ntheta0, aky, kperp2, &
@@ -7961,6 +8108,11 @@ endif
         gamtot_tdep%old = gamtot
         allocate(gamtot_tdep%new(-ntgrid:ntgrid,ntheta0,naky))
         gamtot_tdep%new = gamtot
+
+        ! NDCTESTneighb
+        allocate(gamtot_shift(-ntgrid:ntgrid,ntheta0,naky))
+        gamtot_shift = gamtot
+        ! endNDCTESTneighb
     end if
     
     do iglo = g_lo%llim_proc, g_lo%ulim_proc
@@ -8053,6 +8205,37 @@ endif
       gamtot_tdep%new = real(tot) + kperp2_tdep%new*poisfac
 
   end subroutine update_gamtot_tdep
+
+  ! NDCTESTneighb
+  subroutine compute_gamtot_shift
+      
+      use dist_fn_arrays, only: aj0_shift
+      use species, only: nspec, spec
+      use theta_grid, only: ntgrid
+      use kt_grids, only: ntheta0, naky, kperp2_shift
+      use le_grids, only: anon, integrate_species
+      use gs2_layouts, only: g_lo, ie_idx, is_idx
+      use dist_fn_arrays, only: gamtot_shift
+      
+      implicit none
+      
+      complex, dimension (-ntgrid:ntgrid,ntheta0,naky) :: tot
+      real, dimension (nspec) :: wgt
+      integer :: iglo, ie, is, isgn
+      
+      do iglo = g_lo%llim_proc, g_lo%ulim_proc
+          ie = ie_idx(g_lo,iglo)
+          is = is_idx(g_lo,iglo)
+          do isgn = 1,2
+              g0(:,isgn,iglo) = (1.0 - aj0_shift(:,iglo)**2)*anon(ie)
+          end do
+      end do
+      wgt = spec%z*spec%z*spec%dens/spec%temp
+      call integrate_species (g0, wgt, tot)
+      gamtot_shift = real(tot) + kperp2_shift*poisfac
+
+  end subroutine compute_gamtot_shift
+  ! endNDCTESTneighb
 
   subroutine getfieldeq1 (phi, apar, bpar, antot, antota, antotp, &
        fieldeq, fieldeqa, fieldeqp, expflow_opt)
