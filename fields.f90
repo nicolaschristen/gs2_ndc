@@ -455,7 +455,7 @@ contains
     use unit_tests, only: debug_message
     implicit none
     integer, parameter :: verb=3
-    logical :: michael_exp = .true. ! NDCTESTswitchexp
+    logical :: michael_exp = .false. ! NDCTESTswitchexp
 
     if (.not. allocated(phi)) then
        call debug_message(verb, 'fields::allocate_arrays allocating')

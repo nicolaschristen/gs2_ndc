@@ -25,6 +25,7 @@ module dist_fn_arrays
   public :: remap_period ! NDCTESTnl
   ! NDCTESTneighb
   public :: jump
+  public :: jumping
   public :: a, b, r, ainv
   public :: last_jump
   public :: aj0_shift
@@ -90,7 +91,7 @@ module dist_fn_arrays
   real, dimension(:), allocatable :: remap_period ! NDCTESTnl
 
   ! NDCTESTneighb
-  integer, dimension(:), allocatable :: jump
+  integer, dimension(:), allocatable :: jump, jumping
   complex, dimension (:,:,:), allocatable :: a, b, r, ainv
   integer, dimension(:), allocatable :: last_jump
   real, dimension(:,:), allocatable :: aj0_shift
