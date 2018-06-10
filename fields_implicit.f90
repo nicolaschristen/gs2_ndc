@@ -525,12 +525,13 @@ contains
     use fields_arrays, only: apar_ext
     use antenna, only: antenna_amplitudes, no_driver
     use dist_fn, only: timeadv, exb_shear, collisions_advance, &
-        update_kperp2_tdep, update_aj0_tdep, update_gamtot_tdep, compute_wdrift, init_invert_rhs, &
+        update_kperp2_tdep, update_aj0_tdep, update_gamtot_tdep, &
         gamtot, getan ! NDCTESTmichael
     use dist_fn, only: g_exb, & ! NDCTESTremap_plot
-        first_gk_solve ! NDCTESTneighb
+        first_gk_solve, compute_a_b_r_ainv ! NDCTESTneighb
     use dist_fn_arrays, only: g, gnew, kx_shift, theta0_shift, &
-        gamtot_tdep ! NDCTESTmichael
+        gamtot_tdep, & ! NDCTESTmichael
+        a, b, r, ainv ! NDCTESTneighb
     use unit_tests, only: debug_message
     use mp, only: iproc
     use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear, &
@@ -642,7 +643,7 @@ contains
             
             if (proc0) call time_message(.false.,timer_tadv_abr,' Tadv_rhs') ! NDCTESTtime
             
-            call init_invert_rhs
+            call compute_a_b_r_ainv(a,b,r,ainv) ! NDCTESTneighb
             
             if (proc0) call time_message(.false.,timer_tadv_abr,' Tadv_rhs') ! NDCTESTtime
             
@@ -895,9 +896,10 @@ contains
     use theta_grid, only: ntgrid
     use kt_grids, only: naky, ntheta0, implicit_flowshear, mixed_flowshear, interp_before, &
         explicit_flowshear, akx, kperp2_tdep
-    use dist_fn_arrays, only: g, kx_shift
+    use dist_fn_arrays, only: g, kx_shift, &
+        a, b, r, ainv ! NDCTESTneighb
     use dist_fn, only: M_class, N_class, i_class, &
-        update_kperp2_tdep, update_aj0_tdep, update_gamtot_tdep, init_invert_rhs
+        update_kperp2_tdep, update_aj0_tdep, update_gamtot_tdep, compute_a_b_r_ainv
     use run_parameters, only: fphi, fapar, fbpar
     use gs2_layouts, only: init_fields_layouts, f_lo, init_jfields_layouts
     use prof, only: prof_entering, prof_leaving
@@ -1092,7 +1094,7 @@ contains
 
                            if(implicit_flowshear) then
                                if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
-                               call init_invert_rhs
+                               call compute_a_b_r_ainv(a,b,r,ainv)
                                if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
                            end if
                        end if
@@ -1123,7 +1125,7 @@ contains
 
                            if(implicit_flowshear) then
                                if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
-                               call init_invert_rhs
+                               call compute_a_b_r_ainv(a,b,r,ainv)
                                if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
                            end if
                            ! endNDCTESTshift
@@ -1152,7 +1154,7 @@ contains
 
                            if(implicit_flowshear) then
                                if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
-                               call init_invert_rhs
+                               call compute_a_b_r_ainv(a,b,r,ainv)
                                if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
                            end if
                            ! endNDCTESTshift
@@ -1179,7 +1181,7 @@ contains
                            
                            if(implicit_flowshear) then
                                if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
-                               call init_invert_rhs
+                               call compute_a_b_r_ainv(a,b,r,ainv)
                                if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
                            end if
                            ! endNDCTESTshift

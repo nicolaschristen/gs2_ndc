@@ -113,6 +113,7 @@ module dist_fn
   
   ! NDCTESTneighb
   public :: first_gk_solve
+  public :: compute_a_b_r_ainv
   ! endNDCTESTneighb
 
   ! knobs
@@ -194,7 +195,6 @@ module dist_fn
   
   ! (-ntgrid:ntgrid,ntheta0,naky) replicated
 
-  complex, dimension (:,:,:), allocatable :: a, b, r, ainv
   ! (-ntgrid:ntgrid, 2, -g-layout-)
 
   real, dimension (:,:,:), allocatable :: gridfac1
@@ -917,7 +917,7 @@ contains
 
   subroutine finish_dist_fn_level_2
     use dist_fn_arrays, only: aj0, aj1, aj0_gf, aj1_gf, aj0_tdep, gamtot_tdep, &
-        aj0_shift, gamtot_shift ! NDCTESTneighb
+        aj0_shift, gamtot_shift, a_shift, b_shift, a, b, r, ainv ! NDCTESTneighb
 
     if (.not. initialized_dist_fn_level_2) return
     initialized_dist_fn_level_2 = .false.
@@ -938,6 +938,7 @@ contains
     ! NDCTESTneighb
     if (allocated(aj0_shift)) deallocate (aj0_shift)
     if (allocated(gamtot_shift)) deallocate (gamtot_shift)
+    if (allocated(a_shift)) deallocate(a_shift, b_shift)
     ! endNDCTESTneighb
   end subroutine finish_dist_fn_level_2
   
@@ -946,7 +947,7 @@ contains
     use dist_fn_arrays, only: vpa, vpac, vpar
     use dist_fn_arrays, only: ittp
     use dist_fn_arrays, only: vpa_gf, vperp2_gf, &
-        wdrift_shift, wdriftttp_shift ! NDCTESTneighb
+        wdrift_shift, wdriftttp_shift, a, b, r, ainv ! NDCTESTneighb
     use kt_grids, only: implicit_flowshear
     !initializing  = .true.
     if (.not. initialized_dist_fn_level_3) return
@@ -2033,150 +2034,195 @@ contains
       end do
   
   end subroutine compute_aj0_shift
-  ! endNDCTESTneighb
-
+  
   subroutine init_invert_rhs
-    use dist_fn_arrays, only: vpar, ittp, kx_shift, kx_shift_old
-    use species, only: spec, nspec
-    use theta_grid, only: ntgrid, shat
-    use kt_grids, only: naky, ntheta0, implicit_flowshear
-    use le_grids, only: nlambda, ng2, forbid, negrid
-    use constants, only: zi
-    use gs2_layouts, only: g_lo, ik_idx, it_idx, il_idx, ie_idx, is_idx
-    implicit none
 
-    integer :: iglo
-    integer :: ig, ik, it, il, ie, is, isgn
-    real :: wdttp, vp, bd
-    real :: wdold, wdnew, wdttpold, wdttpnew
-#ifdef LOWFLOW
-    complex :: wd
-#else
-    real :: wd
-#endif
-
-    if (.not.allocated(a)) then
-        ! At initialisation
-        allocate (a(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-        allocate (b(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-        allocate (r(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-        allocate (ainv(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-        a = 0. ; b = 0. ; r = 0. ; ainv = 0.
-    else
-        ! Depending on the flow-shear implementation, different arrays become time-dependent
-        ! and need to be updated at each time-step:
-        !  -- explicit or mixed: a and b
-        !  -- implicit: a, b, ainv and r
-        ! NDC 02/2018
-        if(implicit_flowshear) then
-            a = 0.
-            b = 0.
-            ainv = 0.
-            r = 0.
-        end if
-    end if
-    
-    do iglo = g_lo%llim_proc, g_lo%ulim_proc
-       ik = ik_idx(g_lo,iglo)
-       it = it_idx(g_lo,iglo)
-       il = il_idx(g_lo,iglo)
-       ie = ie_idx(g_lo,iglo)
-       is = is_idx(g_lo,iglo)
-       do isgn = 1, 2
-          do ig = -ntgrid, ntgrid-1
-# ifdef LOWFLOW
-             wd = wdrift(ig,isgn,iglo) + wstar_neo(ig,it,ik)*spec(is)%zt
-             wdttp = wdriftttp(ig,it,ik,ie,is,isgn) + wstar_neo(ig,it,ik)*spec(is)%zt
-# else
-             if(implicit_flowshear) then
-                 wdold = wdrift(ig,isgn,iglo) &
-                     + vdrift_x_cent(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik) ! NDCTODO: should be wdrift_old
-                 wdttpold = wdriftttp(ig,it,ik,ie,is,isgn) &
-                     + vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik) ! NDCTODO: should be wdriftttp_old
-                 wdnew = wdrift(ig,isgn,iglo) &
-                     + vdrift_x_cent(ig,isgn,iglo)/(2.*shat)*kx_shift(ik)
-                 wdttpnew = wdriftttp(ig,it,ik,ie,is,isgn) &
-                     + vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift(ik)
-             else
-                 ! NDCTODO: should split into old
-                 wd = wdrift(ig,isgn,iglo)
-                 wdttp = wdriftttp(ig,it,ik,ie,is,isgn)
-             end if
-# endif
-
-             ! use positive vpar because we will be flipping sign of d/dz
-             ! when doing parallel field solve for -vpar
-             ! also, note that vpar is (vpa bhat + v_{magnetic}) . grad theta / delthet
-             ! if compile with LOWFLOW defined
-             vp = vpar(ig,1,iglo)
-             bd = bkdiff(is)
-
-             if(implicit_flowshear) then
-                 ainv(ig,isgn,iglo) &
-                      = 1.0/(1.0 + bd &
-                      + (1.0-fexp(is))*spec(is)%tz*(zi*wdnew*(1.0+bd) + 2.0*vp))
-                 r(ig,isgn,iglo) &
-                      = (1.0 - bd &
-                      + (1.0-fexp(is))*spec(is)%tz*(zi*wdnew*(1.0-bd) - 2.0*vp)) &
-                      *ainv(ig,isgn,iglo)
-                 a(ig,isgn,iglo) &
-                      = 1.0 + bd &
-                      + fexp(is)*spec(is)%tz*(-zi*wdold*(1.0+bd) - 2.0*vp)
-                 b(ig,isgn,iglo) &
-                      = 1.0 - bd &
-                      + fexp(is)*spec(is)%tz*(-zi*wdold*(1.0-bd) + 2.0*vp)
-             else
-                 ainv(ig,isgn,iglo) &
-                      = 1.0/(1.0 + bd &
-                      + (1.0-fexp(is))*spec(is)%tz*(zi*wd*(1.0+bd) + 2.0*vp))
-                 r(ig,isgn,iglo) &
-                      = (1.0 - bd &
-                      + (1.0-fexp(is))*spec(is)%tz*(zi*wd*(1.0-bd) - 2.0*vp)) &
-                      *ainv(ig,isgn,iglo)
-                 a(ig,isgn,iglo) &
-                      = 1.0 + bd &
-                      + fexp(is)*spec(is)%tz*(-zi*wd*(1.0+bd) - 2.0*vp)
-                 b(ig,isgn,iglo) &
-                      = 1.0 - bd &
-                      + fexp(is)*spec(is)%tz*(-zi*wd*(1.0-bd) + 2.0*vp)
-             end if
+      use kt_grids, only: explicit_flowshear, mixed_flowshear
+      use theta_grid, only: ntgrid
+      use gs2_layouts, only: g_lo
+      use dist_fn_arrays, only: a_shift, b_shift, a, b, r, ainv
+      
+      implicit none
+      
+      if (.not.allocated(a)) then
+          allocate (a(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+          allocate (b(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+          allocate (r(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+          allocate (ainv(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+          a = 0. ; b = 0. ; r = 0. ; ainv = 0.
+      end if
           
-             if (nlambda > ng2) then
-                ! zero out forbidden regions
-                if (forbid(ig,il) .or. forbid(ig+1,il)) then
-                   r(ig,isgn,iglo) = 0.0
-                   ainv(ig,isgn,iglo) = 0.0
-                end if
-             
-! CMR, DD, 25/7/2014: 
-!  set ainv=1 just left of lower bounce points ONLY for RIGHTWARDS travelling 
-!  trapped particles. Part of multiple trapped particle algorithm
-!  NB not applicable to ttp or wfb!
-if( isgn.eq.1 )then
-                if (forbid(ig,il) .and. .not. forbid(ig+1,il)) then
-                   ainv(ig,isgn,iglo) = 1.0 + ainv(ig,isgn,iglo)
-                end if
-endif
-                ! ???? mysterious mucking around with totally trapped particles
-                ! part of multiple trapped particle algorithm
-                if (il >= ittp(ig) .and. .not. forbid(ig, il)) then
-                    if(implicit_flowshear) then
-                        ainv(ig,isgn,iglo) = 1.0/(1.0 + zi*(1.0-fexp(is))*spec(is)%tz*wdttpnew)
-                        a(ig,isgn,iglo) = 1.0 - zi*fexp(is)*spec(is)%tz*wdttpold
-                    else
-                        ainv(ig,isgn,iglo) = 1.0/(1.0 + zi*(1.0-fexp(is))*spec(is)%tz*wdttp)
-                        a(ig,isgn,iglo) = 1.0 - zi*fexp(is)*spec(is)%tz*wdttp
-                    end if
-                   
-                    r(ig,isgn,iglo) = 0.0
-                end if
-             end if
-          end do
-       end do
-    end do
+      call compute_a_b_r_ainv(a,b,r,ainv)
 
+      if(explicit_flowshear .or. mixed_flowshear) then
+          if(.not. allocated(a_shift)) then
+              allocate (a_shift(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+              allocate (b_shift(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+              a_shift = a ; b_shift = b ;
+          end if
+      end if
 
   end subroutine init_invert_rhs
+
+  ! Fully interpolating approach for flow shear:
+  ! a b ainv r become time-dependent and need to be updated at each time-step.
+  ! NDC 02/2018
+  !
+  ! Mixed and explicit approaches:
+  ! In the old implementation, nearest neighbours were always the ones at time-step it+1,
+  ! even in explicit terms. To correct this bug, a_shift b_shift
+  ! need to be recomputed whenever an ExB remap occurred.
+  ! NDC 06/2018
+
+  subroutine compute_a_b_r_ainv(my_a,my_b,my_r,my_ainv)
+    
+      use dist_fn_arrays, only: vpar, ittp, &
+          wdrift_shift, wdriftttp_shift, kx_shift, kx_shift_old ! NDCTESTneighb
+      use species, only: spec
+      use theta_grid, only: ntgrid, shat
+      use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear
+      use le_grids, only: nlambda, ng2, forbid
+      use constants, only: zi
+      use gs2_layouts, only: g_lo, ik_idx, it_idx, il_idx, ie_idx, is_idx
+      
+      implicit none
+
+      complex, dimension (-ntgrid:,:,g_lo%llim_proc:), intent(inout) :: my_a, my_b
+      complex, dimension (-ntgrid:,:,g_lo%llim_proc:), intent(inout), optional :: my_r, my_ainv
+      integer :: iglo
+      integer :: ig, ik, it, il, ie, is, isgn
+      real :: vp, bd
+      real, dimension(-ntgrid:ntgrid) :: wdttpold, wdttpnew
+#ifdef LOWFLOW
+      complex, dimension(-ntgrid:ntgrid) :: wdold, wdnew
+#else
+      real, dimension(-ntgrid:ntgrid) :: wdold, wdnew
+#endif
+      logical :: compute_r_ainv = .true. ! NDCTESTneighb
+
+      ! For the mixed/explicit flow shear schemes, a_shift and b_shift have to be recomputed
+      ! over time, but not r and ainv. So at initialisation compute_r_ainv=.true., and then
+      ! it is set to .false. when updating a_shift and b_shift.
+      compute_r_ainv = present(my_r)
+    
+      do iglo = g_lo%llim_proc, g_lo%ulim_proc
+          
+          ik = ik_idx(g_lo,iglo)
+          it = it_idx(g_lo,iglo)
+          il = il_idx(g_lo,iglo)
+          ie = ie_idx(g_lo,iglo)
+          is = is_idx(g_lo,iglo)
+          
+          do isgn = 1, 2
+
+# ifdef LOWFLOW
+              ! NDCQUEST: LOWFLOW not supported for new flow shear
+              wdnew = wdrift(:,isgn,iglo) + wstar_neo(:,it,ik)*spec(is)%zt
+              wdold = wdnew
+
+              wdttpnew = wdriftttp(:,it,ik,ie,is,isgn) + wstar_neo(:,it,ik)*spec(is)%zt
+              wdttpold = wdttpnew
+# else
+              ! Computing time dependent a,b,r,ainv
+              if(implicit_flowshear) then
+
+                  wdnew = wdrift(:,isgn,iglo) + vdrift_x_cent(:,isgn,iglo)/(2.*shat)*kx_shift(ik)
+                  wdold = wdrift(:,isgn,iglo) & ! NDCTODO
+                      + vdrift_x_cent(:,isgn,iglo)/(2.*shat)*kx_shift_old(ik)
+                  
+                  wdttpnew = wdriftttp(:,it,ik,ie,is,isgn) + vdrift_x(:,isgn,iglo)/(2.*shat)*kx_shift(ik)
+                  wdttpold = wdriftttp(:,it,ik,ie,is,isgn) & ! NDCTODO
+                      + vdrift_x(:,isgn,iglo)/(2.*shat)*kx_shift_old(ik)
+
+              ! Computing b_shift,a_shift
+              else if((explicit_flowshear .or. mixed_flowshear) .and. .not. compute_r_ainv) then
+                  
+                  ! quantities at time step it+1 are not needed in this case
+                  wdnew = 0.
+                  wdold = wdrift_shift(:,isgn,iglo)
+
+                  wdttpnew = 0.
+                  wdttpold = wdriftttp_shift(:,it,ik,ie,is,isgn)
+
+              ! Computing a,b,r,ainv during initialisation
+              else
+
+                  wdnew = wdrift(:,isgn,iglo)
+                  wdold = wdnew
+
+                  wdttpnew = wdriftttp(:,it,ik,ie,is,isgn)
+                  wdttpold = wdttpnew
+              
+              end if
+# endif
+
+              do ig = -ntgrid, ntgrid-1
+
+                  ! use positive vpar because we will be flipping sign of d/dz
+                  ! when doing parallel field solve for -vpar
+                  ! also, note that vpar is (vpa bhat + v_{magnetic}) . grad theta / delthet
+                  ! if compile with LOWFLOW defined
+                  vp = vpar(ig,1,iglo)
+                  bd = bkdiff(is)
+
+                  if(compute_r_ainv) then
+                      my_ainv(ig,isgn,iglo) &
+                           = 1.0/(1.0 + bd &
+                           + (1.0-fexp(is))*spec(is)%tz*(zi*wdnew(ig)*(1.0+bd) + 2.0*vp))
+                      my_r(ig,isgn,iglo) &
+                           = (1.0 - bd &
+                           + (1.0-fexp(is))*spec(is)%tz*(zi*wdnew(ig)*(1.0-bd) - 2.0*vp)) &
+                           *my_ainv(ig,isgn,iglo)
+                  end if
+
+                  my_a(ig,isgn,iglo) &
+                       = 1.0 + bd &
+                       + fexp(is)*spec(is)%tz*(-zi*wdold(ig)*(1.0+bd) - 2.0*vp)
+                  my_b(ig,isgn,iglo) &
+                       = 1.0 - bd &
+                       + fexp(is)*spec(is)%tz*(-zi*wdold(ig)*(1.0-bd) + 2.0*vp)
+          
+                  if (nlambda > ng2) then
+                      ! zero out forbidden regions
+                      
+                      if (present(my_r)) then
+                          
+                          if(forbid(ig,il) .or. forbid(ig+1,il)) then
+                              my_r(ig,isgn,iglo) = 0.0
+                              my_ainv(ig,isgn,iglo) = 0.0
+                          end if
+                  
+                          ! CMR, DD, 25/7/2014: 
+                          !  set ainv=1 just left of lower bounce points ONLY for RIGHTWARDS travelling 
+                          !  trapped particles. Part of multiple trapped particle algorithm
+                          !  NB not applicable to ttp or wfb!
+                          if( isgn.eq.1 )then
+                              if (forbid(ig,il) .and. .not. forbid(ig+1,il)) then
+                                  my_ainv(ig,isgn,iglo) = 1.0 + my_ainv(ig,isgn,iglo)
+                              end if
+                          endif
+                          ! ???? mysterious mucking around with totally trapped particles
+                          ! part of multiple trapped particle algorithm
+                          if (il >= ittp(ig) .and. .not. forbid(ig, il)) then
+                              my_ainv(ig,isgn,iglo) = 1.0/(1.0 + zi*(1.0-fexp(is))*spec(is)%tz*wdttpnew(ig))
+                              my_r(ig,isgn,iglo) = 0.0
+                          end if
+                      end if
+
+                      ! ???? mysterious mucking around with totally trapped particles
+                      ! part of multiple trapped particle algorithm
+                      if (il >= ittp(ig) .and. .not. forbid(ig, il)) then
+                          my_a(ig,isgn,iglo) = 1.0 - zi*fexp(is)*spec(is)%tz*wdttpold(ig)
+                      end if
+
+                  end if
+
+              end do
+          end do
+      end do
+
+  end subroutine compute_a_b_r_ainv
+  ! endNDCTESTneighb
 
   subroutine init_bc
     use theta_grid, only: ntgrid
@@ -4572,7 +4618,7 @@ endif
     use run_parameters, only: fphi, fapar, fbpar
     use dist_fn_arrays, only: kx_shift, kx_shift_old, theta0_shift, &
         t_last_jump, remap_period, & ! NDCTESTnl
-        jump, last_jump ! NDCTESTneighb
+        jump, last_jump, a_shift, b_shift ! NDCTESTneighb
     use gs2_time, only: code_dt, code_dt_old, code_time
     use constants, only: twopi   
     use theta_grid, only: theta ! NDCTEST 
@@ -4730,12 +4776,14 @@ endif
        end do
 
        ! NDCTESTneighb
-       ! Re-computing the shifted gamtot requires all ky's.
-       ! We only recompute it when, for one of the ky's, kx's
+       ! Re-computing the shifted gamtot, a and b requires all ky's.
+       ! We only recompute them when, for one of the ky's, kx's
        ! have jumped by a different amount compared to the
        ! last time they jumped.
-       if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-           if(compute_shifted_vars) call compute_gamtot_shift
+       ! NDC 06/18
+       if(compute_shifted_vars) then
+           call compute_gamtot_shift
+           if(explicit_flowshear .or. mixed_flowshear) call compute_a_b_r_ainv(a_shift,b_shift)
        end if
        ! endNDCTESTneighb
     else
@@ -5388,7 +5436,8 @@ endif
     use dist_fn_arrays, only: hneoc, vparterm, wdfac, wstarfac, wdttpfac
 #endif
     use dist_fn_arrays, only: aj0, aj1, vperp2, vpar, vpac, g, ittp, &
-        aj0_tdep, kx_shift, kx_shift_old
+        aj0_tdep, kx_shift, kx_shift_old, &
+        a, b ! NDCTESTneighb
     use theta_grid, only: ntgrid, shat, itor_over_B
     use kt_grids, only: aky, explicit_flowshear, implicit_flowshear, mixed_flowshear
     use le_grids, only: nlambda, ng2, lmax, anon, negrid
@@ -6030,7 +6079,8 @@ endif
 #ifdef LOWFLOW
     use dist_fn_arrays, only: hneoc, vparterm, wdfac, wstarfac, wdttpfac
 #endif
-    use dist_fn_arrays, only: aj0, aj1, vperp2, g, ittp
+    use dist_fn_arrays, only: aj0, aj1, vperp2, g, ittp, &
+        a, b, r, ainv ! NDCTESTneighb
     use theta_grid, only: ntgrid
     use kt_grids, only: aky
     use le_grids, only: nlambda, ng2, lmax, anon
@@ -6624,7 +6674,8 @@ endif
   subroutine invert_rhs_1 &
        (phi, apar, bpar, phinew, aparnew, bparnew, istep, &
         iglo, sourcefac)
-    use dist_fn_arrays, only: gnew, ittp, vperp2, aj1, aj0, aj0_tdep
+    use dist_fn_arrays, only: gnew, ittp, vperp2, aj1, aj0, aj0_tdep, &
+        r, ainv ! NDCTESTneighb
     use run_parameters, only: eqzip, secondary, tertiary, harris
     use theta_grid, only: ntgrid
     use le_grids, only: nlambda, ng2, lmax, forbid, anon
