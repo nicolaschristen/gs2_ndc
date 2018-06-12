@@ -733,10 +733,8 @@ contains
     call allocate_arrays
 
     ! NDCTESTneighb
-    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-        allocate(jumping(naky))
-        jumping = 0
-    end if
+    allocate(jumping(naky))
+    jumping = 0
     ! endNDCTESTneighb
 
   end subroutine init_dist_fn_arrays
@@ -1309,13 +1307,11 @@ contains
       ! NDCTESTneighb
       ! NDCQUEST: if dt reset, do we need to recompute wdrift_shift?
       ! (same for tdep quantities, a_shift,b_shift,...)
-      if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-          if(.not. allocated(wdrift_shift)) then
-              allocate (wdrift_shift(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-              wdrift_shift = wdrift
-              allocate (wdriftttp_shift(-ntgrid:ntgrid,ntheta0,naky,negrid,nspec,2))
-              wdriftttp_shift = wdriftttp
-          end if
+      if(.not. allocated(wdrift_shift)) then
+          allocate (wdrift_shift(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+          wdrift_shift = wdrift
+          allocate (wdriftttp_shift(-ntgrid:ntgrid,ntheta0,naky,negrid,nspec,2))
+          wdriftttp_shift = wdriftttp
       end if
       ! endNDCTESTneighb
 
@@ -1903,12 +1899,12 @@ contains
         aj0_tdep%old = aj0
         allocate(aj0_tdep%new(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
         aj0_tdep%new = aj0
-
-        ! NDCTESTneighb
-        allocate(aj0_shift(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
-        aj0_shift = aj0
-        ! endNDCTESTneighb
     end if
+
+    ! NDCTESTneighb
+    allocate(aj0_shift(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
+    aj0_shift = aj0
+    ! endNDCTESTneighb
 
   end subroutine init_bessel
         
@@ -2054,7 +2050,7 @@ contains
   
   subroutine init_invert_rhs
 
-      use kt_grids, only: explicit_flowshear, mixed_flowshear
+      use kt_grids, only: implicit_flowshear
       use theta_grid, only: ntgrid
       use gs2_layouts, only: g_lo
       use dist_fn_arrays, only: a_shift, b_shift, a, b, r, ainv
@@ -2071,7 +2067,7 @@ contains
           
       call compute_a_b_r_ainv(a,b,r,ainv)
 
-      if(explicit_flowshear .or. mixed_flowshear) then
+      if(.not. implicit_flowshear) then
           if(.not. allocated(a_shift)) then
               allocate (a_shift(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
               allocate (b_shift(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
@@ -2153,8 +2149,8 @@ contains
                       + jumping(ik)*wdriftttp_shift(:,it,ik,ie,is,isgn) &
                       + vdrift_x(:,isgn,iglo)/(2.*shat)*kx_shift_old(ik)
 
-              ! Computing b_shift,a_shift
-              else if((explicit_flowshear .or. mixed_flowshear) .and. .not. compute_r_ainv) then
+              ! Computing b_shift,a_shift with correct neighbours
+              else if(.not. compute_r_ainv) then
                   
                   ! quantities at time step it+1 are not needed in this case
                   wdnew = 0.
@@ -4362,12 +4358,12 @@ contains
           if (box .or. shat .eq. 0.0) then
              allocate (kx_shift(naky))
              kx_shift = 0.
+             allocate(kx_shift_old(naky))
+             kx_shift_old = 0.
              ! NDCTESTremap_plot: in if, remove last logical
              if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. remap_plot) then
              ! endNDCTESTremap_plot
              !if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-                 allocate(kx_shift_old(naky))
-                 kx_shift_old = 0.
                  allocate(t_last_jump(naky)) ! NDCTESTnl
                  t_last_jump = 0. ! NDCTESTnl
                  allocate(remap_period(naky)) ! NDCTESTnl
@@ -4758,42 +4754,40 @@ contains
           ! In flow-shear cases, kx_shift_old is kx_shift at the previous time-step with ExB jumps taken into account, ie:
           ! kx_shift_old(ik) is kx*[it]-kxbar[it+1] -- NDC 02/2018
           ! NDCTESTkxshift
-          if(implicit_flowshear .or. explicit_flowshear .or. mixed_flowshear) then
               
-              !kx_shift_old(ik) = kx_shift_old(ik) - jump(ik)*dkx
-              !kx_shift_old(ik) = kx_shift(ik) + aky(ik)*g_exb*g_exbfac*gdt*tunits(ik) ! undo last time-step
+          !kx_shift_old(ik) = kx_shift_old(ik) - jump(ik)*dkx
+          !kx_shift_old(ik) = kx_shift(ik) + aky(ik)*g_exb*g_exbfac*gdt*tunits(ik) ! undo last time-step
 
-              ! NDCTESTneighb
-              ! For one of the ky's, kx's jump by a different amount than they did
-              ! last time they jumped. So shifted quantities used to store nearest
-              ! neighbours at time-ste it have to be re-computed.
-              ! NDC 06/18
-              if(jump(ik)/=0) then
+          ! NDCTESTneighb
+          ! For one of the ky's, kx's jump by a different amount than they did
+          ! last time they jumped. So shifted quantities used to store nearest
+          ! neighbours at time-ste it have to be re-computed.
+          ! NDC 06/18
+          if(jump(ik)/=0) then
+              
+              jumping(ik) = 1
+              
+              if(jump(ik)/=last_jump(ik)) then
                   
-                  jumping(ik) = 1
-                  
-                  if(jump(ik)/=last_jump(ik)) then
-                      
-                      compute_shifted_vars = .true.
+                  compute_shifted_vars = .true.
 
-                      ! Some shifted quantities can be updated here,
-                      ! for every ky individually, others (e.g. gamtot)
-                      ! have to be recomputed for all ky's together later on.
-                      call compute_akx_shift(ik,jump(ik))
-                      call compute_kperp2_shift(ik)
-                      call compute_aj0_shift(ik)
-                      call compute_wdrift_shift(ik)
+                  ! Some shifted quantities can be updated here,
+                  ! for every ky individually, others (e.g. gamtot)
+                  ! have to be recomputed for all ky's together later on.
+                  call compute_akx_shift(ik,jump(ik))
+                  call compute_kperp2_shift(ik)
+                  call compute_aj0_shift(ik)
+                  call compute_wdrift_shift(ik)
 
-                      last_jump(ik) = jump(ik)
+                  last_jump(ik) = jump(ik)
 
-                  end if
-
-              else
-                  jumping(ik) = 0
               end if
-              ! endNDCTESTneighb
 
+          else
+              jumping(ik) = 0
           end if
+          ! endNDCTESTneighb
+
           ! endNDCTESTkxshift
           
           ! NDCTESTnl 
@@ -4812,7 +4806,9 @@ contains
        ! NDC 06/18
        if(compute_shifted_vars) then
            call compute_gamtot_shift
-           if(explicit_flowshear .or. mixed_flowshear) call compute_a_b_r_ainv(a_shift,b_shift)
+           ! For interpolating flow shear scheme, we ahve to update a,b,r,ainv.
+           ! This is done in fields_implicit::advance_implicit.
+           if(.not. implicit_flowshear) call compute_a_b_r_ainv(a_shift,b_shift)
        end if
        ! endNDCTESTneighb
     else
@@ -5553,7 +5549,7 @@ contains
             b_old(:,isgn) = b(:,isgn,iglo)
         end do
     
-    else if(explicit_flowshear .or. mixed_flowshear) then
+    else
 
         aj0_new = aj0(:,iglo)
         aj0_old = (1-jumping(ik))*aj0(:,iglo) + jumping(ik)*aj0_shift(:,iglo)
@@ -5571,25 +5567,6 @@ contains
             b_old(:,isgn) = (1-jumping(ik))*b(:,isgn,iglo) + jumping(ik)*b_shift(:,isgn,iglo)
         end do
 
-    else
-        ! reproducing the old, wrong behaviour where nearest neighbours are always 
-        ! the ones from time step it+1, even in explicit terms.
-        ! NDC 06/18
-    
-        aj0_new = aj0(:,iglo)
-        aj0_old = aj0(:,iglo)
-        
-        wdnew = wdrift(:,isgn,iglo)
-        wdold = wdrift(:,isgn,iglo)
-        
-        wdttpnew = wdriftttp(:,it,ik,ie,is,2)
-        wdttpold = wdriftttp(:,it,ik,ie,is,2)
-
-        do isgn_loop = 1,2
-            a_old(:,isgn) = a(:,isgn,iglo)
-            b_old(:,isgn) = b(:,isgn,iglo)
-        end do
-    
     end if
 
     phigavg = fphi * ( fexp(is)*phi(:,it,ik)*aj0_old &
@@ -6725,7 +6702,7 @@ contains
        (phi, apar, bpar, phinew, aparnew, bparnew, istep, &
         iglo, sourcefac)
     use dist_fn_arrays, only: gnew, ittp, vperp2, aj1, aj0, aj0_tdep, &
-        r, ainv ! NDCTESTneighb
+        r, ainv, aj0_shift, jumping ! NDCTESTneighb
     use run_parameters, only: eqzip, secondary, tertiary, harris
     use theta_grid, only: ntgrid
     use le_grids, only: nlambda, ng2, lmax, forbid, anon
@@ -6847,10 +6824,16 @@ contains
 
     else
 
-        aj0_l = aj0(-ntgrid,iglo)
-        aj0_r = aj0(ntgrid,iglo)
-        phi_l = phinew(-ntgrid,it,ik)
-        phi_r = phinew(ntgrid,it,ik)
+        if(first_gk_solve) then
+            aj0_l = (1-jumping(ik))*aj0(-ntgrid,iglo) + jumping(ik)*aj0_shift(-ntgrid,iglo)
+            aj0_r = (1-jumping(ik))*aj0(ntgrid,iglo) + jumping(ik)*aj0_shift(ntgrid,iglo)
+        else
+            aj0_l = aj0(-ntgrid,iglo)
+            aj0_r = aj0(ntgrid,iglo)
+        end if
+
+         phi_l = phinew(-ntgrid,it,ik)
+         phi_r = phinew(ntgrid,it,ik)
 
     end if
     ! endNDCTESTneighb
@@ -7135,7 +7118,8 @@ endif
 
   subroutine invert_rhs_linked &
        (phi, apar, bpar, phinew, aparnew, bparnew, istep, sourcefac)
-    use dist_fn_arrays, only: gnew
+    use dist_fn_arrays, only: gnew, &
+        jumping ! NDCTESTneighb
     use theta_grid, only: bmag, ntgrid
     use le_grids, only: energy, al, nlambda, ng2, anon
     use gs2_layouts, only: g_lo, ik_idx, it_idx, il_idx, ie_idx, is_idx, idx
@@ -7143,7 +7127,8 @@ endif
     use run_parameters, only: fbpar, fphi
     use species, only: spec
     use spfunc, only: j0, j1
-    use kt_grids, only: kperp2, kperp2_tdep, explicit_flowshear, implicit_flowshear, mixed_flowshear
+    use kt_grids, only: kperp2, kperp2_tdep, explicit_flowshear, implicit_flowshear, mixed_flowshear, &
+        kperp2_shift ! NDCTESTneighb
     use fields_arrays, only: phistar_old
 
     implicit none
@@ -7232,8 +7217,16 @@ endif
 
           else
 
-              kperp2_l = kperp2(-ntgrid,itl,ik)
-              kperp2_r = kperp2(ntgrid,itr,ik)
+              if(first_gk_solve) then
+                  kperp2_l = (1-jumping(ik))*kperp2(-ntgrid,itl,ik) &
+                      + jumping(ik)*kperp2_shift(-ntgrid,itl,ik)
+                  kperp2_r = (1-jumping(ik))*kperp2(ntgrid,itr,ik) &
+                      + jumping(ik)*kperp2_shift(ntgrid,itr,ik)
+              else
+                  kperp2_l = kperp2(-ntgrid,itl,ik)
+                  kperp2_r = kperp2(ntgrid,itr,ik)
+              end if
+
               phi_l = phinew(-ntgrid,itl,ik)
               phi_r = phinew(ntgrid,itr,ik)
 
@@ -8219,12 +8212,12 @@ endif
         gamtot_tdep%old = gamtot
         allocate(gamtot_tdep%new(-ntgrid:ntgrid,ntheta0,naky))
         gamtot_tdep%new = gamtot
-
-        ! NDCTESTneighb
-        allocate(gamtot_shift(-ntgrid:ntgrid,ntheta0,naky))
-        gamtot_shift = gamtot
-        ! endNDCTESTneighb
     end if
+
+    ! NDCTESTneighb
+    allocate(gamtot_shift(-ntgrid:ntgrid,ntheta0,naky))
+    gamtot_shift = gamtot
+    ! endNDCTESTneighb
     
     do iglo = g_lo%llim_proc, g_lo%ulim_proc
        ie = ie_idx(g_lo,iglo)
