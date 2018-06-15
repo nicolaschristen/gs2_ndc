@@ -1054,10 +1054,12 @@ contains
     call broadcast (interp_before) ! NDCTEST
     
     ! NDCTESTneighb
-    allocate(akx_shift(ntheta0,naky))
-    do ik = 1,naky
-        akx_shift(:,ik) = akx
-    end do
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+        allocate(akx_shift(ntheta0,naky))
+        do ik = 1,naky
+            akx_shift(:,ik) = akx
+        end do
+    end if
     ! endNDCTESTneighb
 
     call init_kperp2
@@ -1205,12 +1207,12 @@ contains
         kperp2_tdep%old = kperp2
         allocate(kperp2_tdep%new(-ntgrid:ntgrid,ntheta0,naky))
         kperp2_tdep%new = kperp2
-    end if
 
-    ! NDCTESTneighb
-    allocate(kperp2_shift(-ntgrid:ntgrid,ntheta0,naky))
-    kperp2_shift = kperp2
-    ! endNDCTESTneighb
+        ! NDCTESTneighb
+        allocate(kperp2_shift(-ntgrid:ntgrid,ntheta0,naky))
+        kperp2_shift = kperp2
+        ! endNDCTESTneighb
+    end if
 
   end subroutine init_kperp2
 
