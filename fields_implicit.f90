@@ -531,7 +531,7 @@ contains
         first_gk_solve, compute_a_b_r_ainv ! NDCTESTneighb
     use dist_fn_arrays, only: g, gnew, kx_shift, theta0_shift, &
         gamtot_tdep, & ! NDCTESTmichael
-        a, b, r, ainv, jumping, gamtot_shift ! NDCTESTneighb
+        a, b, r, ainv ! NDCTESTneighb
     use unit_tests, only: debug_message
     use mp, only: iproc
     use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear, &
@@ -568,7 +568,6 @@ contains
     character(5) :: istep_str
     ! endNDCTESTremap_plot
     logical :: michael_exp = .false. ! NDCTESTswitchexp
-    real :: gamtot_old ! NDCTESTneighb
     
     ! NDCTESTremap_plot
     if(remap_plot_shear .or. remap_plot_nl) then
@@ -669,11 +668,8 @@ contains
                 do it = 1,ntheta0
                     do ik = 1,naky
                         if(aky(ik)/=0.) then
-                            gamtot_old = (1-jumping(ik))*gamtot(ig,it,ik) &
-                                + jumping(ik)*gamtot_shift(ig,it,ik)
-
                             phistar_old(ig,it,ik) = 1./gamtot_tdep%old(ig,it,ik)*expflow_antot_tdep(ig,it,ik) &
-                                -1./gamtot_old*expflow_antot(ig,it,ik)
+                                -1./gamtot(ig,it,ik)*expflow_antot(ig,it,ik)
                         end if
                     end do
                 end do

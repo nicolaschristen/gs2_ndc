@@ -25,14 +25,8 @@ module dist_fn_arrays
   public :: remap_period ! NDCTESTnl
   ! NDCTESTneighb
   public :: jump
-  public :: jumping
   public :: a, b, r, ainv
   public :: last_jump
-  public :: aj0_shift
-  public :: gamtot_shift
-  public :: wdrift_shift
-  public :: wdriftttp_shift
-  public :: a_shift, b_shift
   ! endNDCTESTneighb
   
   ! dist fn
@@ -91,14 +85,9 @@ module dist_fn_arrays
   real, dimension(:), allocatable :: remap_period ! NDCTESTnl
 
   ! NDCTESTneighb
-  integer, dimension(:), allocatable :: jump, jumping
+  integer, dimension(:), allocatable :: jump
   complex, dimension (:,:,:), allocatable :: a, b, r, ainv
   integer, dimension(:), allocatable :: last_jump
-  real, dimension(:,:), allocatable :: aj0_shift
-  real, dimension(:,:,:), allocatable :: gamtot_shift
-  real, dimension(:,:,:), allocatable :: wdrift_shift
-  real, dimension(:,:,:,:,:,:), allocatable :: wdriftttp_shift
-  complex, dimension(:,:,:), allocatable :: a_shift, b_shift
   ! endNDCTESTneighb
   
 contains
