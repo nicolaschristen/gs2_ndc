@@ -5662,19 +5662,83 @@ contains
           do ig = -ntgrid, ntgrid-1
 
              if (il < ittp(ig)) cycle
+<<<<<<< HEAD
              ! NDCQUEST: factors of 2 in those terms seem weird... In the non-ttp, there are no factors because
              ! they're hidden in the bakdifing. Is there no factor of 2 here because how rhs is inverted for ttp ?
              source(ig) &
                   = g(ig,2,iglo)*a_old(ig,2) &
+||||||| e006768... Remove factors of 2 in ttp (most likely because of how invert_rhs treats ttp).
+             if(implicit_flowshear) then
+                 source(ig) &
+                      = g(ig,2,iglo)*a(ig,2,iglo) &
+=======
+             if(implicit_flowshear) then
+                 ! NDCQUEST: factors of 2 in those terms seem wrong... In the non-ttp, there are no factors because
+                 ! they're hidden in the bakdifing. I think factors of 2 is missing here.
+                 source(ig) &
+                      = g(ig,2,iglo)*a(ig,2,iglo) &
+>>>>>>> parent of e006768... Remove factors of 2 in ttp (most likely because of how invert_rhs treats ttp).
 #ifdef LOWFLOW
+<<<<<<< HEAD
                   - anon(ie)*zi*(wdttpfac(ig,it,ik,ie,is,2)*hneoc(ig,2,iglo))*phigavg(ig) &
                   + zi*wstar(ik,ie,is)*hneoc(ig,2,iglo)*phigavg(ig)
+||||||| e006768... Remove factors of 2 in ttp (most likely because of how invert_rhs treats ttp).
+                      - anon(ie)*zi*(wdttpfac(ig,it,ik,ie,is,2)*hneoc(ig,2,iglo))*phigavg(ig) &
+                      + zi*wstar(ik,ie,is)*hneoc(ig,2,iglo)*phigavg(ig)
 #else
+                      - anon(ie)*zi*(wdriftttp_tdep%new(ig,it,ik,ie,is,2))*phigavgnew(ig) &
+                      - anon(ie)*zi*(wdriftttp_tdep%old(ig,it,ik,ie,is,2))*phigavg(ig) &
+                      + zi*wstar(ik,ie,is)*(phigavg(ig)+phigavgnew(ig))
+#endif             
+             else
+                 ! NDCQUEST: factors of 2 in those terms seem weird... In the non-ttp, there are no factors because
+                 ! they're hidden in the bakdifing. Is there no factor of 2 here because how rhs is inverted for ttp ?
+                 source(ig) &
+                      = g(ig,2,iglo)*a(ig,2,iglo) &
+#ifdef LOWFLOW
+                      - anon(ie)*zi*(wdttpfac(ig,it,ik,ie,is,2)*hneoc(ig,2,iglo))*phigavg(ig) &
+                      + zi*wstar(ik,ie,is)*hneoc(ig,2,iglo)*phigavg(ig)
+=======
+                      - anon(ie)*zi*(wdttpfac(ig,it,ik,ie,is,2)*hneoc(ig,2,iglo))*phigavg(ig) &
+                      + zi*wstar(ik,ie,is)*hneoc(ig,2,iglo)*phigavg(ig)
+#else
+                      ! NDCTESToriginal
+                      !- anon(ie)*zi*(wdriftttp_tdep%new(ig,it,ik,ie,is,2))*phigavgnew(ig) &
+                      !- anon(ie)*zi*(wdriftttp_tdep%old(ig,it,ik,ie,is,2))*phigavg(ig) &
+                      !+ zi*wstar(ik,ie,is)*(phigavg(ig)+phigavgnew(ig))
+                      ! endNDCTESToriginal
+                      - 2.*anon(ie)*zi*(wdriftttp_tdep%new(ig,it,ik,ie,is,2))*phigavgnew(ig) &
+                      - 2.*anon(ie)*zi*(wdriftttp_tdep%old(ig,it,ik,ie,is,2))*phigavg(ig) &
+                      + 2.*zi*wstar(ik,ie,is)*(phigavg(ig)+phigavgnew(ig))
+#endif             
+             else
+                 ! NDCQUEST: factors of 2 in those terms seem wrong... In the non-ttp, there are no factors because
+                 ! they're hidden in the bakdifing. I think factors of 2 is missing here.
+                 source(ig) &
+                      = g(ig,2,iglo)*a(ig,2,iglo) &
+#ifdef LOWFLOW
+                      - anon(ie)*zi*(wdttpfac(ig,it,ik,ie,is,2)*hneoc(ig,2,iglo))*phigavg(ig) &
+                      + zi*wstar(ik,ie,is)*hneoc(ig,2,iglo)*phigavg(ig)
+>>>>>>> parent of e006768... Remove factors of 2 in ttp (most likely because of how invert_rhs treats ttp).
+#else
+<<<<<<< HEAD
                   - anon(ie)*zi*wdttp_phigavg(ig) &
                   + zi*wstar(ik,ie,is)*phigavg(ig)
+||||||| e006768... Remove factors of 2 in ttp (most likely because of how invert_rhs treats ttp).
+                      - anon(ie)*zi*(wdriftttp(ig,it,ik,ie,is,2))*phigavg(ig) &
+                      + zi*wstar(ik,ie,is)*phigavg(ig)
+=======
+                      ! NDCTESToriginal
+                      !- anon(ie)*zi*(wdriftttp(ig,it,ik,ie,is,2))*phigavg(ig) &
+                      !+ zi*wstar(ik,ie,is)*phigavg(ig)
+                      ! endNDCTESToriginal
+                      - 2.*anon(ie)*zi*(wdriftttp(ig,it,ik,ie,is,2))*phigavg(ig) &
+                      + 2.*zi*wstar(ik,ie,is)*phigavg(ig)
+>>>>>>> parent of e006768... Remove factors of 2 in ttp (most likely because of how invert_rhs treats ttp).
              
              if(explicit_flowshear .or. mixed_flowshear) then 
          
+<<<<<<< HEAD
                  ! NDCQUEST: why is ttp treated differently ?
                  ! NDCQUEST: how do we check for CFL condition with new explicit terms ? Cannot add them to gexp_1 because it does not
                  ! get ExB re-mapped ... -> same issue with terms in set_source below.
@@ -5720,6 +5784,109 @@ contains
                  if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
                  if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
 
+||||||| e006768... Remove factors of 2 in ttp (most likely because of how invert_rhs treats ttp).
+                     ! NDCQUEST: why is ttp treated differently ?
+                     ! NDCQUEST: how do we check for CFL condition with new explicit terms ? Cannot add them to gexp_1 because it does not
+                     ! get ExB re-mapped ... -> same issue with terms in set_source below.
+
+                     !if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                     !if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                     !if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+                     !g_bd = calc_g_bd(ig,isgn,iglo,bd)
+                     !j0phi_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0,phi)
+                     !j0phi_tdep_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phi)
+                     !if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                     !if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                     !if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+
+                     if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                     if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                     if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+                     source(ig) = source(ig) &
+                         - zi * spec(is)%tz * vdrift_x(ig,isgn,iglo)/(2.*shat) * kx_shift_old(ik) * g(ig,2,iglo) &
+                         - zi * ( vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik) + &
+                             wdriftttp(ig,it,ik,ie,is,2) ) * aj0_tdep%old(ig,iglo)*phi(ig,it,ik) & ! NDCTESTmichaelnew: replaced wdrift
+                         + zi * wdriftttp(ig,it,ik,ie,is,2) * phigavg(ig) & ! NDCTESTmichaelnew: replaced wdrift
+                         + zi * wstar(ik,ie,is) * (aj0_tdep%old(ig,iglo)*phi(ig,it,ik)-phigavg(ig))
+                     if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                     if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                     if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+
+                 end if
+
+                 ! NDCTESTmichaelnew
+                 if(explicit_flowshear) then
+
+                     if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                     if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                     if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+
+                     source(ig) = source(ig) &
+                          - zi * ( vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik) + &
+                              wdriftttp(ig,it,ik,ie,is,2) ) * aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik) &
+                          + zi * wstar(ik,ie,is) * aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik)
+
+                     if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                     if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                     if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+
+                 end if
+#endif             
+=======
+                     ! NDCQUEST: why is ttp treated differently ?
+                     ! NDCQUEST: how do we check for CFL condition with new explicit terms ? Cannot add them to gexp_1 because it does not
+                     ! get ExB re-mapped ... -> same issue with terms in set_source below.
+
+                     !if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                     !if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                     !if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+                     !g_bd = calc_g_bd(ig,isgn,iglo,bd)
+                     !j0phi_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0,phi)
+                     !j0phi_tdep_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phi)
+                     !if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                     !if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                     !if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+
+                     if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                     if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                     if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+                     ! NDCQUEST: Factors of 2 here are consistent with the non-ttp terms below, but not with the standard ttp ones
+                     ! above. Are the ones above wrong ?
+                     source(ig) = source(ig) &
+                         - zi * spec(is)%tz * vdrift_x(ig,isgn,iglo)/shat * kx_shift_old(ik) * g(ig,2,iglo) &
+                         - zi * ( vdrift_x(ig,isgn,iglo)/shat*kx_shift_old(ik) + &
+                             2.*wdriftttp(ig,it,ik,ie,is,2) ) * aj0_tdep%old(ig,iglo)*phi(ig,it,ik) & ! NDCTESTmichaelnew: replaced wdrift
+                         + 2.*zi * wdriftttp(ig,it,ik,ie,is,2) * phigavg(ig) & ! NDCTESTmichaelnew: replaced wdrift
+                         + 2.*zi * wstar(ik,ie,is) * (aj0_tdep%old(ig,iglo)*phi(ig,it,ik)-phigavg(ig))
+                     if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                     if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                     if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+
+                 end if
+
+                 ! NDCTESTmichaelnew
+                 if(explicit_flowshear) then
+
+                     if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                     if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                     if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+                     
+                     j0phistar_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phistar_old)
+
+                     ! NDCQUEST: Factors of 2 here are consistent with the non-ttp terms below, but not with the standard ttp ones
+                     ! above. Are the ones above wrong ?
+                     source(ig) = source(ig) &
+                          - zi * ( vdrift_x(ig,isgn,iglo)/shat*kx_shift_old(ik) + &
+                              2.*wdriftttp(ig,it,ik,ie,is,2) ) * aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik) &
+                          + 2.*zi * wstar(ik,ie,is) * aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik)
+
+                     if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
+                     if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
+                     if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
+
+                 end if
+#endif             
+>>>>>>> parent of e006768... Remove factors of 2 in ttp (most likely because of how invert_rhs treats ttp).
              end if
 #endif             
           end do
