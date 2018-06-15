@@ -526,9 +526,9 @@ contains
     use antenna, only: antenna_amplitudes, no_driver
     use dist_fn, only: timeadv, exb_shear, collisions_advance, &
         update_kperp2_tdep, update_aj0_tdep, update_gamtot_tdep, compute_wdrift, init_invert_rhs, &
-        update_wdrift_tdep, &
         gamtot, getan ! NDCTESTmichael
-    use dist_fn, only: g_exb ! NDCTESTremap_plot
+    use dist_fn, only: g_exb, & ! NDCTESTremap_plot
+        first_gk_solve ! NDCTESTneighb
     use dist_fn_arrays, only: g, gnew, kx_shift, theta0_shift, &
         gamtot_tdep ! NDCTESTmichael
     use unit_tests, only: debug_message

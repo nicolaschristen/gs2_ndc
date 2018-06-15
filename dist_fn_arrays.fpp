@@ -21,9 +21,6 @@ module dist_fn_arrays
   public :: kx_shift_old
   public :: aj0_tdep
   public :: gamtot_tdep
-  public :: gamtot_old ! NDCTESTfelix
-  public :: wdrift_tdep
-  public :: wdriftttp_tdep
   public :: t_last_jump ! NDCTESTnl
   public :: remap_period ! NDCTESTnl
   
