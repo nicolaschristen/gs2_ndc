@@ -975,41 +975,10 @@ contains
         
        ! For flow-shear cases
        if(implicit_flowshear .or. mixed_flowshear) then
-           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
+           ! required for shifting in kx during interpolation
            allocate(dkx(naky))
-           dkx = akx(2)-akx(1)
-
+           dkx = (akx(2) - akx(1))
            kx_shift_stored = kx_shift
-
-           kx_shift = -0.5*dkx
-
-           call update_kperp2_tdep
-           kperp2_left = kperp2_tdep%new
-           call update_aj0_tdep
-           aj0_left = aj0_tdep%new
-           call update_gamtot_tdep
-           gamtot_left = gamtot_tdep%new
-           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
-           if(implicit_flowshear) then
-               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
-               call compute_a_b_r_ainv(a,b,r_left,ainv_left)
-               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
-           end if
-
-           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
-           kx_shift = 0.5*dkx
-           
-           call update_kperp2_tdep
-           kperp2_right = kperp2_tdep%new
-           call update_aj0_tdep
-           aj0_right = aj0_tdep%new
-           call update_gamtot_tdep
-           gamtot_right = gamtot_tdep%new
-           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
-           if(implicit_flowshear) then
-               call compute_a_b_r_ainv(a,b,r_right,ainv_right)
-           end if
-           
        end if
 
        ! In implicit implementation of flow-shear, need to compute different response
@@ -1118,6 +1087,23 @@ contains
                       phinew(ig,it,ik) = 1.0
                    end do
                    if (.not. skip_initialisation) then
+                       ! NDCTESTshift: moving kxstar to kx
+                       if(implicit_flowshear .or. mixed_flowshear) then
+                           !interp_shift_kx = -1 NDCTESTshift
+                           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
+                           kx_shift = 0. ! NDCTESTneighb
+                           call update_kperp2_tdep
+                           call update_aj0_tdep
+                           call update_gamtot_tdep
+                           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
+
+                           if(implicit_flowshear) then
+                               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
+                               call compute_a_b_r_ainv(a,b,r,ainv)
+                               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
+                           end if
+                       end if
+
                        trigger_timer_aminv = .true. ! NDCTESTtime
                        trigger_timer_interp = .false. ! NDCTESTtime
                        if (proc0) call time_message(.false.,timer_aminv_row,' Tadv_tdep') ! NDCTESTtime
@@ -1133,6 +1119,23 @@ contains
                        ! required for aminv interpolation in cases with flow-shear --NDC 11/2017
                        if(implicit_flowshear .or. mixed_flowshear) then
                        
+                           !interp_shift_kx = -1 NDCTESTshift
+                           ! NDCTESTshift: moving to kx-0.5*dkx
+                           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
+                           kx_shift = -0.5*dkx ! NDCTESTneighb
+                           call update_kperp2_tdep ! NDCTEST: change factor to -1.
+                           call update_aj0_tdep
+                           call update_gamtot_tdep
+                           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
+
+                           if(implicit_flowshear) then
+                               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
+                               call compute_a_b_r_ainv(a,b,r,ainv)
+                               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
+                           end if
+                           ! endNDCTESTshift
+
+                           !call init_response_row(ig,ifield,am_left,i,n,interp_shift_kx) NDCTESTshift
                            trigger_timer_interp = .true. ! NDCTESTtime
                            trigger_timer_aminv = .false. ! NDCTESTtime
                            if (proc0) call time_message(.false.,timer_interp_row,' Tadv_tdep') ! NDCTESTtime
@@ -1144,6 +1147,24 @@ contains
                            if (proc0) call time_message(.false.,timer_interp_row,' Tadv_tdep') ! NDCTESTtime
                            trigger_timer_interp = .false. ! NDCTESTtime
                            
+                           !interp_shift_kx = 1 NDCTESTshift
+
+                           ! NDCTESTshift: moving to kx+0.5*dkx
+                           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
+                           kx_shift = 0.5*dkx ! NDCTESTneighb
+                           call update_kperp2_tdep ! NDCTEST: remove factor of 0.5
+                           call update_aj0_tdep
+                           call update_gamtot_tdep
+                           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
+
+                           if(implicit_flowshear) then
+                               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
+                               call compute_a_b_r_ainv(a,b,r,ainv)
+                               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
+                           end if
+                           ! endNDCTESTshift
+                           
+                           !call init_response_row(ig,ifield,am_right,i,n,interp_shift_kx) NDCTESTshift
                            trigger_timer_interp = .true. ! NDCTESTtime
                            trigger_timer_aminv = .false. ! NDCTESTtime
                            if (proc0) call time_message(.false.,timer_interp_row,' Tadv_tdep') ! NDCTESTtime
@@ -1154,6 +1175,21 @@ contains
                            end if
                            if (proc0) call time_message(.false.,timer_interp_row,' Tadv_tdep') ! NDCTESTtime
                            trigger_timer_interp = .false. ! NDCTESTtime
+
+                           ! NDCTESTshift: moving back to kxstar(t)
+                           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
+                           kx_shift = kx_shift_stored ! NDCTESTneighb
+                           call update_kperp2_tdep
+                           call update_aj0_tdep
+                           call update_gamtot_tdep
+                           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
+                           
+                           if(implicit_flowshear) then
+                               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
+                               call compute_a_b_r_ainv(a,b,r,ainv)
+                               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
+                           end if
+                           ! endNDCTESTshift
 
                        end if
 

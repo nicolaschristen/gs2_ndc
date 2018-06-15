@@ -4764,24 +4764,27 @@ contains
           ! neighbours at time-ste it have to be re-computed.
           ! NDC 06/18
           if(jump(ik)/=0) then
-              
-              jumping(ik) = 1
-              
-              if(jump(ik)/=last_jump(ik)) then
-                  
-                  compute_shifted_vars = .true.
+             
+              ! NDCTESTbill: added next line, commented out others
+              jumping(ik)=0
+              !jumping(ik) = 1
+              !
+              !if(jump(ik)/=last_jump(ik)) then
+              !    
+              !    compute_shifted_vars = .true.
 
-                  ! Some shifted quantities can be updated here,
-                  ! for every ky individually, others (e.g. gamtot)
-                  ! have to be recomputed for all ky's together later on.
-                  call compute_akx_shift(ik,jump(ik))
-                  call compute_kperp2_shift(ik)
-                  call compute_aj0_shift(ik)
-                  call compute_wdrift_shift(ik)
+              !    ! Some shifted quantities can be updated here,
+              !    ! for every ky individually, others (e.g. gamtot)
+              !    ! have to be recomputed for all ky's together later on.
+              !    call compute_akx_shift(ik,jump(ik))
+              !    call compute_kperp2_shift(ik)
+              !    call compute_aj0_shift(ik)
+              !    call compute_wdrift_shift(ik)
 
-                  last_jump(ik) = jump(ik)
+              !    last_jump(ik) = jump(ik)
 
-              end if
+              !end if
+              ! endNDCTESTbill
 
           else
               jumping(ik) = 0
