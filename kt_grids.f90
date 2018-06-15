@@ -855,9 +855,7 @@ module kt_grids
   
   ! NDCTESTneighb
   public :: akx_shift
-  public :: kperp2_shift
   public :: compute_akx_shift
-  public :: compute_kperp2_shift
   ! endNDCTESTneighb
 
   logical, dimension(:,:), allocatable :: kwork_filter
@@ -895,7 +893,6 @@ module kt_grids
   
   ! NDCTESTneighb
   real, dimension(:,:), allocatable :: akx_shift
-  real, dimension(:,:,:), allocatable :: kperp2_shift
   ! endNDCTESTneighb
 
 contains
@@ -955,25 +952,6 @@ contains
 
   end subroutine compute_akx_shift
   ! endNDCTESTneighb
-
-  ! NDCTESTneighb
-  subroutine compute_kperp2_shift(ik)
-    
-      use theta_grid, only: gds2, gds21, gds22, shat
-
-      implicit none
-
-      integer, intent(in) :: ik
-      integer :: it
-
-      ! NDCQUEST: why is init_kperp2 treating ky=0 differently ?
-      do it = 1, ntheta0
-         kperp2_shift(:,it,ik) = aky(ik)*aky(ik)*gds2 + 2.0*aky(ik)*akx_shift(it,ik)*gds21/shat &
-              + akx_shift(it,ik)*akx_shift(it,ik)*gds22/(shat*shat)
-      end do
-
-  end subroutine compute_kperp2_shift
-  ! NDCTESTneighb
 
   subroutine set_overrides(grids_ov)
     use overrides, only: kt_grids_overrides_type
@@ -1207,11 +1185,6 @@ contains
         kperp2_tdep%old = kperp2
         allocate(kperp2_tdep%new(-ntgrid:ntgrid,ntheta0,naky))
         kperp2_tdep%new = kperp2
-
-        ! NDCTESTneighb
-        allocate(kperp2_shift(-ntgrid:ntgrid,ntheta0,naky))
-        kperp2_shift = kperp2
-        ! endNDCTESTneighb
     end if
 
   end subroutine init_kperp2
@@ -1226,7 +1199,6 @@ contains
 
     ! NDCTESTneighb
     if (allocated(akx_shift)) deallocate(akx_shift)
-    if (allocated(kperp2_shift)) deallocate(kperp2_shift)
     ! endNDCTESTneighb
 
     if(allocated(kperp2_tdep%old)) deallocate(kperp2_tdep%old)

@@ -26,10 +26,6 @@ module dist_fn_arrays
   ! NDCTESTneighb
   public :: jump
   public :: last_jump
-  public :: aj0_shift
-  public :: gamtot_shift
-  public :: wdrift_shift
-  public :: wdriftttp_shift
   ! endNDCTESTneighb
   
   ! dist fn
@@ -90,10 +86,6 @@ module dist_fn_arrays
   ! NDCTESTneighb
   integer, dimension(:), allocatable :: jump
   integer, dimension(:), allocatable :: last_jump
-  real, dimension(:,:), allocatable :: aj0_shift
-  real, dimension(:,:,:), allocatable :: gamtot_shift
-  real, dimension(:,:,:), allocatable :: wdrift_shift
-  real, dimension(:,:,:,:,:,:), allocatable :: wdriftttp_shift
   ! endNDCTESTneighb
   
 contains
