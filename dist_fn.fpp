@@ -6590,10 +6590,6 @@ contains
             
             phi_l = phinew(-ntgrid,it,ik)
             phi_r = phinew(ntgrid,it,ik)
-            do isgn = 1,2
-                my_r(:,isgn) = r(:,isgn,iglo)
-                my_ainv(:,isgn) = ainv(:,isgn,iglo)
-            end do
         
         end if
 
@@ -6604,6 +6600,11 @@ contains
 
          phi_l = phinew(-ntgrid,it,ik)
          phi_r = phinew(ntgrid,it,ik)
+            
+         do isgn = 1,2
+             my_r(:,isgn) = r(:,isgn,iglo)
+             my_ainv(:,isgn) = ainv(:,isgn,iglo)
+         end do
 
     end if
     ! endNDCTESTneighb
@@ -7252,6 +7253,7 @@ endif
     use run_parameters, only: beta, fphi, fapar, fbpar
     use prof, only: prof_entering, prof_leaving
     use gs2_layouts, only: g_lo
+    use mp, only: proc0 ! NDCTEST
     implicit none
     complex, dimension (-ntgrid:,:,:), intent (out) :: antot, antota, antotp
     integer, intent(in), optional :: expflow_opt

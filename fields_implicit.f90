@@ -1272,22 +1272,6 @@ contains
                 end if
              end do
           end do
-              
-          ! Deallocate memory used to compute interpolation matrices
-          if(implicit_flowshear .or. mixed_flowshear) then
-              
-              if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
-              deallocate(kperp2_left, aj0_left, gamtot_left)
-              deallocate(kperp2_right, aj0_right, gamtot_right)
-              if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
-              if(implicit_flowshear) then
-                  if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
-                  deallocate(r_left, ainv_left)
-                  deallocate(r_right, ainv_right)
-                  if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
-              end if
-
-          end if
 
           if((.not. interp_before) .or. explicit_flowshear) then
 
@@ -1320,9 +1304,21 @@ contains
 
        end do
        
-       ! For flow-shear cases: restore time dependent quantities from before matrix computation
        if(implicit_flowshear .or. mixed_flowshear) then
+              
+           ! Deallocate memory used to compute interpolation matrices
+           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
+           deallocate(kperp2_left, aj0_left, gamtot_left)
+           deallocate(kperp2_right, aj0_right, gamtot_right)
+           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
+           if(implicit_flowshear) then
+               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
+               deallocate(r_left, ainv_left)
+               deallocate(r_right, ainv_right)
+               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
+           end if
            
+           ! Restore time dependent quantities from before matrix computation
            if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
            kx_shift = kx_shift_stored
            call update_kperp2_tdep
