@@ -28,6 +28,10 @@ module dist_fn_arrays
   public :: a, b, r, ainv
   public :: last_jump
   ! endNDCTESTneighb
+  ! NDCTESTfast
+  public :: kperp2_left, aj0_left, gamtot_left, r_left, ainv_left
+  public :: kperp2_right, aj0_right, gamtot_right, r_right, ainv_right
+  ! endNDCTESTfast
   
   ! dist fn
   complex, dimension (:,:,:), allocatable :: g, gnew, g_restart_tmp
@@ -89,6 +93,14 @@ module dist_fn_arrays
   complex, dimension (:,:,:), allocatable :: a, b, r, ainv
   integer, dimension(:), allocatable :: last_jump
   ! endNDCTESTneighb
+  
+  ! NDCTESTfast
+  real, dimension(:,:,:), allocatable :: kperp2_left, kperp2_right
+  real, dimension(:,:), allocatable :: aj0_left, aj0_right
+  real, dimension(:,:,:), allocatable :: gamtot_left, gamtot_right
+  complex, dimension(:,:,:), allocatable :: r_left, r_right
+  complex, dimension(:,:,:), allocatable :: ainv_left, ainv_right
+  ! endNDCTESTfast
   
 contains
 
