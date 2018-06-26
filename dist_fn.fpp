@@ -116,6 +116,11 @@ module dist_fn
   public :: compute_a_b_r_ainv
   ! endNDCTESTneighb
 
+  ! NDCTESTfast
+  public :: for_interp_left
+  public :: for_interp_right
+  ! endNDCTESTfast
+
   ! knobs
   complex, dimension (:), allocatable :: fexp ! (nspec)
   real, dimension (:), allocatable :: bkdiff  ! (nspec)
@@ -315,6 +320,11 @@ module dist_fn
   ! Set to false so that BC in dist_fn::invert_rhs_1 for response matrices uses tdep%new
   logical :: first_gk_solve = .false.
   ! endNDCTESTneighb
+
+  ! NDCTESTfast
+  logical :: for_interp_left = .false.
+  logical :: for_interp_right = .false.
+  ! endNDCTESTfast
 
 contains
 
@@ -5208,6 +5218,7 @@ contains
     use dist_fn_arrays, only: aj0, aj1, vperp2, vpar, vpac, g, ittp, &
         aj0_tdep, kx_shift, kx_shift_old, &
         a, b ! NDCTESTneighb
+    use dist_fn_arrays, only: aj0_left, aj0_right ! NDCTESTfast
     use theta_grid, only: ntgrid, shat, itor_over_B
     use kt_grids, only: aky, explicit_flowshear, implicit_flowshear, mixed_flowshear
     use le_grids, only: nlambda, ng2, lmax, anon, negrid
@@ -5273,7 +5284,15 @@ contains
     ! NDCTESTneighb
     if(implicit_flowshear) then
    
-        aj0_new = aj0_tdep%new(:,iglo)
+        ! When computing the shifted aminvs for interpolation,
+        ! for_interp_left/right are set to true in fields_implicit::init_response_matrix
+        if(for_interp_left) then
+            aj0_new = aj0_left(:,iglo)
+        elseif(for_interp_right) then
+            aj0_new = aj0_right(:,iglo)
+        else
+            aj0_new = aj0_tdep%new(:,iglo)
+        end if
         aj0_old = aj0_tdep%old(:,iglo)
 
         wdnew = wdrift(:,isgn,iglo) &
@@ -6432,7 +6451,8 @@ contains
        (phi, apar, bpar, phinew, aparnew, bparnew, istep, &
         iglo, sourcefac)
     use dist_fn_arrays, only: gnew, ittp, vperp2, aj1, aj0, aj0_tdep, &
-        r, ainv ! NDCTESTneighb
+        r, ainv, & ! NDCTESTneighb
+        aj0_left, aj0_right, r_left, r_right, ainv_left, ainv_right ! NDCTESTfast
     use run_parameters, only: eqzip, secondary, tertiary, harris
     use theta_grid, only: ntgrid
     use le_grids, only: nlambda, ng2, lmax, forbid, anon
@@ -6463,6 +6483,9 @@ contains
     real :: aj0_l, aj0_r
     complex :: phi_l, phi_r
     ! endNDCTESTneighb
+    ! NDCTESTfast
+    complex, dimension(-ntgrid:ntgrid,2) :: my_r, my_ainv
+    ! endNDCTESTfast
           
 !    call prof_entering ("invert_rhs_1", "dist_fn")
 
@@ -6524,32 +6547,54 @@ contains
     ! NDCTESTneighb
     if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
 
-        if(first_gk_solve) then
-            aj0_l = aj0_tdep%old(-ntgrid,iglo)
-            aj0_r = aj0_tdep%old(ntgrid,iglo)
-
-            if(explicit_flowshear .and. michael_exp) then
-                phi_l = phinew(-ntgrid,it,ik) + phistar_old(-ntgrid,it,ik)
-                phi_r = phinew(ntgrid,it,ik) + phistar_old(ntgrid,it,ik)
-            else
-                phi_l = phinew(-ntgrid,it,ik)
-                phi_r = phinew(ntgrid,it,ik)
-            end if
+        ! When computing the shifted aminvs for interpolation,
+        ! for_interp_left/right are set to true in fields_implicit::init_response_matrix
+        if(for_interp_left) then
+            aj0_l = aj0_left(-ntgrid,iglo)
+            aj0_r = aj0_left(ntgrid,iglo)
+            do isgn = 1,2
+                my_r(:,isgn) = r_left(:,isgn,iglo)
+                my_ainv(:,isgn) = ainv_left(:,isgn,iglo)
+            end do
+        elseif(for_interp_right) then
+            aj0_l = aj0_right(-ntgrid,iglo)
+            aj0_r = aj0_right(ntgrid,iglo)
+            do isgn = 1,2
+                my_r(:,isgn) = r_right(:,isgn,iglo)
+                my_ainv(:,isgn) = ainv_right(:,isgn,iglo)
+            end do
         else
             aj0_l = aj0_tdep%new(-ntgrid,iglo)
             aj0_r = aj0_tdep%new(ntgrid,iglo)
+            do isgn = 1,2
+                my_r(:,isgn) = r(:,isgn,iglo)
+                my_ainv(:,isgn) = ainv(:,isgn,iglo)
+            end do
+        end if
 
-            if(explicit_flowshear .and. michael_exp) then
+        if(explicit_flowshear .and. michael_exp) then
+            
+            if (first_gk_solve) then
+                phi_l = phinew(-ntgrid,it,ik) + phistar_old(-ntgrid,it,ik)
+                phi_r = phinew(ntgrid,it,ik) + phistar_old(ntgrid,it,ik)
+            else
                 ! NDCQUEST: the two next lines are wrong. For the second GK-solve, we should be adding 
                 ! phistar_new to store the full phi[it+1] in phinew. But we do not know phistar_new
                 ! until we know the full g[it+1], so approximate to phistar_old.
                 ! I suspect this has very little impact on solutions.
                 phi_l = phinew(-ntgrid,it,ik) + phistar_old(-ntgrid,it,ik)
                 phi_r = phinew(ntgrid,it,ik) + phistar_old(ntgrid,it,ik)
-            else
-                phi_l = phinew(-ntgrid,it,ik)
-                phi_r = phinew(ntgrid,it,ik)
             end if
+
+        else
+            
+            phi_l = phinew(-ntgrid,it,ik)
+            phi_r = phinew(ntgrid,it,ik)
+            do isgn = 1,2
+                my_r(:,isgn) = r(:,isgn,iglo)
+                my_ainv(:,isgn) = ainv(:,isgn,iglo)
+            end do
+        
         end if
 
     else
@@ -6643,7 +6688,7 @@ contains
 ! r=ainv=0 if forbid(ig,il) or forbid(ig+1,il), so gnew=0 in forbidden
 ! region and at upper bounce point
     do ig = ntgrid-1, -ntgrid, -1
-       gnew(ig,2,iglo) = -gnew(ig+1,2,iglo)*r(ig,2,iglo) + ainv(ig,2,iglo)*source(ig,2)
+       gnew(ig,2,iglo) = -gnew(ig+1,2,iglo)*my_r(ig,2) + my_ainv(ig,2)*source(ig,2)
     end do
 
     if (use_pass_homog) then
@@ -6659,7 +6704,7 @@ contains
 
     if (il >= ilmin) then
        do ig = ntgrid-1, -ntgrid, -1
-          g1(ig,2) = -g1(ig+1,2)*r(ig,2,iglo) + g2(ig,2)
+          g1(ig,2) = -g1(ig+1,2)*my_r(ig,2) + g2(ig,2)
        end do
     end if
 
@@ -6690,7 +6735,7 @@ contains
     ! time advance vpar > 0 inhomogeneous part
     if (il <= lmax) then
        do ig = -ntgrid, ntgrid-1
-          gnew(ig+1,1,iglo) = -gnew(ig,1,iglo)*r(ig,1,iglo) + ainv(ig,1,iglo)*source(ig,1)
+          gnew(ig+1,1,iglo) = -gnew(ig,1,iglo)*my_r(ig,1) + my_ainv(ig,1)*source(ig,1)
        end do
     end if
 
@@ -6710,7 +6755,7 @@ contains
     if (il >= ilmin) then
        do ig = -ntgrid, ntgrid-1
 !CMR, 17/4/2012:  use consistent homogeneous trapped solution (g2) at lbp
-          g1(ig+1,1) = -g1(ig,1)*r(ig,1,iglo) + g2(ig+1,1)
+          g1(ig+1,1) = -g1(ig,1)*my_r(ig,1) + g2(ig+1,1)
        end do
     end if
 
@@ -6843,7 +6888,8 @@ endif
 
   subroutine invert_rhs_linked &
        (phi, apar, bpar, phinew, aparnew, bparnew, istep, sourcefac)
-    use dist_fn_arrays, only: gnew
+    use dist_fn_arrays, only: gnew, &
+        kperp2_left, kperp2_right ! NDCTESTfast
     use theta_grid, only: bmag, ntgrid
     use le_grids, only: energy, al, nlambda, ng2, anon
     use gs2_layouts, only: g_lo, ik_idx, it_idx, il_idx, ie_idx, is_idx, idx
@@ -6909,33 +6955,37 @@ endif
     
           ! NDCTESTneighb
           if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-
-              if(first_gk_solve) then
-                  kperp2_l = kperp2_tdep%old(-ntgrid,itl,ik)
-                  kperp2_r = kperp2_tdep%old(ntgrid,itr,ik)
-
-                  if(explicit_flowshear .and. michael_exp) then
-                      phi_l = phinew(-ntgrid,itl,ik) + phistar_old(-ntgrid,itl,ik)
-                      phi_r = phinew(ntgrid,itr,ik) + phistar_old(ntgrid,itr,ik)
-                  else
-                      phi_l = phinew(-ntgrid,itl,ik)
-                      phi_r = phinew(ntgrid,itr,ik)
-                  end if
+                  
+              
+              ! When computing the shifted aminvs for interpolation,
+              ! for_interp_left/right are set to true in fields_implicit::init_response_matrix
+              if(for_interp_left) then
+                  kperp2_l = kperp2_left(-ntgrid,itl,ik)
+                  kperp2_r = kperp2_left(ntgrid,itr,ik)
+              elseif(for_interp_right) then
+                  kperp2_l = kperp2_right(-ntgrid,itl,ik)
+                  kperp2_r = kperp2_right(ntgrid,itr,ik)
               else
                   kperp2_l = kperp2_tdep%new(-ntgrid,itl,ik)
                   kperp2_r = kperp2_tdep%new(ntgrid,itr,ik)
+              end if
 
-                  if(explicit_flowshear .and. michael_exp) then
+              if(explicit_flowshear .and. michael_exp) then
+                  
+                  if(first_gk_solve) then
+                      phi_l = phinew(-ntgrid,itl,ik) + phistar_old(-ntgrid,itl,ik)
+                      phi_r = phinew(ntgrid,itr,ik) + phistar_old(ntgrid,itr,ik)
+                  else
                       ! NDCQUEST: the two next lines are wrong. For the second GK-solve, we should be adding 
                       ! phistar_new to store the full phi[it+1] in phinew. But we do not know phistar_new
                       ! until we know the full g[it+1], so approximate to phistar_old.
                       ! I suspect this has very little impact on solutions.
                       phi_l = phinew(-ntgrid,itl,ik) + phistar_old(-ntgrid,itl,ik)
                       phi_r = phinew(ntgrid,itr,ik) + phistar_old(ntgrid,itr,ik)
-                  else
-                      phi_l = phinew(-ntgrid,itl,ik)
-                      phi_r = phinew(ntgrid,itr,ik)
                   end if
+              else
+                  phi_l = phinew(-ntgrid,itl,ik)
+                  phi_r = phinew(ntgrid,itr,ik)
               end if
 
           else
@@ -7193,7 +7243,8 @@ endif
   end subroutine ensure_single_val_fields_pass_r
 
   subroutine getan (antot, antota, antotp, expflow_opt)
-    use dist_fn_arrays, only: vpa, vperp2, aj0, aj1, gnew, aj0_tdep, g
+    use dist_fn_arrays, only: vpa, vperp2, aj0, aj1, gnew, aj0_tdep, g, &
+        aj0_left, aj0_right ! NDCTESTfast
     use kt_grids, only: kperp2, implicit_flowshear, mixed_flowshear
     use species, only: nspec, spec
     use theta_grid, only: ntgrid
@@ -7222,7 +7273,15 @@ endif
           do isgn = 1, 2
              do ig=-ntgrid, ntgrid
                 if(implicit_flowshear .or. mixed_flowshear) then
-                    g0(ig,isgn,iglo) = aj0_tdep%new(ig,iglo)*gnew(ig,isgn,iglo)
+                    ! When computing the shifted aminvs for interpolation,
+                    ! for_interp_left/right are set to true in fields_implicit::init_response_matrix
+                    if(for_interp_left) then
+                        g0(ig,isgn,iglo) = aj0_left(ig,iglo)*gnew(ig,isgn,iglo)
+                    elseif(for_interp_right) then
+                        g0(ig,isgn,iglo) = aj0_right(ig,iglo)*gnew(ig,isgn,iglo)
+                    else
+                        g0(ig,isgn,iglo) = aj0_tdep%new(ig,iglo)*gnew(ig,isgn,iglo)
+                    end if
                 elseif(present(expflow_opt)) then
                     select case(expflow_opt)
                     case(1)
@@ -8017,7 +8076,8 @@ endif
     use run_parameters, only: fphi, fapar, fbpar
     use run_parameters, only: beta, tite
     use species, only: spec, has_electron_species
-    use dist_fn_arrays, only: gamtot_tdep
+    use dist_fn_arrays, only: gamtot_tdep, &
+        gamtot_left, gamtot_right ! NDCTESTfast
     use dist_fn_arrays, only: kx_shift ! NDCTEST
     use kt_grids, only: akx ! NDCTEST
     implicit none
@@ -8065,7 +8125,15 @@ endif
     if (fphi > epsilon(0.0)) then
        
        if(implicit_flowshear .or. mixed_flowshear) then
-           fieldeq = antot + bpar*gamtot1 - gamtot_tdep%new*gridfac1*phi
+           ! When computing the shifted aminvs for interpolation,
+           ! for_interp_left/right are set to true in fields_implicit::init_response_matrix
+           if(for_interp_left) then
+               fieldeq = antot + bpar*gamtot1 - gamtot_left*gridfac1*phi
+           elseif(for_interp_right) then
+               fieldeq = antot + bpar*gamtot1 - gamtot_right*gridfac1*phi
+           else
+               fieldeq = antot + bpar*gamtot1 - gamtot_tdep%new*gridfac1*phi
+           end if
        elseif(present(expflow_opt) .and. expflow_opt == 1) then ! NDCTESTfelix
            fieldeq = antot + bpar*gamtot1 - gridfac1*phi * gamtot_tdep%old
        else
