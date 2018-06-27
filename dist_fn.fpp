@@ -63,7 +63,7 @@ module dist_fn
   !!! for testing purposes
   !public :: init_vpar
   public :: read_parameters, wnml_dist_fn, wnml_dist_fn_species, check_dist_fn
-  public :: timeadv, exb_shear, g_exb, g_exbfac
+  public :: timeadv, exb_shear, g_exb, g_exbfac, update_kx_shift_and_jump
   public :: collisions_advance
   public :: g_exb_error_limit
   public :: g_exb_start_timestep, g_exb_start_time
@@ -752,7 +752,7 @@ contains
     !if (debug) write(6,*) "init_dist_fn: init_vperp2"
     call init_vperp2
 
-    call init_dist_fn_arrays
+    !call init_dist_fn_arrays ! NDC: was called twice
     call init_bc
   
   end subroutine init_dist_fn_level_1
@@ -842,7 +842,8 @@ contains
   end subroutine finish_dist_fn_parameters
 
   subroutine finish_dist_fn_arrays
-    use dist_fn_arrays, only: g, gnew, kx_shift, kx_shift_old, theta0_shift, vperp2
+    use dist_fn_arrays, only: g, gnew, kx_shift, kx_shift_old, theta0_shift, vperp2, &
+        t_last_jump, remap_period
 #ifdef SHMEM
     use shm_mpi3, only : shm_free
 #endif
@@ -862,6 +863,8 @@ contains
     if (allocated(g_h)) deallocate (g_h, save_h)
     if (allocated(kx_shift)) deallocate (kx_shift)
     if (allocated(kx_shift_old)) deallocate (kx_shift_old)
+    if(allocated(t_last_jump)) deallocate(t_last_jump)
+    if(allocated(remap_period)) deallocate(remap_period)
     if (allocated(theta0_shift)) deallocate (theta0_shift)
     if (allocated(vperp2)) deallocate (vperp2)
     initialized_dist_fn_arrays = .false.
@@ -4167,7 +4170,7 @@ contains
           end if
           ! endNDCTESTneighb
 
-          if (box .or. shat .eq. 0.0) then
+          if ((box .or. shat .eq. 0.0) .and. .not. allocated(kx_shift)) then
              allocate (kx_shift(naky))
              kx_shift = 0.
              allocate(kx_shift_old(naky))
@@ -4437,14 +4440,12 @@ contains
     use run_parameters, only: tunits
     use theta_grid, only: ntgrid, ntheta, shat
     use file_utils, only: error_unit
-    use kt_grids, only: akx, aky, naky, ikx, ntheta0, box, theta0, &
-        implicit_flowshear, explicit_flowshear, mixed_flowshear
+    use kt_grids, only: akx, aky, naky, ikx, ntheta0, box, theta0
     use le_grids, only: negrid, nlambda
     use species, only: nspec
     use run_parameters, only: fphi, fapar, fbpar
-    use dist_fn_arrays, only: kx_shift, kx_shift_old, theta0_shift, &
-        t_last_jump, remap_period, & ! NDCTESTnl
-        jump, last_jump ! NDCTESTneighb
+    use dist_fn_arrays, only: theta0_shift, &
+        jump ! NDCTESTneighb
     use gs2_time, only: code_dt, code_dt_old, code_time
     use constants, only: twopi   
     use theta_grid, only: theta ! NDCTEST 
@@ -4530,7 +4531,8 @@ contains
     ! necessary to get factor of 2 right in first time step and
     ! also to get things right after changing time step size
     ! added May 18, 2009 -- MAB
-    gdt = code_dt ! NDCTEST
+    !gdt = code_dt ! NDCTEST
+    gdt = 0.5*(code_dt + code_dt_old)
 
     !Update istep_last
     istep_last = istep
@@ -4545,27 +4547,9 @@ contains
 ! MR, 2007: kx_shift array gets saved in restart file
 ! CMR, 5/10/2010: multiply timestep by tunits(ik) for wstar_units=.true. 
     if ( box .or. shat .eq. 0.0 ) then
-       do ik=1, naky
 
-          kx_shift(ik) = kx_shift(ik) - aky(ik)*g_exb*g_exbfac*gdt*tunits(ik)
-          jump(ik) = nint(kx_shift(ik)/dkx)
-          kx_shift(ik) = kx_shift(ik) - jump(ik)*dkx
-          ! In flow-shear cases, kx_shift_old is kx_shift at the previous time-step with ExB jumps taken into account, ie:
-          ! kx_shift_old(ik) is kx*[it]-kxbar[it+1] -- NDC 02/2018
-          ! NDCTESTkxshift
-              
-          !kx_shift_old(ik) = kx_shift_old(ik) - jump(ik)*dkx
-          kx_shift_old(ik) = kx_shift(ik) + aky(ik)*g_exb*g_exbfac*gdt*tunits(ik) ! undo last time-step
-
-          ! endNDCTESTkxshift
-          
-          ! NDCTESTnl 
-          ! NDCTESTremap_plot: in if, remove last logical
-          if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. remap_plot_shear) then
-              t_last_jump(ik) = t_last_jump(ik) + abs(jump(ik))*remap_period(ik)*g_exbfac ! NDCTEST: need gg_exbfac ?
-          end if
-          ! endNDCTESTnl
-       end do
+       call update_kx_shift_and_jump(gdt)
+    
     else
        do ik=1, naky
           theta0_shift(ik) = theta0_shift(ik) - g_exb*g_exbfac*gdt/shat*tunits(ik)
@@ -4951,7 +4935,62 @@ contains
        ! end do
 
     end if
+
   end subroutine exb_shear
+
+  subroutine update_kx_shift_and_jump(gdt)
+
+      use kt_grids, only: ntheta0, akx, naky, aky, &
+           explicit_flowshear, implicit_flowshear,mixed_flowshear
+      use dist_fn_arrays, only: jump, kx_shift, kx_shift_old, &
+          t_last_jump, remap_period ! NDCTESTnl
+      use run_parameters, only: tunits
+      use file_utils, only: error_unit
+      
+      implicit none
+
+      real, intent(in) :: gdt
+      integer :: ik
+      real :: dkx
+      integer :: ierr
+      ! NDCTESTremap_plot
+      logical :: remap_plot_shear=.false.
+      ! endNDCTESTremap_plot
+
+      ierr = error_unit()
+
+      if(ntheta0 > 1) then
+          dkx = akx(2)-akx(1)
+      else
+         write(ierr,*) "exb_shear: ERROR, need ntheta0>1 for sheared flow"
+         !Warning, dkx has not been set => Should really halt run or find
+         !a suitable default definition for dkx.
+      endif
+      
+      do ik = 1,naky
+
+         kx_shift(ik) = kx_shift(ik) - aky(ik)*g_exb*g_exbfac*gdt*tunits(ik)
+         jump(ik) = nint(kx_shift(ik)/dkx)
+         kx_shift(ik) = kx_shift(ik) - jump(ik)*dkx
+         ! In flow-shear cases, kx_shift_old is kx_shift at the previous time-step with ExB jumps taken into account, ie:
+         ! kx_shift_old(ik) is kx*[it]-kxbar[it+1] -- NDC 02/2018
+         ! NDCTESTkxshift
+             
+         !kx_shift_old(ik) = kx_shift_old(ik) - jump(ik)*dkx
+         kx_shift_old(ik) = kx_shift(ik) + aky(ik)*g_exb*g_exbfac*gdt*tunits(ik) ! undo last time-step
+
+         ! endNDCTESTkxshift
+         
+         ! NDCTESTnl 
+         ! NDCTESTremap_plot: in if, remove last logical
+         if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. remap_plot_shear) then
+             t_last_jump(ik) = t_last_jump(ik) + abs(jump(ik))*remap_period(ik)*g_exbfac ! NDCTEST: need gg_exbfac ?
+         end if
+         ! endNDCTESTnl
+
+      end do
+
+  end subroutine update_kx_shift_and_jump
 
   !<DD>Subroutine to setup a redistribute object to be used in enforcing parity
   subroutine init_enforce_parity(redist_obj,ik_ind)

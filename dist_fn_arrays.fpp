@@ -26,7 +26,6 @@ module dist_fn_arrays
   ! NDCTESTneighb
   public :: jump
   public :: a, b, r, ainv
-  public :: last_jump
   ! endNDCTESTneighb
   ! NDCTESTfast
   public :: kperp2_left, aj0_left, gamtot_left, r_left, ainv_left
@@ -91,7 +90,6 @@ module dist_fn_arrays
   ! NDCTESTneighb
   integer, dimension(:), allocatable :: jump
   complex, dimension (:,:,:), allocatable :: a, b, r, ainv
-  integer, dimension(:), allocatable :: last_jump
   ! endNDCTESTneighb
   
   ! NDCTESTfast
