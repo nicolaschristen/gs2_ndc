@@ -4425,7 +4425,7 @@ contains
 !
 !  end subroutine init_exb_shear
 
-  subroutine exb_shear (g0, phi, apar, bpar, istep, field_local, resetting_opt)
+  subroutine exb_shear (g0, phi, apar, bpar, istep, field_local, undo_remap_opt)
 ! MR, 2007: modified Bill Dorland's version to include grids where kx grid
 !           is split over different processors
 ! MR, March 2009: ExB shear now available on extended theta grid (ballooning)
@@ -4453,7 +4453,7 @@ contains
     complex, dimension (-ntgrid:,:,:), intent (in out) :: phi,    apar,    bpar
     complex, dimension (-ntgrid:,:,g_lo%llim_proc:), intent (in out) :: g0
     integer, intent(in) :: istep
-    logical, intent(in), optional :: resetting_opt
+    logical, intent(in), optional :: undo_remap_opt
     complex, dimension(:,:,:), allocatable :: temp 
     complex, dimension(:,:), allocatable :: temp2
     integer, dimension(1), save :: itmin
@@ -4475,13 +4475,13 @@ contains
     real :: dky
     integer, dimension(:), allocatable :: mycount
     ! endNDCTESTremap_plot
-    logical :: resetting = .false.
+    logical :: undo_remap = .false.
 
     integer :: ig=0 ! NDCTEST
 
     ierr = error_unit()
 
-    if(present(resetting_opt)) resetting = resetting_opt
+    if(present(undo_remap_opt)) undo_remap = undo_remap_opt
 
 ! MR, March 2009: remove ExB restriction to box grids
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -4552,7 +4552,7 @@ contains
 ! CMR, 5/10/2010: multiply timestep by tunits(ik) for wstar_units=.true. 
     if ( box .or. shat .eq. 0.0 ) then
 
-       call update_kx_shift_and_jump(gdt, resetting)
+       call update_kx_shift_and_jump(gdt, undo_remap)
     
     else
        do ik=1, naky
@@ -4942,7 +4942,10 @@ contains
 
   end subroutine exb_shear
 
-  subroutine update_kx_shift_and_jump(gdt, resetting_with_flowshear)
+  ! undo_remap_opt should be set to .true. only if we want to
+  ! undo the last ExB remapping (e.g. when resetting dt in a flowshear case)
+  ! NDC 07/18
+  subroutine update_kx_shift_and_jump(gdt, undo_remap_opt)
 
       use kt_grids, only: ntheta0, akx, naky, aky, &
            explicit_flowshear, implicit_flowshear,mixed_flowshear
@@ -4954,16 +4957,19 @@ contains
       implicit none
 
       real, intent(in) :: gdt
-      logical, intent(in) :: resetting_with_flowshear
+      logical, intent(in), optional :: undo_remap_opt
       integer :: ik
       real :: dkx
       integer :: ierr
       ! NDCTESTremap_plot
       logical :: remap_plot_shear=.false.
       ! endNDCTESTremap_plot
-      integer :: resetting_fac = 1
+      integer :: undo_fac = 1
+      logical :: undo_remap = .false.
 
-      if(resetting_with_flowshear) resetting_fac = -1
+      if(present(undo_remap_opt)) undo_remap = undo_remap_opt
+
+      if(undo_remap) undo_fac = -1
 
       ierr = error_unit()
 
@@ -4977,7 +4983,7 @@ contains
       
       do ik = 1,naky
 
-         kx_shift(ik) = kx_shift(ik) - resetting_fac*aky(ik)*g_exb*g_exbfac*gdt*tunits(ik)
+         kx_shift(ik) = kx_shift(ik) - undo_fac*aky(ik)*g_exb*g_exbfac*gdt*tunits(ik)
          jump(ik) = nint(kx_shift(ik)/dkx)
          kx_shift(ik) = kx_shift(ik) - jump(ik)*dkx
          ! In flow-shear cases, kx_shift_old is kx_shift at the previous time-step with ExB jumps taken into account, ie:
@@ -4992,7 +4998,7 @@ contains
          ! NDCTESTnl 
          ! NDCTESTremap_plot: in if, remove last logical
          if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. remap_plot_shear) then
-             t_last_jump(ik) = t_last_jump(ik) + resetting_fac*abs(jump(ik))*remap_period(ik)*g_exbfac ! NDCTEST: need gg_exbfac ?
+             t_last_jump(ik) = t_last_jump(ik) + undo_fac*abs(jump(ik))*remap_period(ik)*g_exbfac ! NDCTEST: need gg_exbfac ?
          end if
          ! endNDCTESTnl
 
@@ -6167,9 +6173,9 @@ contains
           use unit_tests, only: debug_message
           use nonlinear_terms, only: initializing, istep_last, gryfx_zonal, &
               add_nl_gryfx, add_nl, zip
-          use run_parameters, only: reset
           use dist_fn_arrays, only: g
           use gs2_transforms, only: update_flowshear_phase_fac
+          use run_parameters, only: reset
 
           implicit none
           

@@ -82,13 +82,15 @@ contains
     use run_parameters, only: reset
     use gs2_time, only: code_dt, user_dt, code_dt_cfl, save_dt
     use dist_fn_arrays, only: gnew
-    use gs2_time, only: code_dt_min
+    use gs2_time, only: code_dt_min, code_dt_old
     use gs2_init, only: init_type, init
     use gs2_init, only: init_level_list
     use mp, only: proc0
     use file_utils, only: error_unit
     use job_manage, only: time_message
     use nonlinear_terms, only: gryfx_zonal
+    use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear
+    use dist_fn, only: update_kx_shift_and_jump
     implicit none
     integer, intent(in) :: istep 
     logical, intent(inout) :: my_exit
@@ -99,6 +101,7 @@ contains
     type(init_type), intent(inout) :: current_init
 
     real :: fac = 1.0
+    real :: gdt
 
     if (first) call init_reinit
     first = .false.
@@ -158,6 +161,16 @@ contains
     call save_dt (code_dt)
 
     if (proc0 .and. .not. present(job_id)) write(*,*) 'Changing time step to ', user_dt
+
+    ! When a reset is triggered in cases with flow shear, fields_implicit::advance_implicit
+    ! undoes the last ExB remap and resets kx_shift to its previous state.
+    ! Before we can re-initialise time dependent variables, we now need to update kx_shift
+    ! with the new time step. -- NDC 07/18
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+        !gdt = code_dt ! NDCTEST
+        gdt = 0.5*(code_dt + code_dt_old)
+        call update_kx_shift_and_jump(gdt)
+    end if
 
     ! Don't reset antenna here because species parameters
     ! have not changed so resetting antenna would cause

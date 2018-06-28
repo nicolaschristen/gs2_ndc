@@ -545,6 +545,7 @@ contains
     use constants, only: pi ! NDCTESTremap_plot
     use le_grids, only: nlambda, negrid ! NDCTESTremap_plot
     use species, only: nspec ! NDCTESTremap_plot
+    use gs2_time, only: code_dt, code_dt_old
     !use gs2_layouts, only: g_lo, idx ! NDCTESTdist
     implicit none
     integer :: diagnostics = 1
@@ -568,6 +569,9 @@ contains
     character(5) :: istep_str
     ! endNDCTESTremap_plot
     logical :: michael_exp = .false. ! NDCTESTswitchexp
+    logical :: undo_remap
+    real :: gdt
+    logical :: field_local = .false.
     
     ! NDCTESTremap_plot
     if(remap_plot_shear .or. remap_plot_nl) then
@@ -699,7 +703,26 @@ contains
         first_gk_solve = .false.    
             
         call debug_message(4, 'fields_implicit::advance_implicit called timeadv 1')
-        if(reset) return !Return is resetting
+        ! Return if resetting
+        if(reset) then
+            
+            ! In cases with flowshear, undo the last ExB remapping --NDC 07/18
+            if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+
+                ! In Michael's implementation, move back to full phi for reset
+                if(explicit_flowshear .and. michael_exp) then
+                    phi = phi+phistar_old
+                    phinew = phinew+phistar_old
+                end if
+
+                undo_remap = .true.
+                call exb_shear(gnew, phinew, aparnew, bparnew, istep, field_local, undo_remap)
+
+            end if
+
+            return
+
+        end if
 
         if(.not.no_driver) aparnew = aparnew + apar_ext 
         
