@@ -352,7 +352,7 @@ contains
     real :: dkx
     integer :: ig_nosum, it_nosum = 0 ! NDCTEST
     integer :: expflow_opt
-    logical :: michael_exp = .false. ! NDCTESTswitchexp
+    logical :: michael_exp = .true. ! NDCTESTswitchexp
 
     if (proc0) call time_message(.false.,time_field,' Field Solver')
 
@@ -568,11 +568,11 @@ contains
     complex, dimension(:,:,:), allocatable :: phi_5d
     character(5) :: istep_str
     ! endNDCTESTremap_plot
-    logical :: michael_exp = .false. ! NDCTESTswitchexp
+    logical :: michael_exp = .true. ! NDCTESTswitchexp
     logical :: undo_remap
     real :: gdt
     logical :: field_local = .false.
-    
+
     ! NDCTESTremap_plot
     if(remap_plot_shear .or. remap_plot_nl) then
         write(istep_str,"(I0)") istep
@@ -589,7 +589,7 @@ contains
   
     ! NDCQUEST: how is the ExB remap undone if the timestep needs to be re-set ?    
     if (allocated(kx_shift) .or. allocated(theta0_shift)) call exb_shear (gnew, phinew, aparnew, bparnew, istep) 
-        
+
     g = gnew
     phi = phinew
     apar = aparnew 
@@ -949,7 +949,7 @@ contains
     logical :: tadv_for_interp ! NDCTESTshift
     real, dimension(naky) :: kx_shift_stored ! NDCTESTneighb
     ! NDCTESTfast
-    logical :: michael_exp = .false.
+    logical :: michael_exp = .true.
     ! endNDCTESTfast
 
     call prof_entering ("init_response_matrix", "fields_implicit")
