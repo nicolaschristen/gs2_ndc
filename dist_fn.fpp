@@ -752,7 +752,7 @@ contains
     !if (debug) write(6,*) "init_dist_fn: init_vperp2"
     call init_vperp2
 
-    call init_dist_fn_arrays
+    !call init_dist_fn_arrays ! NDC: was called twice
     call init_bc
   
   end subroutine init_dist_fn_level_1
@@ -842,7 +842,8 @@ contains
   end subroutine finish_dist_fn_parameters
 
   subroutine finish_dist_fn_arrays
-    use dist_fn_arrays, only: g, gnew, kx_shift, kx_shift_old, theta0_shift, vperp2
+    use dist_fn_arrays, only: g, gnew, kx_shift, kx_shift_old, theta0_shift, vperp2, &
+        t_last_jump, remap_period
 #ifdef SHMEM
     use shm_mpi3, only : shm_free
 #endif
@@ -862,6 +863,8 @@ contains
     if (allocated(g_h)) deallocate (g_h, save_h)
     if (allocated(kx_shift)) deallocate (kx_shift)
     if (allocated(kx_shift_old)) deallocate (kx_shift_old)
+    if(allocated(t_last_jump)) deallocate(t_last_jump)
+    if(allocated(remap_period)) deallocate(remap_period)
     if (allocated(theta0_shift)) deallocate (theta0_shift)
     if (allocated(vperp2)) deallocate (vperp2)
     initialized_dist_fn_arrays = .false.
@@ -4167,7 +4170,7 @@ contains
           end if
           ! endNDCTESTneighb
 
-          if (box .or. shat .eq. 0.0) then
+          if ((box .or. shat .eq. 0.0) .and. .not. allocated(kx_shift)) then
              allocate (kx_shift(naky))
              kx_shift = 0.
              allocate(kx_shift_old(naky))
@@ -4422,7 +4425,7 @@ contains
 !
 !  end subroutine init_exb_shear
 
-  subroutine exb_shear (g0, phi, apar, bpar, istep, field_local)
+  subroutine exb_shear (g0, phi, apar, bpar, istep, field_local, undo_remap_opt)
 ! MR, 2007: modified Bill Dorland's version to include grids where kx grid
 !           is split over different processors
 ! MR, March 2009: ExB shear now available on extended theta grid (ballooning)
@@ -4438,13 +4441,12 @@ contains
     use theta_grid, only: ntgrid, ntheta, shat
     use file_utils, only: error_unit
     use kt_grids, only: akx, aky, naky, ikx, ntheta0, box, theta0, &
-        implicit_flowshear, explicit_flowshear, mixed_flowshear
+        explicit_flowshear, implicit_flowshear,mixed_flowshear
     use le_grids, only: negrid, nlambda
     use species, only: nspec
     use run_parameters, only: fphi, fapar, fbpar
-    use dist_fn_arrays, only: kx_shift, kx_shift_old, theta0_shift, &
-        t_last_jump, remap_period, & ! NDCTESTnl
-        jump, last_jump ! NDCTESTneighb
+    use dist_fn_arrays, only: theta0_shift, &
+        jump ! NDCTESTneighb
     use gs2_time, only: code_dt, code_dt_old, code_time
     use constants, only: twopi   
     use theta_grid, only: theta ! NDCTEST 
@@ -4452,6 +4454,7 @@ contains
     complex, dimension (-ntgrid:,:,:), intent (in out) :: phi,    apar,    bpar
     complex, dimension (-ntgrid:,:,g_lo%llim_proc:), intent (in out) :: g0
     integer, intent(in) :: istep
+    logical, intent(in), optional :: undo_remap_opt
     complex, dimension(:,:,:), allocatable :: temp 
     complex, dimension(:,:), allocatable :: temp2
     integer, dimension(1), save :: itmin
@@ -4473,6 +4476,7 @@ contains
     real :: dky
     integer, dimension(:), allocatable :: mycount
     ! endNDCTESTremap_plot
+    logical :: undo_remap
 
     integer :: ig=0 ! NDCTEST
 
@@ -4517,7 +4521,24 @@ contains
     end if
 
     !Check if we want to exit without applying flow shear
-    if (istep.eq.istep_last) return !Don't allow flow shear to happen more than once per step    
+    
+    ! In the old implementation for flow shear, exb_shear was called only once per timestep,
+    ! even when a reset was triggered.
+    ! In the new implementation, we want to be able to call it multiple times if a reset happens:
+    ! the first call is standard, the second undoes the first, and the third uses the new dt.
+    ! NDC 06/18
+    undo_remap = .false.
+    if (istep.eq.istep_last) then
+        if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+            ! Check whether we are undoing an ExB remap done with the old dt,
+            ! or whether we are remapping with the new dt.
+            if(present(undo_remap_opt)) then
+                undo_remap = undo_remap_opt
+            end if
+        else
+            return
+        end if
+    end if
     if (g_exb_start_timestep > istep) return !Flow shear not active yet, set in timesteps
     if (g_exb_start_time >= 0 .and. code_time < g_exb_start_time) return !Flow shear not active yet, set in time
     
@@ -4530,7 +4551,8 @@ contains
     ! necessary to get factor of 2 right in first time step and
     ! also to get things right after changing time step size
     ! added May 18, 2009 -- MAB
-    gdt = code_dt ! NDCTEST
+    !gdt = code_dt ! NDCTEST
+    gdt = 0.5*(code_dt + code_dt_old)
 
     !Update istep_last
     istep_last = istep
@@ -4545,27 +4567,7 @@ contains
 ! MR, 2007: kx_shift array gets saved in restart file
 ! CMR, 5/10/2010: multiply timestep by tunits(ik) for wstar_units=.true. 
     if ( box .or. shat .eq. 0.0 ) then
-       do ik=1, naky
-
-          kx_shift(ik) = kx_shift(ik) - aky(ik)*g_exb*g_exbfac*gdt*tunits(ik)
-          jump(ik) = nint(kx_shift(ik)/dkx)
-          kx_shift(ik) = kx_shift(ik) - jump(ik)*dkx
-          ! In flow-shear cases, kx_shift_old is kx_shift at the previous time-step with ExB jumps taken into account, ie:
-          ! kx_shift_old(ik) is kx*[it]-kxbar[it+1] -- NDC 02/2018
-          ! NDCTESTkxshift
-              
-          !kx_shift_old(ik) = kx_shift_old(ik) - jump(ik)*dkx
-          kx_shift_old(ik) = kx_shift(ik) + aky(ik)*g_exb*g_exbfac*gdt*tunits(ik) ! undo last time-step
-
-          ! endNDCTESTkxshift
-          
-          ! NDCTESTnl 
-          ! NDCTESTremap_plot: in if, remove last logical
-          if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. remap_plot_shear) then
-              t_last_jump(ik) = t_last_jump(ik) + abs(jump(ik))*remap_period(ik)*g_exbfac ! NDCTEST: need gg_exbfac ?
-          end if
-          ! endNDCTESTnl
-       end do
+       call update_kx_shift_and_jump(gdt, undo_remap)
     else
        do ik=1, naky
           theta0_shift(ik) = theta0_shift(ik) - g_exb*g_exbfac*gdt/shat*tunits(ik)
@@ -4951,6 +4953,71 @@ contains
        ! end do
 
     end if
+
+  contains
+
+  ! undo_remap_opt should be set to .true. only if we want to
+  ! undo the last ExB remapping (e.g. when resetting dt in a flowshear case)
+  ! NDC 07/18
+  subroutine update_kx_shift_and_jump(gdt, undo_remap_opt)
+
+      use dist_fn_arrays, only: kx_shift, kx_shift_old, &
+          t_last_jump, remap_period ! NDCTESTnl
+      
+      implicit none
+
+      real, intent(in) :: gdt
+      logical, intent(in), optional :: undo_remap_opt
+      integer :: ik
+      real :: dkx
+      integer :: ierr
+      ! NDCTESTremap_plot
+      logical :: remap_plot_shear=.false.
+      ! endNDCTESTremap_plot
+      integer :: undo_fac
+      logical :: undo_remap
+
+      undo_remap = .false.
+      if(present(undo_remap_opt)) undo_remap = undo_remap_opt
+
+      undo_fac = 1
+      if(undo_remap) undo_fac = -1
+
+      ierr = error_unit()
+
+      if(ntheta0 > 1) then
+          dkx = akx(2)-akx(1)
+      else
+         write(ierr,*) "exb_shear: ERROR, need ntheta0>1 for sheared flow"
+         !Warning, dkx has not been set => Should really halt run or find
+         !a suitable default definition for dkx.
+      endif
+      
+      do ik = 1,naky
+
+         kx_shift(ik) = kx_shift(ik) - undo_fac*aky(ik)*g_exb*g_exbfac*gdt*tunits(ik)
+         jump(ik) = nint(kx_shift(ik)/dkx)
+         kx_shift(ik) = kx_shift(ik) - jump(ik)*dkx
+         ! In flow-shear cases, kx_shift_old is kx_shift at the previous time-step with ExB jumps taken into account, ie:
+         ! kx_shift_old(ik) is kx*[it]-kxbar[it+1] -- NDC 02/2018
+         ! NDCTESTkxshift
+             
+         !kx_shift_old(ik) = kx_shift_old(ik) - jump(ik)*dkx
+         kx_shift_old(ik) = kx_shift(ik) + aky(ik)*g_exb*g_exbfac*gdt*tunits(ik) ! undo last time-step
+
+         ! endNDCTESTkxshift
+         
+         ! NDCTESTnl 
+         ! NDCTESTremap_plot: in if, remove last logical
+         if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. remap_plot_shear) then
+             t_last_jump(ik) = t_last_jump(ik) + undo_fac*abs(jump(ik))*remap_period(ik)*g_exbfac ! NDCTEST: need gg_exbfac ?
+         end if
+         ! endNDCTESTnl
+
+      end do
+
+  end subroutine update_kx_shift_and_jump
+
   end subroutine exb_shear
 
   !<DD>Subroutine to setup a redistribute object to be used in enforcing parity
@@ -5243,7 +5310,7 @@ contains
     complex, dimension (-ntgrid:ntgrid) :: phigavg, apargavg
     real :: c0, c1, c2
     real :: bd, bdfac_p, bdfac_m
-    logical :: michael_exp = .false. ! NDCTESTswitchexp
+    logical :: michael_exp = .true. ! NDCTESTswitchexp
     ! NDCTESTneighb
     complex :: g_bd, wd_phigavg_bd
     real, dimension(-ntgrid:ntgrid) :: aj0_old, aj0_new, wdold, wdnew, wdttpold, wdttpnew
@@ -6120,9 +6187,9 @@ contains
           use unit_tests, only: debug_message
           use nonlinear_terms, only: initializing, istep_last, gryfx_zonal, &
               add_nl_gryfx, add_nl, zip
-          use run_parameters, only: reset
           use dist_fn_arrays, only: g
           use gs2_transforms, only: update_flowshear_phase_fac
+          use run_parameters, only: reset
 
           implicit none
           
@@ -6482,7 +6549,7 @@ contains
     complex :: adjleft, adjright
     logical :: use_pass_homog, speriod_flag
     integer :: ntgl, ntgr
-    logical :: michael_exp = .false. ! NDCTESTswitchexp
+    logical :: michael_exp = .true. ! NDCTESTswitchexp
     ! NDCTESTneighb
     real :: aj0_l, aj0_r
     complex :: phi_l, phi_r
@@ -6878,7 +6945,7 @@ endif
     complex, dimension(ntheta0,naky) :: phi_l, phi_r
     complex, dimension(-ntgrid:ntgrid,ntheta0,naky) :: phi_input
     ! endNDCTESTneighb
-    logical :: michael_exp = .false. ! NDCTESTswitchexp
+    logical :: michael_exp = .true. ! NDCTESTswitchexp
     
     ! NDCTESTfast
     if(implicit_flowshear .or. mixed_flowshear) then
@@ -7209,7 +7276,7 @@ endif
     real :: time
     complex :: sourcefac
     ! NDCTESTfast
-    logical :: michael_exp = .false.
+    logical :: michael_exp = .true.
     complex, dimension(-ntgrid:ntgrid,ntheta0,naky) :: phi_input
     ! endNDCTESTfast
 
