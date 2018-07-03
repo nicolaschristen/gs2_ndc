@@ -1195,7 +1195,7 @@ contains
                        trigger_timer_aminv = .true. ! NDCTESTtime
                        trigger_timer_interp = .false. ! NDCTESTtime
                        if (proc0) call time_message(.false.,timer_aminv_row,' Tadv_tdep') ! NDCTESTtime
-                       kx_shift = 0.
+                       if(allocated(kx_shift)) kx_shift = 0.
                        if(interp_before .and. .not. explicit_flowshear) then
                            call init_response_row (ig, ifield, amcollec(i)%am, i, n)
                        else
