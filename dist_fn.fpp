@@ -8240,6 +8240,10 @@ endif
           gamtot  = gamtot + tite
           gamtot3 = (gamtot-tite) / gamtot
           where (gamtot3 < 2.*epsilon(0.0)) gamtot3 = 1.0
+          if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+              gamtot_tdep%old = gamtot_tdep%old + tite
+              gamtot_tdep%new = gamtot_tdep%new + tite
+          end if
        else
           gamtot = gamtot + tite 
        endif
@@ -8251,12 +8255,13 @@ endif
   subroutine update_gamtot_tdep
       
       use dist_fn_arrays, only: aj0_tdep
-      use species, only: nspec, spec
+      use species, only: nspec, spec, has_electron_species
       use theta_grid, only: ntgrid
       use kt_grids, only: ntheta0, naky, kperp2_tdep
       use le_grids, only: anon, integrate_species
       use gs2_layouts, only: g_lo, ie_idx, is_idx
       use dist_fn_arrays, only: gamtot_tdep
+      use run_parameters, only: tite
       
       implicit none
       
@@ -8288,6 +8293,14 @@ endif
       call integrate_species (g0, wgt, tot)
       gamtot_tdep%new = real(tot) + kperp2_tdep%new*poisfac
 
+      ! Adiabatic electrons 
+      if (.not. has_electron_species(spec)) then
+         if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
+             gamtot_tdep%old = gamtot_tdep%old + tite
+             gamtot_tdep%new = gamtot_tdep%new + tite
+         endif
+      endif
+
   end subroutine update_gamtot_tdep
 
   subroutine getfieldeq1 (phi, apar, bpar, antot, antota, antotp, &
@@ -8315,7 +8328,7 @@ endif
     if (.not. allocated(fl_avg)) allocate (fl_avg(ntheta0, naky))
     fl_avg = 0.
 
-    if (.not. has_electron_species(spec)) then ! NDCQUEST: should make this compatible with flowshear ? And EM ? And LOWFLOW ?
+    if (.not. has_electron_species(spec)) then ! NDCQUEST: no effect of flowshear here. But should make this compatible with adiab. elec. ? And EM ? And LOWFLOW ?
        if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
           
 !          if (first) then 
