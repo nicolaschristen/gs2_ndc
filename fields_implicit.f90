@@ -535,7 +535,8 @@ contains
     use unit_tests, only: debug_message
     use mp, only: iproc
     use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear, &
-        naky, ntheta0 ! NDCTESTmichael
+        naky, ntheta0, & ! NDCTESTmichael
+        apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
     use kt_grids, only: nx, ny, akx, aky ! NDCTESTremap_plot
     use theta_grid, only: ntgrid ! NDCTESTmichael
     use mp, only: proc0 ! NDCTEST
@@ -707,7 +708,7 @@ contains
         if(reset) then
             
             ! In cases with flowshear, undo the last ExB remapping --NDC 07/18
-            if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+            if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin
 
                 ! In Michael's implementation, move back to full phi for reset
                 if(explicit_flowshear .and. michael_exp) then

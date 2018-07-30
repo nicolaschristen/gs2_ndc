@@ -912,7 +912,7 @@ contains
     chop_side = .true.
     left = .true.
     even = .true.
-    clean_init=.false.
+    clean_init=.true.
     new_field_init = .true.
     ikk(1) = 1
     ikk(2) = 2

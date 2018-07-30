@@ -129,7 +129,8 @@ contains
     use gs2_layouts, only: init_x_transform_layouts
     use gs2_layouts, only: fft_wisdom_file, fft_use_wisdom, fft_measure_plan
     use fft_work, only: load_wisdom, save_wisdom, measure_plan
-    use kt_grids, only: akx, explicit_flowshear, implicit_flowshear, mixed_flowshear ! NDCTESTnl
+    use kt_grids, only: akx, explicit_flowshear, implicit_flowshear, mixed_flowshear, & ! NDCTESTnl
+        apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
     use kt_grids, only: aky ! NDCTESTremap_plot
     use constants, only: pi ! NDCTESTnl
     implicit none
@@ -195,8 +196,9 @@ contains
     if (proc0.and.fft_use_wisdom) call save_wisdom(trim(fft_wisdom_file))
 
     ! NDCTESTnl
-    ! NDCTESTremap_plot: in if statement, remove last logical
-    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. remap_plot) then
+    ! NDCTESTremap_plot: in if statement, remove remap_plot
+    ! NDCTEST_nl_vs_lin: in if statement, remove apply_flowshear_nonlin
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. remap_plot .or. apply_flowshear_nonlin) then
 
         if(.not. allocated(x_grid)) then
             allocate(x_grid(nx))
@@ -256,7 +258,8 @@ contains
   subroutine update_flowshear_phase_fac(g_exb)
       
       use kt_grids, only: nx, naky, aky, &
-          explicit_flowshear, implicit_flowshear, mixed_flowshear ! NDCTESTremap_plot
+          explicit_flowshear, implicit_flowshear, mixed_flowshear, & ! NDCTESTremap_plot
+          apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
       use dist_fn_arrays, only: t_last_jump
       use gs2_time, only: code_time
       use constants, only: zi
@@ -268,13 +271,17 @@ contains
       
       do ix = 1, nx
           do ik = 1, naky
-              if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then ! NDCTESTremap_plot remove if statement and realign
+              if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then ! NDCTESTremap_plot remove if statement and realign
                   ! NDCTESTremap_plot: transform to y**
                   !flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*(maxval(t_last_jump)-t_last_jump(ik))*x_grid(ix))
                   ! NDCTESTremap_plot: transform to y*
                   !flowshear_phase_fac(ix,ik) = exp(zi*aky(ik)*g_exb*t_last_jump(ik)*x_grid(ix))
                   ! NDCTESTremap_plot: transform to y
-                  flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*(code_time-t_last_jump(ik))*x_grid(ix))
+                  if(apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin: remove if statement and else part
+                      flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*(code_time-t_last_jump(ik))*x_grid(ix))
+                  else
+                      flowshear_phase_fac(ix,ik) = 1.
+                  end if
               else
                   ! NDCTESTremap_plot: next line is to visualize in lab frame, remove it.
                   flowshear_phase_fac(ix,ik) = 1.
@@ -1390,7 +1397,8 @@ contains
     use gs2_layouts, only: ie_idx,il_idx,is_idx,isign_idx,ig_idx,it_idx ! NDCTESTremap_plot
     use unit_tests,only: debug_message
     use constants, only: zi ! NDCTESTnl
-    use kt_grids, only: nx, aky, explicit_flowshear, implicit_flowshear, mixed_flowshear ! NDCTESTnl
+    use kt_grids, only: nx, aky, explicit_flowshear, implicit_flowshear, mixed_flowshear, & ! NDCTESTnl
+        apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
     use kt_grids, only: ny ! NDCTESTremap_plot
     use gs2_time, only: code_time ! NDCTESTnl
     implicit none
@@ -1430,7 +1438,8 @@ contains
     call transform_x (g, xxf)
     
     ! NDCTESTnl: multiply by phase factor
-    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+    ! NDCTEST_nl_vs_lin: remove apply_flowshear_nonlin
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
         do ix = 1, nx
             do ixxf = xxf_lo%llim_proc, xxf_lo%ulim_proc
                 ik = ik_idx(xxf_lo, ixxf)
@@ -1466,7 +1475,8 @@ contains
     use gs2_layouts, only: g_lo, yxf_lo, ik_idx, &
         xxf_lo ! NDCTESTnl
     use constants, only: zi ! NDCTESTnl
-    use kt_grids, only: nx, aky, explicit_flowshear, implicit_flowshear, mixed_flowshear ! NDCTESTnl
+    use kt_grids, only: nx, aky, explicit_flowshear, implicit_flowshear, mixed_flowshear, & ! NDCTESTnl
+        apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
     use gs2_time, only: code_time ! NDCTESTnl
     implicit none
     real, dimension (:,yxf_lo%llim_proc:), intent (in out) :: yxf
@@ -1477,7 +1487,8 @@ contains
     call inverse_y (yxf, xxf)
     
     ! NDCTESTnl
-    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+    ! NDCTEST_nl_vs_lin: remove apply_flowshear_nonlin
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
         do ix = 1, nx
             do ixxf = xxf_lo%llim_proc, xxf_lo%ulim_alloc
                 ik = ik_idx(xxf_lo, ixxf)

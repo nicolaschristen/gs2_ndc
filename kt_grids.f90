@@ -498,6 +498,7 @@ module kt_grids_box
   logical :: explicit_flowshear
   logical :: implicit_flowshear
   logical :: mixed_flowshear
+  logical :: apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
   logical :: interp_before ! NDCTEST
 
 contains
@@ -511,6 +512,7 @@ contains
     namelist /kt_grids_box_parameters/ naky, ntheta0, ly, nx, ny, n0, jtwist, &
          y0, rtwist, x0, nkpolar, rhostar_box, explicit_flowshear, implicit_flowshear, &
          mixed_flowshear, &
+         apply_flowshear_nonlin, & ! NDCTEST_nl_vs_lin
          interp_before ! NDCTEST
 
     if (parameters_read) return
@@ -524,6 +526,7 @@ contains
     explicit_flowshear = .false.
     implicit_flowshear = .false.
     mixed_flowshear = .false.
+    apply_flowshear_nonlin = .false. ! NDCTEST_nl_vs_lin
     interp_before = .false. ! NDCTEST
 
     gryfx = .false.
@@ -531,6 +534,16 @@ contains
     jtwist = max(int(2.0*pi*shat + 0.5),1)  ! default jtwist -- MAB
     rtwist = 0.0
 
+    ! NDCTEST_nl_vs_lin: read namelist a first time to determine if a new flowshear algorithm is being used
+    in_file = input_unit_exist("kt_grids_box_parameters", exist)
+    if (exist) read (in_file, nml=kt_grids_box_parameters)
+    ! NDCTEST_nl_vs_lin: Set apply_flowshear_nonlin to default value: true if a new algorithm is used, false if not
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+        apply_flowshear_nonlin = .true.
+    else
+        apply_flowshear_nonlin = .false.
+    end if
+    ! NDCTEST_nl_vs_lin: Read a second time to overwrite apply_flowshear_nonlin if the user specified it
     in_file = input_unit_exist("kt_grids_box_parameters", exist)
     if (exist) read (in_file, nml=kt_grids_box_parameters)
   end subroutine init_parameters_box
@@ -814,16 +827,19 @@ contains
   ! allows passing private flowshear flags to kt_grids --NDC 11/2017
   subroutine box_get_flowshear_flags(explicit_flowshear_public, implicit_flowshear_public, &
           mixed_flowshear_public, &
+          apply_flowshear_nonlin_public, & ! NDCTEST_nl_vs_lin
           interp_before_public) ! NDCTEST
       implicit none
       logical, intent(inout) :: explicit_flowshear_public
       logical, intent(inout) :: implicit_flowshear_public
       logical, intent(inout) :: mixed_flowshear_public
+      logical, intent(inout) :: apply_flowshear_nonlin_public ! NDCTEST_nl_vs_lin
       logical, intent(inout) :: interp_before_public ! NDCTEST
 
       explicit_flowshear_public = explicit_flowshear
       implicit_flowshear_public = implicit_flowshear
       mixed_flowshear_public = mixed_flowshear
+      apply_flowshear_nonlin_public = apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
       interp_before_public = interp_before ! NDCTEST
   end subroutine box_get_flowshear_flags
 end module kt_grids_box
@@ -850,6 +866,7 @@ module kt_grids
   public :: explicit_flowshear
   public :: implicit_flowshear
   public :: mixed_flowshear
+  public :: apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
   public :: interp_before ! NDCTEST
   public :: kperp2_tdep
   
@@ -864,6 +881,7 @@ module kt_grids
   logical :: explicit_flowshear
   logical :: implicit_flowshear
   logical :: mixed_flowshear
+  logical :: apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
   logical :: interp_before ! NDCTEST
 
   type :: kperp2_tdep_type
@@ -990,11 +1008,13 @@ contains
         if(grid_option .eq. "box") then
             call box_get_flowshear_flags(explicit_flowshear, implicit_flowshear, &
                 mixed_flowshear, &
+                apply_flowshear_nonlin, & ! NDCTEST_nl_vs_lin
                 interp_before) ! NDCTEST
         else
             explicit_flowshear = .false.
             implicit_flowshear = .false.
             mixed_flowshear = .false.
+            apply_flowshear_nonlin = .false. ! NDCTEST_nl_vs_lin
             interp_before = .false. ! NDCTEST
         end if
     end if
