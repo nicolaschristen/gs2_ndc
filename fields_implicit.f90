@@ -562,8 +562,8 @@ contains
     !integer :: isgn, il, ie, is, iglo ! NDCTESTdist
     !character(len=20) :: my_format ! NDCTESTdist
     ! NDCTESTremap_plot
-    logical :: remap_plot_shear=.false.
-    logical :: remap_plot_nl=.false.
+    logical :: remap_plot_shear = .true.
+    logical :: remap_plot_nl = .false.
     integer :: iglo,iy,ix,ie,il,is,isgn,iyxf
     real, dimension(:,:), allocatable :: fft_out
     complex, dimension(:,:,:), allocatable :: phi_5d
@@ -578,9 +578,9 @@ contains
     if(remap_plot_shear .or. remap_plot_nl) then
         write(istep_str,"(I0)") istep
         if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-            open(83,file="/home/christenl/data/gs2/flowtest/nonlin/nlfelix2/test_xy_"//trim(istep_str)//"_g_exb.dat",status="replace")
+            open(83,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/test_xy_"//trim(istep_str)//"_g_exb.dat",status="replace")
         else
-            open(83,file="/home/christenl/data/gs2/flowtest/nonlin/nlfelix2/test_xy_"//trim(istep_str)//"_old.dat",status="replace")
+            open(83,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/test_xy_"//trim(istep_str)//"_old.dat",status="replace")
         end if
     end if
     ! end NDCTESTremap_plot

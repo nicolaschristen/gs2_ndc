@@ -284,7 +284,7 @@ contains
                   end if
               else
                   ! NDCTESTremap_plot: next line is to visualize in lab frame, remove it.
-                  flowshear_phase_fac(ix,ik) = 1.
+                  flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*code_time*x_grid(ix))
               end if
           end do
       end do
@@ -1407,7 +1407,7 @@ contains
     integer :: iglo
     integer :: ix, ik, ixxf ! NDCTESTnl
     integer :: ig,ie,il,is,isgn,it, iy, iyxf ! NDCTESTremap_plot
-    logical :: remap_plot_shear =.false. ! NDCTESTremap_plot
+    logical :: remap_plot_shear =.true. ! NDCTESTremap_plot
     logical :: remap_plot_nl =.false. ! NDCTESTremap_plot
     logical :: is_open ! NDCTESTremap_plot
 

@@ -4473,7 +4473,7 @@ contains
     complex , dimension(-ntgrid:ntgrid) :: z
     character(130) :: str
     ! NDCTESTremap_plot
-    logical :: remap_plot_shear=.false.
+    logical :: remap_plot_shear = .true.
     real :: alpha_x, alpha_y
     real :: dky
     integer, dimension(:), allocatable :: mycount
@@ -4974,7 +4974,7 @@ contains
       real :: dkx
       integer :: ierr
       ! NDCTESTremap_plot
-      logical :: remap_plot_shear=.false.
+      logical :: remap_plot_shear = .true.
       ! endNDCTESTremap_plot
       integer :: undo_fac
       logical :: undo_remap
