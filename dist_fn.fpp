@@ -4115,9 +4115,6 @@ contains
 
     integer :: ik ! NDCTESTnl
     real :: dkx ! NDCTESTnl
-    ! NDCTESTremap_plot
-    logical :: remap_plot = .false.
-    ! endNDCTESTremap_plot
 
 !    if (alloc) then
     if (.not. allocated(g)) then
@@ -4177,7 +4174,7 @@ contains
              allocate(kx_shift_old(naky))
              kx_shift_old = 0.
              ! NDCTESTremap_plot: in if, remove last logical
-             if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. remap_plot .or. apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin
+             if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin
              ! endNDCTESTremap_plot
              !if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
                  allocate(t_last_jump(naky)) ! NDCTESTnl
@@ -4236,7 +4233,7 @@ contains
     integer,save :: istep_last=-1
     integer, parameter :: verb = 3
     ! NDCTESTremap_plot
-    logical :: remap_plot_nl = .false.
+    logical :: remap_plot_nl = .true.
     real :: c0,c1,c2,dt0,dt1,dt2
     ! endNDCTESTremap_plot
 
@@ -4473,7 +4470,7 @@ contains
     complex , dimension(-ntgrid:ntgrid) :: z
     character(130) :: str
     ! NDCTESTremap_plot
-    logical :: remap_plot_shear = .true.
+    logical :: remap_plot_shear = .false.
     real :: alpha_x, alpha_y
     real :: dky
     integer, dimension(:), allocatable :: mycount
@@ -4973,9 +4970,6 @@ contains
       integer :: ik
       real :: dkx
       integer :: ierr
-      ! NDCTESTremap_plot
-      logical :: remap_plot_shear = .true.
-      ! endNDCTESTremap_plot
       integer :: undo_fac
       logical :: undo_remap
 
@@ -5011,7 +5005,7 @@ contains
          
          ! NDCTESTnl 
          ! NDCTESTremap_plot: in if, remove last logical
-         if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. remap_plot_shear .or. apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin
+         if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin
              t_last_jump(ik) = t_last_jump(ik) + undo_fac*abs(jump(ik))*remap_period(ik)*g_exbfac ! NDCTEST: need gg_exbfac ?
          end if
          ! endNDCTESTnl

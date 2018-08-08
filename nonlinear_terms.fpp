@@ -344,7 +344,7 @@ contains
     integer :: iglo, ik, it, is, ig, ia
     ! NDCTESTremap_plot
     logical :: is_open
-    logical :: remap_plot_nl = .false.
+    logical :: remap_plot_nl = .true.
     integer :: iy,iyxf,ie,il,isgn
     ! endNDCTESTremap_plot
     
@@ -375,7 +375,9 @@ contains
     
     !Form g1=i*ky*g_wesson
     g1=g
-    call g_adjust(g1,phi,bpar,fphi,fbpar,aj0_tdep%old)
+    if(.not. remap_plot_nl) then
+        call g_adjust(g1,phi,bpar,fphi,fbpar,aj0_tdep%old)
+    end if
     do iglo = g_lo%llim_proc, g_lo%ulim_proc
        ik = ik_idx(g_lo,iglo)
        g1(:,:,iglo)=g1(:,:,iglo)*zi*aky(ik)
@@ -440,8 +442,10 @@ contains
 
     !Form g1=i*kx*g_wesson
     g1=g
-    call g_adjust(g1,phi,bpar,fphi,fbpar,aj0_tdep%old)
-    if(present(g_exb_opt)) then
+    if(.not. remap_plot_nl) then
+        call g_adjust(g1,phi,bpar,fphi,fbpar,aj0_tdep%old)
+    end if
+    if(present(g_exb_opt) .and. .not. remap_plot_nl) then
         do iglo = g_lo%llim_proc, g_lo%ulim_proc
            ! Need to take derivatives at fixed x,y so that terms taken into
            ! account by the CFL condition are not secularly growing over time.
@@ -450,6 +454,20 @@ contains
            ik = ik_idx(g_lo,iglo)
            g1(:,:,iglo) = g1(:,:,iglo)*zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))
         enddo
+    else if(remap_plot_nl) then
+        if(present(g_exb_opt)) then
+            do iglo = g_lo%llim_proc, g_lo%ulim_proc
+               it = it_idx(g_lo,iglo)
+               ik = ik_idx(g_lo,iglo)
+               g1(:,:,iglo) = g1(:,:,iglo)*zi*(akx(it)+g_exb_opt*t_last_jump(ik)*aky(ik))
+            enddo
+        else
+            do iglo = g_lo%llim_proc, g_lo%ulim_proc
+               it = it_idx(g_lo,iglo)
+               ik = ik_idx(g_lo,iglo)
+               g1(:,:,iglo) = g1(:,:,iglo)*zi*akx(it)
+            enddo
+        end if
     else
         do iglo = g_lo%llim_proc, g_lo%ulim_proc
            it = it_idx(g_lo,iglo)
@@ -549,7 +567,7 @@ contains
       complex :: fac
 
       ! Flowshear cases: J0 has to be time dependent -- NDC 8/18
-      if(present(g_exb_opt)) then
+      if(present(g_exb_opt) .and. .not. remap_plot_nl) then
           do iglo = g_lo%llim_proc, g_lo%ulim_proc
              it = it_idx(g_lo,iglo)
              ik = ik_idx(g_lo,iglo)
@@ -562,6 +580,28 @@ contains
                 g1(ig,2,iglo) = fac
              end do
           end do
+      else if(remap_plot_nl) then
+          if(present(g_exb_opt)) then
+              do iglo = g_lo%llim_proc, g_lo%ulim_proc
+                 it = it_idx(g_lo,iglo)
+                 ik = ik_idx(g_lo,iglo)
+                 do ig = -ntgrid, ntgrid
+                    fac = zi*(akx(it)+g_exb_opt*t_last_jump(ik)*aky(ik))*phi(ig,it,ik)*fphi
+                    g1(ig,1,iglo) = fac
+                    g1(ig,2,iglo) = fac
+                 end do
+              end do
+          else
+              do iglo = g_lo%llim_proc, g_lo%ulim_proc
+                 it = it_idx(g_lo,iglo)
+                 ik = ik_idx(g_lo,iglo)
+                 do ig = -ntgrid, ntgrid
+                    fac = zi*akx(it)*phi(ig,it,ik)*fphi
+                    g1(ig,1,iglo) = fac
+                    g1(ig,2,iglo) = fac
+                 end do
+              end do
+          end if
       else
           do iglo = g_lo%llim_proc, g_lo%ulim_proc
              it = it_idx(g_lo,iglo)
@@ -582,12 +622,22 @@ contains
       complex :: fac
 
       ! Flowshear cases: J0 has to be time dependent -- NDC 8/18
-      if(present(g_exb_opt)) then
+      if(present(g_exb_opt) .and. .not. remap_plot_nl) then
           do iglo = g_lo%llim_proc, g_lo%ulim_proc
              it = it_idx(g_lo,iglo)
              ik = ik_idx(g_lo,iglo)
              do ig = -ntgrid, ntgrid
                 fac = zi*aky(ik)*aj0_tdep%old(ig,iglo)*phi(ig,it,ik)*fphi
+                g1(ig,1,iglo) = fac
+                g1(ig,2,iglo) = fac
+             end do
+          end do
+      else if(remap_plot_nl) then
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+             it = it_idx(g_lo,iglo)
+             ik = ik_idx(g_lo,iglo)
+             do ig = -ntgrid, ntgrid
+                fac = zi*aky(ik)*phi(ig,it,ik)*fphi
                 g1(ig,1,iglo) = fac
                 g1(ig,2,iglo) = fac
              end do

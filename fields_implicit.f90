@@ -119,7 +119,7 @@ contains
     implicit none
 
     logical :: debug=.false.
-    logical :: remap_plot=.false. ! NDCTESTremap_plot
+    logical :: remap_plot = .true. ! NDCTESTremap_plot
 
     if (initialized) return
     initialized = .true.
@@ -177,7 +177,7 @@ contains
     logical, optional :: gf_lo
     logical :: local_gf_lo
     ! NDCTESTremap_plot
-    logical :: remap_plot=.false.
+    logical :: remap_plot = .true.
     real :: dkx, dky, alpha_x, alpha_y
     integer :: ik, it,iglo
     ! endNDCTESTremap_plot
@@ -562,8 +562,8 @@ contains
     !integer :: isgn, il, ie, is, iglo ! NDCTESTdist
     !character(len=20) :: my_format ! NDCTESTdist
     ! NDCTESTremap_plot
-    logical :: remap_plot_shear = .true.
-    logical :: remap_plot_nl = .false.
+    logical :: remap_plot_shear = .false.
+    logical :: remap_plot_nl = .true.
     integer :: iglo,iy,ix,ie,il,is,isgn,iyxf
     real, dimension(:,:), allocatable :: fft_out
     complex, dimension(:,:,:), allocatable :: phi_5d
@@ -578,9 +578,9 @@ contains
     if(remap_plot_shear .or. remap_plot_nl) then
         write(istep_str,"(I0)") istep
         if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-            open(83,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/test_xy_"//trim(istep_str)//"_g_exb.dat",status="replace")
+            open(83,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/dat/xy_"//trim(istep_str)//"_new.dat",status="replace") ! NDCTESTremap_plot_towrite
         else
-            open(83,file="/home/christenl/data/gs2/flowtest/nonlin/nlplot/test_xy_"//trim(istep_str)//"_old.dat",status="replace")
+            open(83,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/dat/xy_"//trim(istep_str)//"_old.dat",status="replace") ! NDCTESTremap_plot_towrite
         end if
     end if
     ! end NDCTESTremap_plot

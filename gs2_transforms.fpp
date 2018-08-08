@@ -141,7 +141,7 @@ contains
     real :: dkx, dx ! NDCTESTnl
     integer :: ix ! NDCTESTnl
     ! NDCTESTremap_plot
-    logical :: remap_plot = .false.
+    logical :: remap_plot = .true.
     real :: dky, dy
     integer :: iy
     ! endNDCTESTremap_plot
@@ -210,7 +210,7 @@ contains
         end if
         
         if(remap_plot) then
-            open(71,file="/home/christenl/data/gs2/flowtest/nonlin/nlfelix2/x_grid.dat",status="replace") ! NDCTESTremap_plot
+            open(71,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/dat/x_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
         end if
         dkx = akx(2)-akx(1)
         dx = 1./(nx-1) * 2.*pi/dkx
@@ -233,7 +233,7 @@ contains
        
         ! NDCTESTremap_plot
         if(remap_plot) then
-            open(72,file="/home/christenl/data/gs2/flowtest/nonlin/nlfelix2/y_grid.dat",status="replace")
+            open(72,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/dat/y_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
             dky = aky(2)-aky(1)
             dy = 1./(ny-1) * 2.*pi/dky
 
@@ -268,6 +268,7 @@ contains
 
       real, intent(in) :: g_exb
       integer :: ix, ik
+      logical :: remap_plot = .true. ! NDCTESTremap_plot
       
       do ix = 1, nx
           do ik = 1, naky
@@ -277,14 +278,20 @@ contains
                   ! NDCTESTremap_plot: transform to y*
                   !flowshear_phase_fac(ix,ik) = exp(zi*aky(ik)*g_exb*t_last_jump(ik)*x_grid(ix))
                   ! NDCTESTremap_plot: transform to y
-                  if(apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin: remove if statement and else part
+                  if(apply_flowshear_nonlin .and. .not. remap_plot) then ! NDCTEST_nl_vs_lin: remove if statement and else part
                       flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*(code_time-t_last_jump(ik))*x_grid(ix))
+                  else if(remap_plot) then ! to visualize in lab frame
+                      if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+                          flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*(code_time-t_last_jump(ik))*x_grid(ix))
+                      else
+                          flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*code_time*x_grid(ix))
+                      end if
                   else
                       flowshear_phase_fac(ix,ik) = 1.
                   end if
               else
                   ! NDCTESTremap_plot: next line is to visualize in lab frame, remove it.
-                  flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*code_time*x_grid(ix))
+                  flowshear_phase_fac(ix,ik) = 1.
               end if
           end do
       end do
@@ -1407,8 +1414,8 @@ contains
     integer :: iglo
     integer :: ix, ik, ixxf ! NDCTESTnl
     integer :: ig,ie,il,is,isgn,it, iy, iyxf ! NDCTESTremap_plot
-    logical :: remap_plot_shear =.true. ! NDCTESTremap_plot
-    logical :: remap_plot_nl =.false. ! NDCTESTremap_plot
+    logical :: remap_plot_shear =.false. ! NDCTESTremap_plot
+    logical :: remap_plot_nl =.true. ! NDCTESTremap_plot
     logical :: is_open ! NDCTESTremap_plot
 
     call debug_message(4, 'gs2_transforms::transform2_5d starting')
@@ -1439,7 +1446,7 @@ contains
     
     ! NDCTESTnl: multiply by phase factor
     ! NDCTEST_nl_vs_lin: remove apply_flowshear_nonlin
-    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin .or. remap_plot_shear .or. remap_plot_nl) then
         do ix = 1, nx
             do ixxf = xxf_lo%llim_proc, xxf_lo%ulim_proc
                 ik = ik_idx(xxf_lo, ixxf)
@@ -1483,12 +1490,14 @@ contains
     complex, dimension (:,:,g_lo%llim_proc:), intent (out) :: g
     integer :: iglo
     integer :: ix, ik, ixxf ! NDCTESTnl
+    logical :: remap_plot_shear =.false. ! NDCTESTremap_plot
+    logical :: remap_plot_nl =.true. ! NDCTESTremap_plot
 
     call inverse_y (yxf, xxf)
     
     ! NDCTESTnl
     ! NDCTEST_nl_vs_lin: remove apply_flowshear_nonlin
-    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin .or. remap_plot_shear .or. remap_plot_nl) then
         do ix = 1, nx
             do ixxf = xxf_lo%llim_proc, xxf_lo%ulim_alloc
                 ik = ik_idx(xxf_lo, ixxf)
