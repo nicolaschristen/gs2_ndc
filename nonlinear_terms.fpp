@@ -375,7 +375,11 @@ contains
     
     !Form g1=i*ky*g_wesson
     g1=g
-    call g_adjust(g1,phi,bpar,fphi,fbpar,aj0_tdep%old)
+    if(present(g_exb_opt)) then ! case with new flowshear algo -- NDC 08/18
+        call g_adjust(g1,phi,bpar,fphi,fbpar,aj0_tdep%old)
+    else
+        call g_adjust(g1,phi,bpar,fphi,fbpar)
+    end if
     do iglo = g_lo%llim_proc, g_lo%ulim_proc
        ik = ik_idx(g_lo,iglo)
        g1(:,:,iglo)=g1(:,:,iglo)*zi*aky(ik)
@@ -440,7 +444,11 @@ contains
 
     !Form g1=i*kx*g_wesson
     g1=g
-    call g_adjust(g1,phi,bpar,fphi,fbpar,aj0_tdep%old)
+    if(present(g_exb_opt)) then ! case with new flowshear algo -- NDC 08/18
+        call g_adjust(g1,phi,bpar,fphi,fbpar,aj0_tdep%old)
+    else
+        call g_adjust(g1,phi,bpar,fphi,fbpar)
+    end if
     if(present(g_exb_opt)) then
         do iglo = g_lo%llim_proc, g_lo%ulim_proc
            ! Need to take derivatives at fixed x,y so that terms taken into
