@@ -712,16 +712,11 @@ contains
     use unit_tests, only: ilast_step, debug_message
     use gs2_init, only: init
     use nonlinear_terms, only: gryfx_zonal
-    use fields_implicit, only: timer_interp_tdep, timer_interp_wdrift, timer_interp_abr, & ! NDCTESTtime
-       timer_interp_alloc, timer_interp_row, timer_interp_tadv, timer_interp_fieldeq, &
-       timer_interp_invert, timer_aminv_row, timer_aminv_tadv, timer_aminv_fieldeq, & ! NDCTESTtime
-      timer_tadv_tdep, timer_tadv_wdrift, timer_tadv_abr ! NDCTESTtime
     type(gs2_program_state_type), intent(inout) :: state
     integer :: istep, istatus
     integer, intent(in) :: nstep_run
     logical :: temp_initval_override_store
     integer :: istep_loop_max
-    logical :: remap_plot_shear=.false. ! NDCTESTremap_plot
 
     if (.not. state%included) return
 
@@ -837,7 +832,6 @@ contains
          !call broadcast(state%exit)
        !end if
 
-       if(remap_plot_shear) state%exit=.false. ! NDCTESTremap_plot: delete this line
        if(state%exit) state%converged = .true.
        if (state%exit) call debug_message(state%verb+1, &
          'gs2_main::evolve_equations exit true after diagnostics')
@@ -861,7 +855,6 @@ contains
 
             !If something has triggered a reset then reset here
             if(state%dont_change_timestep) reset = .false.
-            if(remap_plot_shear) reset=.false. ! NDCTESTremap_plot: delete this line
             if (reset) then
                call prepare_initial_values_overrides(state)
                call set_initval_overrides_to_current_vals(state%init%initval_ov)
@@ -910,23 +903,6 @@ contains
 
     if (state%print_times) call print_times(state, state%timers)
     
-    if(proc0) then ! NDCTESTtime
-        write(*,*) 'Time for aminv init_row: ', timer_aminv_row(1)/60., ' min'
-        write(*,*) 'Time for aminv timeadv: ', timer_aminv_tadv(1)/60., ' min'
-        write(*,*) 'Time for aminv getfieldeq: ', timer_aminv_fieldeq(1)/60., ' min'
-        write(*,*) 'Time for interp. tdep: ', timer_interp_tdep(1)/60., ' min'
-        write(*,*) 'Time for interp. wdrift: ', timer_interp_wdrift(1)/60., ' min'
-        write(*,*) 'Time for interp. a,b,r,ainv: ', timer_interp_abr(1)/60., ' min'
-        write(*,*) 'Time for interp. init_row: ', timer_interp_row(1)/60., ' min'
-        write(*,*) 'Time for interp. timeadv: ', timer_interp_tadv(1)/60., ' min'
-        write(*,*) 'Time for interp. getfieldeq: ', timer_interp_fieldeq(1)/60., ' min'
-        write(*,*) 'Time for interp. invert: ', timer_interp_invert(1)/60., ' min'
-        write(*,*) 'Time for interp. alloc: ', timer_interp_alloc(1)/60., ' min'
-        write(*,*) 'Time for tadv. tdep: ', timer_tadv_tdep(1)/60., ' min'
-        write(*,*) 'Time for tadv. wdrift: ', timer_tadv_wdrift(1)/60., ' min'
-        write(*,*) 'Time for tadv. a,b,r,ainv: ', timer_tadv_abr(1)/60., ' min'
-    end if
-
     ilast_step = state%istep_end
 
     ! We also restore the value of the override
