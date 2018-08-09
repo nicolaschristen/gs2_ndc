@@ -8921,7 +8921,7 @@ endif
     use run_parameters, only: beta, fphi, fapar, fbpar
     use theta_grid, only: ntgrid, bmag
     use kt_grids, only: ntheta0, naky, kperp2, &
-        implicit_flowshear, mixed_flowshear
+        explicit_flowshear, implicit_flowshear, mixed_flowshear
     use dist_fn_arrays, only: gamtot_tdep
     
     complex, dimension (-ntgrid:,:,:), intent (out) :: phi, apar, bpar
@@ -8953,8 +8953,12 @@ endif
     if (fphi > epsilon(0.0)) then
 
 !CMR, 1/8/2011:  bmag corrections here: 
+       ! NDCQUEST: is there a reason for not trusting phi written in the restart files ?
        ! NDCQUEST: should those beta corrections still be there for ES runs with beta/=0 ?
-       if(implicit_flowshear .or. mixed_flowshear) then ! NDCQUEST: what to do for explicit?
+       ! NDCQUEST: with mixed flow shear algorithm, phi calculated here will differ
+       ! from the one saved in a restart file (part of the time dependences in QN
+       ! have been made explicit and moved to the GK eq).
+       if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
            numerator = (beta * gamtot2 + bmagsp**2) * antot - (beta * gamtot1) * antotp
            denominator = (beta * gamtot2 + bmagsp**2) * gamtot_tdep%new + (beta/2.0) * gamtot1 * gamtot1
        else
