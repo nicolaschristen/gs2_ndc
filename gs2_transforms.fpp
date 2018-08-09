@@ -41,7 +41,7 @@ module gs2_transforms
   public :: init_x_transform, init_zf, kz_spectrum
   public :: transform_x, transform_y, transform2
   public :: inverse_x, inverse_y, inverse2
-  public :: update_flowshear_phase_fac ! NDCTESTnl
+  public :: update_flowshear_phase_fac
 
   logical :: initialized=.false., initialized_x=.false., initialized_y_fft=.false.
   logical :: initialized_x_redist=.false., initialized_y_redist=.false., initialized_3d=.false.
@@ -114,9 +114,8 @@ module gs2_transforms
   complex, save, dimension (:, :, :), pointer, contiguous :: ag => null()
 #endif
 
-  real, dimension(:), allocatable :: x_grid ! NDCTESTnl
-  real, dimension(:), allocatable :: y_grid ! NDCTESTremap_plot
-  complex, dimension(:,:), allocatable :: flowshear_phase_fac ! NDCTESTnl
+  real, dimension(:), allocatable :: x_grid
+  complex, dimension(:,:), allocatable :: flowshear_phase_fac
 
 contains
 
@@ -129,22 +128,16 @@ contains
     use gs2_layouts, only: init_x_transform_layouts
     use gs2_layouts, only: fft_wisdom_file, fft_use_wisdom, fft_measure_plan
     use fft_work, only: load_wisdom, save_wisdom, measure_plan
-    use kt_grids, only: akx, explicit_flowshear, implicit_flowshear, mixed_flowshear, & ! NDCTESTnl
+    use kt_grids, only: akx, explicit_flowshear, implicit_flowshear, mixed_flowshear, &
         apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
-    use kt_grids, only: aky ! NDCTESTremap_plot
-    use constants, only: pi ! NDCTESTnl
+    use constants, only: pi
     implicit none
     integer, intent (in) :: ntgrid, naky, ntheta0, nlambda, negrid, nspec
     integer, intent (in) :: nx, ny
     logical, intent (out) :: accelerated
     logical, parameter :: debug = .false.
-    real :: dkx, dx ! NDCTESTnl
-    integer :: ix ! NDCTESTnl
-    ! NDCTESTremap_plot
-    logical :: remap_plot = .false.
-    real :: dky, dy
-    integer :: iy
-    ! endNDCTESTremap_plot
+    real :: dkx, dx
+    integer :: ix
 
     character (1) :: char
 ! CMR, 12/2/2010:  return correct status of "accelerated" even if already initialised
@@ -195,70 +188,33 @@ contains
     
     if (proc0.and.fft_use_wisdom) call save_wisdom(trim(fft_wisdom_file))
 
-    ! NDCTESTnl
-    ! NDCTESTremap_plot: in if statement, remove remap_plot
     ! NDCTEST_nl_vs_lin: in if statement, remove apply_flowshear_nonlin
-    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. remap_plot .or. apply_flowshear_nonlin) then
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
 
         if(.not. allocated(x_grid)) then
             allocate(x_grid(nx))
-            if(remap_plot) then
-                allocate(y_grid(ny)) ! NDCTESTremap_plot
-            end if
             allocate(flowshear_phase_fac(nx,naky))
             flowshear_phase_fac = 1.
         end if
         
-        if(remap_plot) then
-            open(71,file="/home/christenl/data/gs2/flowtest/nonlin/nlfelix2/x_grid.dat",status="replace") ! NDCTESTremap_plot
-        end if
         dkx = akx(2)-akx(1)
         dx = 1./(nx-1) * 2.*pi/dkx
 
         do ix = 1, nx/2+1
             x_grid(ix) = (ix-1)*dx
-            if(remap_plot) then
-                write(71,"(E14.7)") x_grid(ix) ! NDCTESTremap_plot
-            end if
         end do
         do ix = nx/2+2, nx
             x_grid(ix) = (ix-nx-1)*dx
-            if(remap_plot) then
-                write(71,"(E14.7)") x_grid(ix) ! NDCTESTremap_plot
-            end if
         end do
-        if(remap_plot) then
-            close(71) ! NDCTESTremap_plot
-        end if
-       
-        ! NDCTESTremap_plot
-        if(remap_plot) then
-            open(72,file="/home/christenl/data/gs2/flowtest/nonlin/nlfelix2/y_grid.dat",status="replace")
-            dky = aky(2)-aky(1)
-            dy = 1./(ny-1) * 2.*pi/dky
-
-            do iy = 1, ny/2+1
-                y_grid(iy) = (iy-1)*dy
-                write(72,"(E14.7)") y_grid(iy)
-            end do
-            do iy = ny/2+2, ny
-                y_grid(iy) = (iy-ny-1)*dy
-                write(72,"(E14.7)") y_grid(iy)
-            end do
-            close(72)
-        end if
-        ! endNDCTESTremap_plot
 
     end if
-    ! endNDCTESTnl
 
   end subroutine init_transforms
 
-  ! NDCTESTnl
   subroutine update_flowshear_phase_fac(g_exb)
       
       use kt_grids, only: nx, naky, aky, &
-          explicit_flowshear, implicit_flowshear, mixed_flowshear, & ! NDCTESTremap_plot
+          explicit_flowshear, implicit_flowshear, mixed_flowshear, &
           apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
       use dist_fn_arrays, only: t_last_jump
       use gs2_time, only: code_time
@@ -271,20 +227,23 @@ contains
       
       do ix = 1, nx
           do ik = 1, naky
-              if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then ! NDCTESTremap_plot remove if statement and realign
+              if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
                   ! NDCTESTremap_plot: transform to y**
                   !flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*(maxval(t_last_jump)-t_last_jump(ik))*x_grid(ix))
                   ! NDCTESTremap_plot: transform to y*
                   !flowshear_phase_fac(ix,ik) = exp(zi*aky(ik)*g_exb*t_last_jump(ik)*x_grid(ix))
                   ! NDCTESTremap_plot: transform to y
-                  if(apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin: remove if statement and else part
+                  if(apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin: remove if statement and second part
                       flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*(code_time-t_last_jump(ik))*x_grid(ix))
                   else
                       flowshear_phase_fac(ix,ik) = 1.
                   end if
               else
-                  ! NDCTESTremap_plot: next line is to visualize in lab frame, remove it.
-                  flowshear_phase_fac(ix,ik) = 1.
+                  if(apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin: remove if statement and first part
+                      flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*(code_time-t_last_jump(ik))*x_grid(ix))
+                  else
+                      flowshear_phase_fac(ix,ik) = 1.
+                  end if
               end if
           end do
       end do
@@ -1238,10 +1197,6 @@ contains
     use gs2_layouts, only: xxf_lo, g_lo
     use prof, only: prof_entering, prof_leaving
     use redistribute, only: gather
-    ! NDCTESTremap_plot
-    use gs2_layouts, only: it_idx, ik_idx, ie_idx, il_idx, is_idx, isign_idx, ig_idx
-    use theta_grid, only: ntgrid
-    ! endNDCTESTremap_plot
     implicit none
     complex, dimension (-xxf_lo%ntgrid:,:,g_lo%llim_proc:), intent (in) :: g
     complex, dimension (:,xxf_lo%llim_proc:), intent (out) :: xxf
@@ -1393,23 +1348,17 @@ contains
 
   subroutine transform2_5d (g, yxf)
     use gs2_layouts, only: g_lo, yxf_lo, ik_idx, &
-        xxf_lo ! NDCTESTnl
-    use gs2_layouts, only: ie_idx,il_idx,is_idx,isign_idx,ig_idx,it_idx ! NDCTESTremap_plot
+        xxf_lo
     use unit_tests,only: debug_message
-    use constants, only: zi ! NDCTESTnl
-    use kt_grids, only: nx, aky, explicit_flowshear, implicit_flowshear, mixed_flowshear, & ! NDCTESTnl
+    use constants, only: zi
+    use kt_grids, only: nx, aky, explicit_flowshear, implicit_flowshear, mixed_flowshear, &
         apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
-    use kt_grids, only: ny ! NDCTESTremap_plot
-    use gs2_time, only: code_time ! NDCTESTnl
+    use gs2_time, only: code_time
     implicit none
     complex, dimension (:,:,g_lo%llim_proc:), intent (in out) :: g
     real, dimension (:,yxf_lo%llim_proc:), intent (out) :: yxf
     integer :: iglo
-    integer :: ix, ik, ixxf ! NDCTESTnl
-    integer :: ig,ie,il,is,isgn,it, iy, iyxf ! NDCTESTremap_plot
-    logical :: remap_plot_shear =.false. ! NDCTESTremap_plot
-    logical :: remap_plot_nl =.false. ! NDCTESTremap_plot
-    logical :: is_open ! NDCTESTremap_plot
+    integer :: ix, ik, ixxf
 
     call debug_message(4, 'gs2_transforms::transform2_5d starting')
 
@@ -1430,14 +1379,12 @@ contains
 
     do iglo = g_lo%llim_proc, g_lo%ulim_proc
        if (ik_idx(g_lo, iglo) == 1) cycle
-       if(.not. (remap_plot_shear .or. remap_plot_nl)) then ! NDCTESTremap_plot: remove if statement
-           g(:,:,iglo) = g(:,:,iglo) / 2.0
-       end if
+       g(:,:,iglo) = g(:,:,iglo) / 2.0
     end do
 
     call transform_x (g, xxf)
     
-    ! NDCTESTnl: multiply by phase factor
+    ! New flow shear algorithm: multiply by phase factor -- NDC 08/18
     ! NDCTEST_nl_vs_lin: remove apply_flowshear_nonlin
     if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
         do ix = 1, nx
@@ -1447,57 +1394,36 @@ contains
             end do
         end do
     end if
-    ! endNDCTESTnl
 
     call transform_y (xxf, yxf)
 
-    ! NDCTESTremap_plot
-    inquire(unit=83,opened=is_open)
-    if(remap_plot_shear .and. is_open) then
-        do iy = 1, ny
-            do iyxf = yxf_lo%llim_proc, yxf_lo%ulim_proc
-                it=it_idx(yxf_lo,iyxf)
-                ie=ie_idx(yxf_lo,iyxf)
-                il=il_idx(yxf_lo,iyxf)
-                is=is_idx(yxf_lo,iyxf)
-                ig=ig_idx(yxf_lo,iyxf)
-                isgn=isign_idx(yxf_lo,iyxf)
-                if(ie==1 .and. il==1 .and. is==1 .and. isgn==1 .and. ig==1) then
-                    write(83,"(I0,A,I0,A,E14.7)") it," ",iy," ",yxf(iy,iyxf) ! NDCTESTremap_plot
-                end if
-            end do
-        end do
-    end if
-    ! endNDCTESTremap_plot
   end subroutine transform2_5d
 
   subroutine inverse2_5d (yxf, g)
     use gs2_layouts, only: g_lo, yxf_lo, ik_idx, &
-        xxf_lo ! NDCTESTnl
-    use constants, only: zi ! NDCTESTnl
-    use kt_grids, only: nx, aky, explicit_flowshear, implicit_flowshear, mixed_flowshear, & ! NDCTESTnl
+        xxf_lo
+    use constants, only: zi
+    use kt_grids, only: nx, aky, explicit_flowshear, implicit_flowshear, mixed_flowshear, &
         apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
-    use gs2_time, only: code_time ! NDCTESTnl
+    use gs2_time, only: code_time
     implicit none
     real, dimension (:,yxf_lo%llim_proc:), intent (in out) :: yxf
     complex, dimension (:,:,g_lo%llim_proc:), intent (out) :: g
     integer :: iglo
-    integer :: ix, ik, ixxf ! NDCTESTnl
+    integer :: ix, ik, ixxf
 
     call inverse_y (yxf, xxf)
     
-    ! NDCTESTnl
     ! NDCTEST_nl_vs_lin: remove apply_flowshear_nonlin
     if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
         do ix = 1, nx
             do ixxf = xxf_lo%llim_proc, xxf_lo%ulim_alloc
                 ik = ik_idx(xxf_lo, ixxf)
-                ! multiply by the complex conjugate of the phase factor
+                ! New flow shear algorithm: multiply by the complex conjugate of the phase factor -- NDC 08/18
                 xxf(ix, ixxf) = xxf(ix, ixxf) * conjg(flowshear_phase_fac(ix,ik))
             end do
         end do
     end if
-    ! endNDCTESTnl
 
     call inverse_x (xxf, g)
 
@@ -2436,7 +2362,6 @@ contains
 
     if(allocated(fft)) deallocate(fft) 
 
-    ! NDCTESTnl
     if(allocated(x_grid)) deallocate(x_grid, flowshear_phase_fac)
 
     !Destroy fftw plans
