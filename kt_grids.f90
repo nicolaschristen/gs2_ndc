@@ -562,9 +562,6 @@ contains
     use constants, only: pi
     use mp, only: mp_abort, proc0
     implicit none
-    ! NDCTESTremap_plot
-    logical :: remap_plot_shear = .false.
-    ! endNDCTESTremap_plot
 
     call init_parameters_box
 
@@ -597,16 +594,8 @@ contains
     if (jtwist < 0) jtwist = max(int(2.0*pi*shat + 0.5),1)
 
     if (ly == 0.) ly = 2.0*pi*y0
-    if(remap_plot_shear) then
-        if (naky == 0) naky = (ny-1)/2 + 1 ! NDCTESTremap_plot: delete
-    else
-        if (naky == 0) naky = (ny-1)/3 + 1 ! NDCTESTremap_plot: keep
-    end if
-    if(remap_plot_shear) then
-        if (ntheta0 == 0) ntheta0 = nx ! NDCTESTremap_plot: delete
-    else
-        if (ntheta0 == 0) ntheta0 = 2*((nx-1)/3) + 1 ! NDCTESTremap_plot: keep
-    end if
+    if (naky == 0) naky = (ny-1)/3 + 1
+    if (ntheta0 == 0) ntheta0 = 2*((nx-1)/3) + 1
     if (rtwist == 0.) rtwist = real(jtwist)
     if (nkpolar == 0) nkpolar = int(real(naky-1.)*sqrt(2.))
 
@@ -619,11 +608,8 @@ contains
       if (proc0) write (error_unit(), *) "INFO: ny set from naky"
       ny = (naky - 1)*  3 + 1
     else if (naky /= (ny-1)/3 + 1) then
-      ! NDCTESTremap_plot: remove if statement
-      if(.not. remap_plot_shear) then
-          if (proc0) write (error_unit(), *) "ERROR: naky and ny both set and inconsistent... set one or the other"
-          call mp_abort("ERROR: naky and ny both set and inconsistent... set one or the other")
-      end if
+      if (proc0) write (error_unit(), *) "ERROR: naky and ny both set and inconsistent... set one or the other"
+      call mp_abort("ERROR: naky and ny both set and inconsistent... set one or the other")
     end if
     if (nx == 0) then 
       if (proc0) write (error_unit(), *) "INFO: nx set from ntheta0"
@@ -632,11 +618,8 @@ contains
       end if
       nx = ((ntheta0 - 1) /  2) * 3 + 1
     else if (ntheta0 /= 2*((nx-1)/3) + 1) then
-      ! NDCTESTremap_plot: remove if statement
-      if(.not. remap_plot_shear) then
-          if (proc0) write (error_unit(), *) "ERROR: ntheta0 and nx both set and inconsistent... set one or the other"
-          call mp_abort("")
-      end if
+      if (proc0) write (error_unit(), *) "ERROR: ntheta0 and nx both set and inconsistent... set one or the other"
+      call mp_abort("")
     end if
 
     
@@ -1137,8 +1120,6 @@ contains
 
   subroutine init_kperp2
     use theta_grid, only: ntgrid, gds2, gds21, gds22, shat
-    use job_manage, only: time_message ! NDCTESTtime
-    use mp, only: proc0 ! NDCTESTtime
     implicit none
     integer :: ik, it, itmin, itmax
     real :: dkx
