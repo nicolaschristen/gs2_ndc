@@ -10,21 +10,6 @@ module fields_implicit
   public :: reset_init
   public :: field_subgath, dump_response, read_response
   public :: dump_response_to_file_imp
-  
-  public :: timer_aminv_row ! NDCTESTtime
-  public :: timer_aminv_tadv ! NDCTESTtime
-  public :: timer_aminv_fieldeq ! NDCTESTtime
-  public :: timer_interp_tdep ! NDCTESTtime
-  public :: timer_interp_wdrift ! NDCTESTtime
-  public :: timer_interp_abr ! NDCTESTtime
-  public :: timer_interp_row ! NDCTESTtime
-  public :: timer_interp_tadv ! NDCTESTtime
-  public :: timer_interp_fieldeq ! NDCTESTtime
-  public :: timer_interp_invert ! NDCTESTtime
-  public :: timer_interp_alloc ! NDCTESTtime
-  public :: timer_tadv_tdep ! NDCTESTtime
-  public :: timer_tadv_wdrift ! NDCTESTtime
-  public :: timer_tadv_abr ! NDCTESTtime
 
   !> Unit tests
   public :: fields_implicit_unit_test_init_fields_implicit
@@ -78,23 +63,6 @@ module fields_implicit
   logical :: field_subgath
   logical :: dump_response=.false., read_response=.false.
   integer, dimension(:), allocatable :: recvcnts, displs
-  
-  real :: timer_aminv_row(2) = 0. ! NDCTESTtime
-  real :: timer_aminv_tadv(2) = 0. ! NDCTESTtime
-  real :: timer_aminv_fieldeq(2) = 0. ! NDCTESTtime
-  real :: timer_interp_tdep(2) = 0. ! NDCTESTtime
-  real :: timer_interp_wdrift(2) = 0. ! NDCTESTtime
-  real :: timer_interp_abr(2) = 0. ! NDCTESTtime
-  real :: timer_interp_row(2) = 0. ! NDCTESTtime
-  real :: timer_interp_tadv(2) = 0. ! NDCTESTtime
-  real :: timer_interp_fieldeq(2) = 0. ! NDCTESTtime
-  real :: timer_interp_invert(2) = 0. ! NDCTESTtime
-  real :: timer_interp_alloc(2) = 0. ! NDCTESTtime
-  real :: timer_tadv_tdep(2) = 0. ! NDCTESTtime
-  real :: timer_tadv_wdrift(2) = 0. ! NDCTESTtime
-  real :: timer_tadv_abr(2) = 0. ! NDCTESTtime
-  logical :: trigger_timer_aminv = .true. ! NDCTESTtime
-  logical :: trigger_timer_interp = .false. ! NDCTESTtime
 
   ! NDCTESTinv
   type noninv_field_matrix_type
@@ -119,7 +87,6 @@ contains
     implicit none
 
     logical :: debug=.false.
-    logical :: remap_plot=.false. ! NDCTESTremap_plot
 
     if (initialized) return
     initialized = .true.
@@ -144,10 +111,7 @@ contains
         ! Must be done before resp. m.
         !if (run_scan) call set_scan_parameter(dummy)
     if (debug) write(6,*) "init_fields_implicit: response_matrix"
-    ! NDCTESTremap_plot
-    if(.not. remap_plot) then
-        call init_response_matrix
-    end if
+    call init_response_matrix
     if (debug) write(6,*) "init_fields_implicit: antenna"
     call init_antenna
   end subroutine init_fields_implicit
@@ -166,21 +130,11 @@ contains
     use dist_fn, only: get_init_field
     use init_g, only: new_field_init
     use mp, only: iproc
-    ! NDCTESTremap_plot
-    use kt_grids, only: akx, aky, naky, ntheta0
-    use constants, only: pi
-    use gs2_layouts, only: g_lo,ik_idx,it_idx
-    ! endNDCTESTremap_plot
 
     implicit none
 
     logical, optional :: gf_lo
     logical :: local_gf_lo
-    ! NDCTESTremap_plot
-    logical :: remap_plot=.false.
-    real :: dkx, dky, alpha_x, alpha_y
-    integer :: ik, it,iglo
-    ! endNDCTESTremap_plot
 
     if(present(gf_lo)) then
       local_gf_lo = gf_lo
@@ -196,33 +150,8 @@ contains
        !AJ fields redistribute.
        g = gnew
     else if (new_field_init) then
-       ! NDCTESTremap_plot
-       if(remap_plot) then
-           write(*,*) 'Initializing phi to Gaussian'
-           dkx = akx(2)-akx(1)
-           dky = aky(2)-aky(1)
-           alpha_x = 1./64. * (2.*pi/dkx)**2 ! -> exp(-x**2/sig_x**2) with sig_x = 2*sqrt(alpha_x) = Lx
-           alpha_y = 1./256. * (2.*pi/dky)**2 ! -> exp(-y**2/sig_y**2) with sig_y = 2*sqrt(alpha_y) = Ly
-
-           ! Gaussian in phi
-           do ik = 1, naky
-               do it = 1, ntheta0
-                   phinew(:,it,ik) = 100*exp(-1.*alpha_x*(akx(it)**2))*exp(-1.*alpha_y*(aky(ik)**2))
-               end do
-           end do
-           phi = phinew
-
-           ! Gaussian in g
-           do iglo = g_lo%llim_proc, g_lo%ulim_proc
-               ik = ik_idx(g_lo,iglo)
-               it = it_idx(g_lo,iglo)
-               gnew(:,:,iglo) = exp(-1.*alpha_y*(akx(it)**2))*exp(-1.*alpha_x*(aky(ik)**2))
-           end do
-           g = gnew
-       else
-           call get_init_field (phinew, aparnew, bparnew)
-           phi = phinew; apar = aparnew; bpar = bparnew; g = gnew
-       end if
+       call get_init_field (phinew, aparnew, bparnew)
+       phi = phinew; apar = aparnew; bpar = bparnew; g = gnew
     else
        call getfield (phinew, aparnew, bparnew)
        phi = phinew; apar = aparnew; bpar = bparnew 
@@ -350,7 +279,6 @@ contains
     complex, dimension (:), allocatable :: u_small
     integer :: jflo, ik, it, nl, nr, i, m, n, dc, ic, iflo
     real :: dkx
-    integer :: ig_nosum, it_nosum = 0 ! NDCTEST
     integer :: expflow_opt
     logical :: michael_exp = .true. ! NDCTESTswitchexp
 
@@ -460,9 +388,9 @@ contains
           ! to compute time-dependent aminv --NDC 11/2017
           if((implicit_flowshear .or. mixed_flowshear) .and. .not. interp_before) then
               !u_small(jflo) = u_small(jflo) - sum( fl(:,it,ik) * & ! NDCTEST quadratic
-              !    ( kx_shift(ik)*(kx_shift(ik)-dkx)/(2.*dkx*dkx) * aminv_left(i)%dcell(dc)%supercell(nl:nr) & ! NDCTEST
-              !    - (kx_shift(ik)+dkx)*(kx_shift(ik)-dkx)/(dkx*dkx) * aminv(i)%dcell(dc)%supercell(nl:nr) & ! NDCTEST
-              !    + kx_shift(ik)*(kx_shift(ik)+dkx)/(2.*dkx*dkx) * aminv_right(i)%dcell(dc)%supercell(nl:nr) ) ) ! NDCTEST
+              !    ( kx_shift(ik)*(kx_shift(ik)-dkx)/(2.*dkx*dkx) * aminv_left(i)%dcell(dc)%supercell(nl:nr) &
+              !    - (kx_shift(ik)+dkx)*(kx_shift(ik)-dkx)/(dkx*dkx) * aminv(i)%dcell(dc)%supercell(nl:nr) &
+              !    + kx_shift(ik)*(kx_shift(ik)+dkx)/(2.*dkx*dkx) * aminv_right(i)%dcell(dc)%supercell(nl:nr) ) )
               
               !u_small(jflo) = u_small(jflo) - sum( fl(:,it,ik) * & ! NDCTEST linear
               !    ( (1.-sign(1.,kx_shift(ik)))/2.* abs(kx_shift(ik))/dkx * aminv_left(i)%dcell(dc)%supercell(nl:nr) &
@@ -476,14 +404,6 @@ contains
           else
               u_small(jflo)=u_small(jflo)-sum(aminv(i)%dcell(dc)%supercell(nl:nr)*fl(:, it, ik))
           end if
-          
-          ! it_nosum = it_idx(jf_lo, jflo) ! NDCTEST
-          ! ig_nosum = ig_idx(jf_lo, jflo) ! NDCTEST
-          ! if (ik==2 .and. ig_nosum==0 .and. it==it_nosum) then ! NDCTEST
-          !     write(*,*) akx(it_nosum), ' ', realpart(aminv_left(i)%dcell(dc)%supercell(ntgrid+1+nidx*(n-1))), ' ', & ! NDCTEST
-          !         realpart(aminv(i)%dcell(dc)%supercell(ntgrid+1+nidx*(n-1))), ' ', & ! NDCTEST
-          !         realpart(aminv_right(i)%dcell(dc)%supercell(ntgrid+1+nidx*(n-1))) ! NDCTEST
-          ! end if ! NDCTEST
 
        end do
 
@@ -527,8 +447,7 @@ contains
     use dist_fn, only: timeadv, exb_shear, collisions_advance, &
         update_kperp2_tdep, update_aj0_tdep, update_gamtot_tdep, &
         gamtot, getan ! NDCTESTmichael
-    use dist_fn, only: g_exb, & ! NDCTESTremap_plot
-        first_gk_solve, compute_a_b_r_ainv ! NDCTESTneighb
+    use dist_fn, only: first_gk_solve, compute_a_b_r_ainv ! NDCTESTneighb
     use dist_fn_arrays, only: g, gnew, kx_shift, theta0_shift, &
         gamtot_tdep, & ! NDCTESTmichael
         a, b, r, ainv ! NDCTESTneighb
@@ -537,258 +456,170 @@ contains
     use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear, &
         naky, ntheta0, & ! NDCTESTmichael
         apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
-    use kt_grids, only: nx, ny, akx, aky ! NDCTESTremap_plot
     use theta_grid, only: ntgrid ! NDCTESTmichael
-    use mp, only: proc0 ! NDCTEST
-    use job_manage, only: time_message ! NDCTESTtime
-    use gs2_layouts, only: g_lo, yxf_lo, ig_idx, it_idx, ik_idx, isign_idx, is_idx, ie_idx, il_idx ! NDCTESTremap_plot
-    use gs2_transforms, only: transform2, update_flowshear_phase_fac, init_transforms ! NDCTESTremap_plot
-    use constants, only: pi ! NDCTESTremap_plot
-    use le_grids, only: nlambda, negrid ! NDCTESTremap_plot
-    use species, only: nspec ! NDCTESTremap_plot
     use gs2_time, only: code_dt, code_dt_old
-    !use gs2_layouts, only: g_lo, idx ! NDCTESTdist
     implicit none
     integer :: diagnostics = 1
     integer, intent (in) :: istep
     logical, intent (in) :: remove_zonal_flows_switch
     integer, parameter :: verb=4
-    !integer :: expflow_opt, ig, it, ik ! NDCTESTmichael
-    !complex, dimension(:,:,:), allocatable :: expflow_antot, expflow_antot_tdep ! NDCTESTmichael
-    !complex, dimension(:,:,:), allocatable :: dummy1, dummy2, phistar ! NDCTESTmichael
     integer :: expflow_opt, ig, it, ik ! NDCTESTmichaelnew
     complex, dimension(:,:,:), allocatable :: expflow_antot, expflow_antot_tdep ! NDCTESTmichaelnew
     complex, dimension(:,:,:), allocatable :: dummy1, dummy2 ! NDCTESTmichaelnew
-    !integer :: isgn, il, ie, is, iglo ! NDCTESTdist
-    !character(len=20) :: my_format ! NDCTESTdist
-    ! NDCTESTremap_plot
-    logical :: remap_plot_shear=.false.
-    logical :: remap_plot_nl=.false.
-    integer :: iglo,iy,ix,ie,il,is,isgn,iyxf
-    real, dimension(:,:), allocatable :: fft_out
-    complex, dimension(:,:,:), allocatable :: phi_5d
-    character(5) :: istep_str
-    ! endNDCTESTremap_plot
     logical :: michael_exp = .true. ! NDCTESTswitchexp
     logical :: undo_remap
     real :: gdt
     logical :: field_local = .false.
 
-    ! NDCTESTremap_plot
-    if(remap_plot_shear .or. remap_plot_nl) then
-        write(istep_str,"(I0)") istep
-        if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-            open(83,file="/home/christenl/data/gs2/flowtest/nonlin/nlfelix2/test_xy_"//trim(istep_str)//"_g_exb.dat",status="replace")
-        else
-            open(83,file="/home/christenl/data/gs2/flowtest/nonlin/nlfelix2/test_xy_"//trim(istep_str)//"_old.dat",status="replace")
-        end if
-    end if
-    ! end NDCTESTremap_plot
-
     !GGH NOTE: apar_ext is initialized in this call
     if(.not.no_driver) call antenna_amplitudes (apar_ext)
   
-    ! NDCQUEST: how is the ExB remap undone if the timestep needs to be re-set ?    
     if (allocated(kx_shift) .or. allocated(theta0_shift)) call exb_shear (gnew, phinew, aparnew, bparnew, istep) 
 
     g = gnew
     phi = phinew
     apar = aparnew 
     bpar = bparnew       
+    
+    ! In cases with flow-shear, after kx_shift got updated in exb_shear,
+    ! update time-dependent kperp2, aj0, gamtot, wdrift, wdriftttp, a, b, r, ainv.
+    ! NDC 02/2018
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+        
+        call update_kperp2_tdep
+        call update_aj0_tdep
+        call update_gamtot_tdep
+        
+    end if
 
-    ! NDCTESTremap_plot
-    if(remap_plot_shear) then
-        call update_flowshear_phase_fac(g_exb)
-        ! copy phi to 5d array to use modified transform routines
-        write(*,*) 'Copying phi to 5d array.'
-        allocate(phi_5d(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-        phi_5d = 0.
-        do iglo = g_lo%llim_proc, g_lo%ulim_proc
-            it = it_idx(g_lo,iglo)
-            ik = ik_idx(g_lo,iglo)
-            do ig = -ntgrid, ntgrid
-               phi_5d(ig,1,iglo) = phi(ig,it,ik)
-               phi_5d(ig,2,iglo) = phi(ig,it,ik)
+    if(implicit_flowshear) then
+        
+        call compute_a_b_r_ainv(a,b,r,ainv) ! NDCTESTneighb
+        
+    end if
+
+    ! NDCTESTmichaelnew: compute phistar[it]
+    if(explicit_flowshear .and. michael_exp) then
+
+        !deallocate is further down in this subroutine
+        allocate(expflow_antot(-ntgrid:ntgrid,ntheta0,naky))
+        expflow_antot = 0.
+        allocate(expflow_antot_tdep(-ntgrid:ntgrid,ntheta0,naky))
+        expflow_antot_tdep = 0.
+        allocate(dummy1(-ntgrid:ntgrid,ntheta0,naky))
+        dummy1 = 0.
+        allocate(dummy2(-ntgrid:ntgrid,ntheta0,naky))
+        dummy2 = 0.
+
+        expflow_opt = 2
+        call getan(expflow_antot, dummy1, dummy2, expflow_opt)
+        expflow_opt = 3
+        call getan(expflow_antot_tdep, dummy1, dummy2, expflow_opt)
+
+        phistar_old = 0.
+        do ig = -ntgrid,ntgrid
+            do it = 1,ntheta0
+                do ik = 1,naky
+                    if(aky(ik)/=0.) then
+                        phistar_old(ig,it,ik) = 1./gamtot_tdep%old(ig,it,ik)*expflow_antot_tdep(ig,it,ik) &
+                            -1./gamtot(ig,it,ik)*expflow_antot(ig,it,ik)
+                    end if
+                end do
+            end do
+        end do
+
+    end if
+    
+    if(explicit_flowshear .and. michael_exp) then
+        ! NDCTESTmichaelnew: replace phi[it] and phi[it+1] by phibar[it]
+        phi = phi-phistar_old
+        phinew = phinew-phistar_old
+    end if
+        
+    call debug_message(4, 'fields_implicit::advance_implicit calling timeadv 1')
+    
+    ! To apply g_wesson=0 at the boundary correctly in flow shear cases (see dist_fn::invert_rhs_1),
+    ! we need to know whether we are solving the GK equation for the first time in this time step or not.
+    ! NDC 06/18
+    first_gk_solve = .true.
+
+    call timeadv (phi, apar, bpar, phinew, aparnew, bparnew, istep)
+    
+    first_gk_solve = .false.    
+        
+    call debug_message(4, 'fields_implicit::advance_implicit called timeadv 1')
+    ! Return if resetting
+    if(reset) then
+        
+        ! In cases with flowshear, undo the last ExB remapping --NDC 07/18
+        if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin
+
+            ! In Michael's implementation, move back to full phi for reset
+            if(explicit_flowshear .and. michael_exp) then
+                phi = phi+phistar_old
+                phinew = phinew+phistar_old
+            end if
+
+            undo_remap = .true.
+            call exb_shear(gnew, phinew, aparnew, bparnew, istep, field_local, undo_remap)
+
+        end if
+
+        return
+
+    end if
+
+    if(.not.no_driver) aparnew = aparnew + apar_ext 
+    
+    call debug_message(4, 'fields_implicit::advance_implicit calling getfield')
+
+    ! NDCTESTmichaelnew: in flowshear cases, QN returns phibar[it+1]-phibar[it]
+    call getfield (phinew, aparnew, bparnew)
+    
+    ! NDCTESTmichaelnew: in flowshear cases, this sets phinew=phibar[it+1]
+    phinew = phinew + phi
+    aparnew  = aparnew + apar
+    bparnew  = bparnew + bpar
+
+    ! NDCQUEST: when explicit_flowshear=true, the removal is wrong for now: it is applied to phibar[it+1]
+    ! Should we apply it to phibar[it+1] and phistar[it+1] ? In that case there might
+    ! be a problem since phistar[it+1] needs the full g[it+1] to be computed ...
+    if (remove_zonal_flows_switch) call remove_zonal_flows
+    
+    call debug_message(4, 'fields_implicit::advance_implicit calling timeadv')
+    
+    call timeadv (phi, apar, bpar, phinew, aparnew, bparnew, istep, diagnostics)
+
+    ! NDCTESTmichaelnew: compute phistar[it+1] and get the full phi[it] and phi[it+1]
+    if(explicit_flowshear .and. michael_exp) then
+
+        expflow_opt = 4
+        call getan(expflow_antot, dummy1, dummy2, expflow_opt)
+        expflow_opt = 5
+        call getan(expflow_antot_tdep, dummy1, dummy2, expflow_opt)
+
+        phistar_new = 0.
+        do ig = -ntgrid,ntgrid
+            do it = 1,ntheta0
+                do ik = 1,naky
+                    if(aky(ik)/=0.) then
+                        phistar_new(ig,it,ik) = 1./gamtot_tdep%new(ig,it,ik)*expflow_antot_tdep(ig,it,ik)-1./gamtot(ig,it,ik)*expflow_antot(ig,it,ik)
+                    end if
+                end do
             end do
         end do
         
-        allocate(fft_out(ny,yxf_lo%llim_proc:yxf_lo%ulim_alloc))
-        fft_out = 0.
-
-        call transform2(phi_5d,fft_out)
-                
-        deallocate(phi_5d,fft_out)
-
-    elseif(remap_plot_nl) then
-
-        ! time stepping to evolve g
-        call timeadv(phi, apar, bpar, phinew, aparnew, bparnew, istep)
+        phinew = phinew + phistar_new
+        phi = phi + phistar_old
+        
+        deallocate(expflow_antot, expflow_antot_tdep, dummy1, dummy2)
 
     end if
-    ! endNDCTESTremap_plot
-    
-    if(.not. (remap_plot_shear .or. remap_plot_nl)) then ! NDCTESTremap_plot: remove if statement and align correctly all its content.
-        ! In cases with flow-shear, after kx_shift got updated in exb_shear,
-        ! update time-dependent kperp2, aj0, gamtot, wdrift, wdriftttp, a, b, r, ainv.
-        ! NDC 02/2018
-        ! NDCQUEST: how do we deal with this updating if time-step has to be re-set ?
-        if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-            
-            if (proc0) call time_message(.false.,timer_tadv_tdep,' Tadv_tdep') ! NDCTESTtime
-            
-            call update_kperp2_tdep
-            call update_aj0_tdep
-            call update_gamtot_tdep
-            
-            if (proc0) call time_message(.false.,timer_tadv_tdep,' Tadv_tdep') ! NDCTESTtime
-            
-        end if
-
-        if(implicit_flowshear) then
-            
-            if (proc0) call time_message(.false.,timer_tadv_abr,' Tadv_rhs') ! NDCTESTtime
-            
-            call compute_a_b_r_ainv(a,b,r,ainv) ! NDCTESTneighb
-            
-            if (proc0) call time_message(.false.,timer_tadv_abr,' Tadv_rhs') ! NDCTESTtime
-            
-        end if
-
-        ! NDCTESTmichaelnew: compute phistar[it]
-        if(explicit_flowshear .and. michael_exp) then
-
-            !deallocate is further down in this subroutine
-            allocate(expflow_antot(-ntgrid:ntgrid,ntheta0,naky))
-            expflow_antot = 0.
-            allocate(expflow_antot_tdep(-ntgrid:ntgrid,ntheta0,naky))
-            expflow_antot_tdep = 0.
-            allocate(dummy1(-ntgrid:ntgrid,ntheta0,naky))
-            dummy1 = 0.
-            allocate(dummy2(-ntgrid:ntgrid,ntheta0,naky))
-            dummy2 = 0.
-
-            expflow_opt = 2
-            call getan(expflow_antot, dummy1, dummy2, expflow_opt)
-            expflow_opt = 3
-            call getan(expflow_antot_tdep, dummy1, dummy2, expflow_opt)
-
-            phistar_old = 0.
-            do ig = -ntgrid,ntgrid
-                do it = 1,ntheta0
-                    do ik = 1,naky
-                        if(aky(ik)/=0.) then
-                            phistar_old(ig,it,ik) = 1./gamtot_tdep%old(ig,it,ik)*expflow_antot_tdep(ig,it,ik) &
-                                -1./gamtot(ig,it,ik)*expflow_antot(ig,it,ik)
-                        end if
-                    end do
-                end do
-            end do
-
-        end if
         
-        if(explicit_flowshear .and. michael_exp) then
-            ! NDCTESTmichaelnew: replace phi[it] and phi[it+1] by phibar[it]
-            phi = phi-phistar_old
-            phinew = phinew-phistar_old
-        end if
-            
-        call debug_message(4, 'fields_implicit::advance_implicit calling timeadv 1')
-        
-        ! To apply g_wesson=0 at the boundary correctly in flow shear cases (see dist_fn::invert_rhs_1),
-        ! we need to know whether we are solving the GK equation for the first time in this time step or not.
-        ! NDC 06/18
-        first_gk_solve = .true.
+    call debug_message(4, 'fields_implicit::advance_implicit called timeadv')
 
-        call timeadv (phi, apar, bpar, phinew, aparnew, bparnew, istep)
-        
-        first_gk_solve = .false.    
-            
-        call debug_message(4, 'fields_implicit::advance_implicit called timeadv 1')
-        ! Return if resetting
-        if(reset) then
-            
-            ! In cases with flowshear, undo the last ExB remapping --NDC 07/18
-            if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin
-
-                ! In Michael's implementation, move back to full phi for reset
-                if(explicit_flowshear .and. michael_exp) then
-                    phi = phi+phistar_old
-                    phinew = phinew+phistar_old
-                end if
-
-                undo_remap = .true.
-                call exb_shear(gnew, phinew, aparnew, bparnew, istep, field_local, undo_remap)
-
-            end if
-
-            return
-
-        end if
-
-        if(.not.no_driver) aparnew = aparnew + apar_ext 
-        
-        call debug_message(4, 'fields_implicit::advance_implicit calling getfield')
-
-        ! NDCTESTmichaelnew: in flowshear cases, QN returns phibar[it+1]-phibar[it]
-        call getfield (phinew, aparnew, bparnew)
-        
-        ! NDCTESTmichaelnew: in flowshear cases, this sets phinew=phibar[it+1]
-        phinew = phinew + phi
-        
-        ! NDCTESTmichael
-        !if(explicit_flowshear) then
-        !    phinew   = phinew  + phistar
-        !end if
-        aparnew  = aparnew + apar
-        bparnew  = bparnew + bpar
-
-        ! NDCQUEST: the removal is wrong for now: it is applied to phibar[it+1]
-        ! Should we apply it to phibar[it+1] and phistar[it+1] ? In that case there might
-        ! be a problem since phistar[it+1] needs the full g[it+1] to be computed ...
-        if (remove_zonal_flows_switch) call remove_zonal_flows
-        
-        call debug_message(4, 'fields_implicit::advance_implicit calling timeadv')
-        
-        call timeadv (phi, apar, bpar, phinew, aparnew, bparnew, istep, diagnostics)
-
-        ! NDCTESTmichaelnew: compute phistar[it+1] and get the full phi[it] and phi[it+1]
-        if(explicit_flowshear .and. michael_exp) then
-
-            expflow_opt = 4
-            call getan(expflow_antot, dummy1, dummy2, expflow_opt)
-            expflow_opt = 5
-            call getan(expflow_antot_tdep, dummy1, dummy2, expflow_opt)
-
-            phistar_new = 0.
-            do ig = -ntgrid,ntgrid
-                do it = 1,ntheta0
-                    do ik = 1,naky
-                        if(aky(ik)/=0.) then
-                            phistar_new(ig,it,ik) = 1./gamtot_tdep%new(ig,it,ik)*expflow_antot_tdep(ig,it,ik)-1./gamtot(ig,it,ik)*expflow_antot(ig,it,ik)
-                        end if
-                    end do
-                end do
-            end do
-            
-            phinew = phinew + phistar_new
-            phi = phi + phistar_old
-            
-            deallocate(expflow_antot, expflow_antot_tdep, dummy1, dummy2)
-
-        end if
-            
-        call debug_message(4, 'fields_implicit::advance_implicit called timeadv')
-
-        ! Advance collisions, if separate from timeadv
-        call collisions_advance (phi, bpar, phinew, aparnew, bparnew, istep, diagnostics)
-
-    end if ! NDCTESTremap_plot: remove end if
-
-    ! NDCTESTremap_plot
-    if(remap_plot_shear .or. remap_plot_nl) then
-        close(83)
-    end if
-    ! endNDCTESTremap_plot
+    ! Advance collisions, if separate from timeadv
+    call collisions_advance (phi, bpar, phinew, aparnew, bparnew, istep, diagnostics)
 
   end subroutine advance_implicit
 
@@ -919,28 +750,24 @@ contains
   end subroutine reset_init
 
   subroutine init_response_matrix
-    use mp, only: barrier, &
-        proc0 ! NDCTESTtime
+    use mp, only: barrier
     use fields_arrays, only: phi, apar, bpar, phinew, aparnew, bparnew, &
-        phistar_old ! NDCTESTfast
+        phistar_old
     use theta_grid, only: ntgrid
     use kt_grids, only: naky, ntheta0, implicit_flowshear, mixed_flowshear, interp_before, &
         explicit_flowshear, akx, kperp2_tdep
     use dist_fn_arrays, only: g, kx_shift, &
         a, b, r, ainv ! NDCTESTneighb
-    ! NDCTESTfast
     use dist_fn_arrays, only: aj0_tdep, gamtot_tdep, &
         kperp2_left, aj0_left, gamtot_left, r_left, ainv_left, &
         kperp2_right, aj0_right, gamtot_right, r_right, ainv_right
-    ! endNDCTESTfast
     use dist_fn, only: M_class, N_class, i_class, &
         update_kperp2_tdep, update_aj0_tdep, update_gamtot_tdep, compute_a_b_r_ainv, &
-        for_interp_left, for_interp_right ! NDCTESTfast
+        for_interp_left, for_interp_right
     use run_parameters, only: fphi, fapar, fbpar
     use gs2_layouts, only: init_fields_layouts, f_lo, init_jfields_layouts, &
-        g_lo ! NDCTESTfast
+        g_lo
     use prof, only: prof_entering, prof_leaving
-    use job_manage, only: time_message ! NDCTESTtime
     implicit none
     integer :: ig, ifield, it, ik, i, m, n
     complex, dimension(:,:), allocatable :: am
@@ -949,9 +776,7 @@ contains
     real, dimension(naky) :: dkx ! NDCTESTshift
     logical :: tadv_for_interp ! NDCTESTshift
     real, dimension(naky) :: kx_shift_stored ! NDCTESTneighb
-    ! NDCTESTfast
     logical :: michael_exp = .true.
-    ! endNDCTESTfast
 
     call prof_entering ("init_response_matrix", "fields_implicit")
 
@@ -1014,19 +839,14 @@ contains
            dkx = (akx(2) - akx(1))
            kx_shift_stored = kx_shift
 
-           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
            allocate(kperp2_left(-ntgrid:ntgrid,ntheta0,naky))
            allocate(aj0_left(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
            allocate(gamtot_left(-ntgrid:ntgrid,ntheta0,naky))
-           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
            if(implicit_flowshear) then
-               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
                allocate(r_left(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
                allocate(ainv_left(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
            end if
            
-           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
            kx_shift = -0.5*dkx
            
            call update_kperp2_tdep
@@ -1035,26 +855,18 @@ contains
            aj0_left = aj0_tdep%new
            call update_gamtot_tdep
            gamtot_left = gamtot_tdep%new
-           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
            if(implicit_flowshear) then
-               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
                call compute_a_b_r_ainv(a,b,r_left,ainv_left)
-               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
            end if
 
-           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
            allocate(kperp2_right(-ntgrid:ntgrid,ntheta0,naky))
            allocate(aj0_right(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
            allocate(gamtot_right(-ntgrid:ntgrid,ntheta0,naky))
-           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
            if(implicit_flowshear) then
-               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
                allocate(r_right(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
                allocate(ainv_right(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
            end if
 
-           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
            kx_shift = 0.5*dkx
 
            call update_kperp2_tdep
@@ -1063,23 +875,16 @@ contains
            aj0_right = aj0_tdep%new
            call update_gamtot_tdep
            gamtot_right = gamtot_tdep%new
-           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
            if(implicit_flowshear) then
-               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
                call compute_a_b_r_ainv(a,b,r_right,ainv_right)
-               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
            end if
 
-           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
            kx_shift = 0.
            call update_kperp2_tdep
            call update_aj0_tdep
            call update_gamtot_tdep
-           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
            if(implicit_flowshear) then
-               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
                call compute_a_b_r_ainv(a,b,r,ainv)
-               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
            end if
        end if
 
@@ -1116,8 +921,6 @@ contains
           ! am's for shifted kx's,
           ! required for aminv interpolation in cases with flow-shear --NDC 11/2017
           if(implicit_flowshear .or. mixed_flowshear) then
-
-              if (proc0) call time_message(.false.,timer_interp_alloc,' Init_invert') ! NDCTESTtime
         
               if(interp_before) then
                  
@@ -1143,8 +946,6 @@ contains
                   am_right = 0.
 
               end if
-
-              if (proc0) call time_message(.false.,timer_interp_alloc,' Init_invert') ! NDCTESTtime
 
           end if
 
@@ -1193,17 +994,12 @@ contains
                       phinew(ig,it,ik) = 1.0
                    end do
                    if (.not. skip_initialisation) then
-                       trigger_timer_aminv = .true. ! NDCTESTtime
-                       trigger_timer_interp = .false. ! NDCTESTtime
-                       if (proc0) call time_message(.false.,timer_aminv_row,' Tadv_tdep') ! NDCTESTtime
                        if(allocated(kx_shift)) kx_shift = 0.
                        if(interp_before .and. .not. explicit_flowshear) then
                            call init_response_row (ig, ifield, amcollec(i)%am, i, n)
                        else
                            call init_response_row (ig, ifield, am, i, n)
                        end if
-                       if (proc0) call time_message(.false.,timer_aminv_row,' Tadv_tdep') ! NDCTESTtime
-                       trigger_timer_aminv = .false. ! NDCTESTtime
 
                        ! am for shifted kx's,
                        ! required for aminv interpolation in cases with flow-shear --NDC 11/2017
@@ -1214,16 +1010,11 @@ contains
                            for_interp_left = .true.
                            kx_shift = -0.5*dkx
                            
-                           trigger_timer_interp = .true. ! NDCTESTtime
-                           trigger_timer_aminv = .false. ! NDCTESTtime
-                           if (proc0) call time_message(.false.,timer_interp_row,' Tadv_tdep') ! NDCTESTtime
                            if(interp_before) then
                                call init_response_row(ig,ifield,amcollec(i)%am_left,i,n,tadv_for_interp) ! NDCTESTinv
                            else
                                call init_response_row(ig,ifield,am_left,i,n,tadv_for_interp)
                            end if
-                           if (proc0) call time_message(.false.,timer_interp_row,' Tadv_tdep') ! NDCTESTtime
-                           trigger_timer_interp = .false. ! NDCTESTtime
                            
                            for_interp_left = .false.
                            
@@ -1232,16 +1023,11 @@ contains
                            for_interp_right = .true.
                            kx_shift = 0.5*dkx
 
-                           trigger_timer_interp = .true. ! NDCTESTtime
-                           trigger_timer_aminv = .false. ! NDCTESTtime
-                           if (proc0) call time_message(.false.,timer_interp_row,' Tadv_tdep') ! NDCTESTtime
                            if(interp_before) then
                                call init_response_row(ig,ifield,amcollec(i)%am_right,i,n,tadv_for_interp) ! NDCTESTinv
                            else
                                call init_response_row(ig,ifield,am_right,i,n,tadv_for_interp)
                            end if
-                           if (proc0) call time_message(.false.,timer_interp_row,' Tadv_tdep') ! NDCTESTtime
-                           trigger_timer_interp = .false. ! NDCTESTtime
                            
                            for_interp_right = .false.
 
@@ -1309,19 +1095,11 @@ contains
               ! required for aminv interpolation in cases with flow-sear --NDC 11/2017
                        
               if (implicit_flowshear .or. mixed_flowshear) then
-                  if (proc0) call time_message(.false.,timer_interp_invert,' Tadv_tdep') ! NDCTESTtime
                   call init_inverse_matrix(am_left, aminv_left, i)
-                  if (proc0) call time_message(.false.,timer_interp_invert,' Tadv_tdep') ! NDCTESTtime
-                  if (proc0) call time_message(.false.,timer_interp_alloc,' Init_invert') ! NDCTESTtime
                   deallocate (am_left)
-                  if (proc0) call time_message(.false.,timer_interp_alloc,' Init_invert') ! NDCTESTtime
 
-                  if (proc0) call time_message(.false.,timer_interp_invert,' Tadv_tdep') ! NDCTESTtime
                   call init_inverse_matrix(am_right, aminv_right, i)
-                  if (proc0) call time_message(.false.,timer_interp_invert,' Tadv_tdep') ! NDCTESTtime
-                  if (proc0) call time_message(.false.,timer_interp_alloc,' Init_invert') ! NDCTESTtime
                   deallocate (am_right)
-                  if (proc0) call time_message(.false.,timer_interp_alloc,' Init_invert') ! NDCTESTtime
               end if
 
           end if
@@ -1331,28 +1109,20 @@ contains
        if(implicit_flowshear .or. mixed_flowshear) then
               
            ! Deallocate memory used to compute interpolation matrices
-           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
            deallocate(kperp2_left, aj0_left, gamtot_left)
            deallocate(kperp2_right, aj0_right, gamtot_right)
-           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
            if(implicit_flowshear) then
-               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
                deallocate(r_left, ainv_left)
                deallocate(r_right, ainv_right)
-               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
            end if
            
            ! Restore time dependent quantities from before matrix computation
-           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
            kx_shift = kx_shift_stored
            call update_kperp2_tdep
            call update_aj0_tdep
            call update_gamtot_tdep
-           if (proc0) call time_message(.false.,timer_interp_tdep,' bla') ! NDCTESTtime
            if(implicit_flowshear) then
-               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
                call compute_a_b_r_ainv(a,b,r,ainv)
-               if (proc0) call time_message(.false.,timer_interp_abr,' bla') ! NDCTESTtime
            end if
 
        end if
@@ -1372,15 +1142,12 @@ contains
     use run_parameters, only: fphi, fapar, fbpar
     use gs2_layouts, only: f_lo, idx, idx_local
     use prof, only: prof_entering, prof_leaving
-    use job_manage, only: time_message ! NDCTESTtime
-    use mp, only: proc0 ! NDCTESTtime
     implicit none
     integer, intent (in) :: ig, ifield, ic, n
     complex, dimension(:,f_lo(ic)%llim_proc:), intent (in out) :: am
     logical, intent(in), optional :: tadv_opt
     complex, dimension (:,:,:), allocatable :: fieldeq, fieldeqa, fieldeqp
     integer :: irow, istart, iflo, ik, it, ifin, m, nn
-    logical :: tadv ! NDCTESTshift
 
     if(present(tadv_opt)) then
         tadv = tadv_opt
@@ -1407,20 +1174,11 @@ contains
     ! NDCTESTshift: also call timeadv for interpolation matrices in mixed flow-shear approach
     if(tadv) then
         
-        if (proc0 .and. trigger_timer_aminv) call time_message(.false.,timer_aminv_tadv,' Init_resp') ! NDCTESTtime
-        if (proc0 .and. trigger_timer_interp) call time_message(.false.,timer_interp_tadv,' Init_resp') ! NDCTESTtime
-        !call timeadv (phi, apar, bpar, phinew, aparnew, bparnew, 0)
-        call timeadv (phi, apar, bpar, phinew, aparnew, bparnew, 0,0,trigger_timer_aminv,trigger_timer_interp) ! NDCTESTtime
-        if (proc0 .and. trigger_timer_aminv) call time_message(.false.,timer_aminv_tadv,' Init_resp') ! NDCTESTtime
-        if (proc0 .and. trigger_timer_interp) call time_message(.false.,timer_interp_tadv,' Init_resp') ! NDCTESTtime
+        call timeadv (phi, apar, bpar, phinew, aparnew, bparnew, 0)
 
     end if
 
-    if (proc0 .and. trigger_timer_aminv) call time_message(.false.,timer_aminv_fieldeq,' Init_resp') ! NDCTESTtime
-    if (proc0 .and. trigger_timer_interp) call time_message(.false.,timer_interp_fieldeq,' Init_resp') ! NDCTESTtime
     call getfieldeq (phinew, aparnew, bparnew, fieldeq, fieldeqa, fieldeqp)
-    if (proc0 .and. trigger_timer_aminv) call time_message(.false.,timer_aminv_fieldeq,' Init_resp') ! NDCTESTtime
-    if (proc0 .and. trigger_timer_interp) call time_message(.false.,timer_interp_fieldeq,' Init_resp') ! NDCTESTtime
 
     !Loop over 2pi domains / cells
     do nn = 1, N_class(ic)

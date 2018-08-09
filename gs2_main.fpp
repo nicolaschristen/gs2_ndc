@@ -712,7 +712,6 @@ contains
     use unit_tests, only: ilast_step, debug_message
     use gs2_init, only: init
     use nonlinear_terms, only: gryfx_zonal
-    use dist_fn, only: timer_aminv_setsource, timer_interp_setsource, timer_adv_setsource ! NDCTESTtime
     use fields_implicit, only: timer_interp_tdep, timer_interp_wdrift, timer_interp_abr, & ! NDCTESTtime
        timer_interp_alloc, timer_interp_row, timer_interp_tadv, timer_interp_fieldeq, &
        timer_interp_invert, timer_aminv_row, timer_aminv_tadv, timer_aminv_fieldeq, & ! NDCTESTtime
@@ -914,21 +913,18 @@ contains
     if(proc0) then ! NDCTESTtime
         write(*,*) 'Time for aminv init_row: ', timer_aminv_row(1)/60., ' min'
         write(*,*) 'Time for aminv timeadv: ', timer_aminv_tadv(1)/60., ' min'
-        write(*,*) 'Time for aminv set_source: ', timer_aminv_setsource(1)/60., ' min'
         write(*,*) 'Time for aminv getfieldeq: ', timer_aminv_fieldeq(1)/60., ' min'
         write(*,*) 'Time for interp. tdep: ', timer_interp_tdep(1)/60., ' min'
         write(*,*) 'Time for interp. wdrift: ', timer_interp_wdrift(1)/60., ' min'
         write(*,*) 'Time for interp. a,b,r,ainv: ', timer_interp_abr(1)/60., ' min'
         write(*,*) 'Time for interp. init_row: ', timer_interp_row(1)/60., ' min'
         write(*,*) 'Time for interp. timeadv: ', timer_interp_tadv(1)/60., ' min'
-        write(*,*) 'Time for interp. set_source: ', timer_interp_setsource(1)/60., ' min'
         write(*,*) 'Time for interp. getfieldeq: ', timer_interp_fieldeq(1)/60., ' min'
         write(*,*) 'Time for interp. invert: ', timer_interp_invert(1)/60., ' min'
         write(*,*) 'Time for interp. alloc: ', timer_interp_alloc(1)/60., ' min'
         write(*,*) 'Time for tadv. tdep: ', timer_tadv_tdep(1)/60., ' min'
         write(*,*) 'Time for tadv. wdrift: ', timer_tadv_wdrift(1)/60., ' min'
         write(*,*) 'Time for tadv. a,b,r,ainv: ', timer_tadv_abr(1)/60., ' min'
-        write(*,*) 'Time for tadv. set_source: ', timer_adv_setsource(1)/60., ' min'
     end if
 
     ilast_step = state%istep_end
