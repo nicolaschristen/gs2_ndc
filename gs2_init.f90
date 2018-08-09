@@ -944,7 +944,7 @@ contains
     use run_parameters, only: fphi, fapar, fbpar
     use mp, only: proc0
     use unit_tests, only: job_id
-    use kt_grids, only: implicit_flowshear, mixed_flowshear
+    use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear
     use dist_fn, only: update_kperp2_tdep, update_aj0_tdep, update_gamtot_tdep
     implicit none
     type (init_type), intent(in) :: current
@@ -966,7 +966,7 @@ contains
 
     ! In flow shear cases, need to compute t-dep quantities from kx_shift that has been restored
     ! by ginit above. This is required for set_init_fields below. -- NDC 08/18
-    if(restarted .and. (implicit_flowshear .or. mixed_flowshear)) then ! NDCQUEST: is this required for explicit ?
+    if(restarted .and. (explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear)) then
         call update_kperp2_tdep
         call update_aj0_tdep
         call update_gamtot_tdep

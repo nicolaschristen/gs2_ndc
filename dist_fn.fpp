@@ -106,20 +106,14 @@ module dist_fn
 
   public :: compute_wdrift ! NDCTESTshift
   public :: init_invert_rhs ! NDCTESTshift
-
-  public :: timer_aminv_setsource ! NDCTESTtime
-  public :: timer_interp_setsource ! NDCTESTtime
-  public :: timer_adv_setsource ! NDCTESTtime
   
   ! NDCTESTneighb
   public :: first_gk_solve
   public :: compute_a_b_r_ainv
   ! endNDCTESTneighb
 
-  ! NDCTESTfast
   public :: for_interp_left
   public :: for_interp_right
-  ! endNDCTESTfast
 
   ! knobs
   complex, dimension (:), allocatable :: fexp ! (nspec)
@@ -310,21 +304,13 @@ module dist_fn
   logical :: explicit_terms_present = .false.
   logical :: explicit_lowflow = .false.
 
-  real :: timer_aminv_setsource(2) = 0. ! NDCTESTtime
-  real :: timer_interp_setsource(2) = 0. ! NDCTESTtime
-  real :: timer_adv_setsource(2) = 0. ! NDCTESTtime
-  logical :: trigger_timer_aminv2 ! NDCTESTtime
-  logical :: trigger_timer_interp2 ! NDCTESTtime
-    
   ! NDCTESTneighb
   ! Set to false so that BC in dist_fn::invert_rhs_1 for response matrices uses tdep%new
   logical :: first_gk_solve = .false.
   ! endNDCTESTneighb
 
-  ! NDCTESTfast
   logical :: for_interp_left = .false.
   logical :: for_interp_right = .false.
-  ! endNDCTESTfast
 
 contains
 
@@ -729,14 +715,14 @@ contains
     call init_nonlinear_terms
 
     ! Checking if explicit terms are present in the simulation.
-    ! For now, those include nonlinear terms, continuous
-    ! flow-shear terms and (work in progress) low-flow terms.
+    ! For now, those include nonlinear terms
+    ! and (work in progress) low-flow terms.
     ! NDC 11/2017
 #ifdef LOWFLOW
     ! Change to true ifdef LOWFLOW
     explicit_lowflow = .true.
 #endif
-    explicit_terms_present = (nonlin .or. explicit_lowflow) ! NDCTEST: remove ringing
+    explicit_terms_present = (nonlin .or. explicit_lowflow)
 
     if (debug) write(6,*) "init_dist_fn: allocate_arrays"
     call allocate_arrays
@@ -752,7 +738,7 @@ contains
     !if (debug) write(6,*) "init_dist_fn: init_vperp2"
     call init_vperp2
 
-    !call init_dist_fn_arrays ! NDC: was called twice
+    call init_dist_fn_arrays ! NDCQUEST: is it really meant to be called twice ?
     call init_bc
   
   end subroutine init_dist_fn_level_1
@@ -1276,8 +1262,6 @@ contains
           mixed_flowshear
       use le_grids, only: negrid
       use gs2_layouts, only: g_lo
-      use job_manage, only: time_message ! NDCTESTtime
-      use mp, only: proc0 ! NDCTESTtime
       
       implicit none
 
@@ -1744,8 +1728,6 @@ contains
 !AJ
     use gs2_layouts, only: gf_lo, init_gf_layouts
     use spfunc, only: j0, j1
-    use job_manage, only: time_message ! NDCTESTtime
-    use mp, only: proc0 ! NDCTESTtime
 
     implicit none
 
@@ -1807,11 +1789,7 @@ contains
 
   end subroutine init_bessel
         
-  ! Updating time-dependent kperp2 for cases with flow-shear.
-  ! If the optional argument kx_shift_interp is provided, kperp2_tdep%old is not changed,
-  ! and kperp2_tdep%new gets re-computed using kx_shift_interp instead of kx_shift.
-  ! This optional argument is only required when computing shifted versions of the field-solve matrix
-  ! in fields_implicit::init_response_matrix). -- NDC 02/2018
+  ! Updating time-dependent kperp2 for cases with flow-shear -- NDC 02/2018
   subroutine update_kperp2_tdep
       
       use theta_grid, only: ntgrid, gds21, gds22, shat
@@ -1830,16 +1808,10 @@ contains
               do it = 1, ntheta0
 
                   ! First old
-                  ! NDCTESTkxshift
                   kperp2_tdep%old(:,it,ik) = kperp2(:,it,ik) + &
                       kx_shift_old(ik)*kx_shift_old(ik)*gds22/(shat*shat) + &
                       2.0*kx_shift_old(ik)*aky(ik)*gds21/shat + &
                       2.0*kx_shift_old(ik)*akx(it)*gds22/(shat*shat)
-                  !kperp2_tdep%old(:,it,ik) = kperp2(:,it,ik) + &
-                  !    (my_kx_shift(ik)+aky(ik)*g_exb*g_exbfac*gdt*tunits(ik))*(my_kx_shift(ik)+aky(ik)*g_exb*g_exbfac*gdt*tunits(ik))*gds22/(shat*shat) + &
-                  !    2.0*(my_kx_shift(ik)+aky(ik)*g_exb*g_exbfac*gdt*tunits(ik))*aky(ik)*gds21/shat + &
-                  !    2.0*(my_kx_shift(ik)+aky(ik)*g_exb*g_exbfac*gdt*tunits(ik))*theta0(it,ik)*aky(ik)*gds22/shat
-                  ! endNDCTESTkxshift
 
                   ! Then new
                   kperp2_tdep%new(:,it,ik) = kperp2(:,it,ik) + &
@@ -1849,16 +1821,12 @@ contains
               
               end do
 
-              ! write(*,*) 'kperp2_tdep = ', kperp2_tdep%new(:,ntheta0,2) ! NDCTEST
-
           end if
 
       end do
   end subroutine update_kperp2_tdep
 
-  ! Updating time-dependent aj0 for cases with flow-shear.
-  ! The optional argument shift_for_interp prevents aj0_tdep%old from being changed and is only used
-  ! to compute shifted versions of the field-solve matrix in fiedls_implicit::init_response_matrix. -- NDC 02/2018
+  ! Updating time-dependent aj0 for cases with flow-shear -- NDC 02/2018
   subroutine update_aj0_tdep
       
       use kt_grids, only: kperp2_tdep, aky
@@ -1868,7 +1836,6 @@ contains
       use gs2_layouts, only: g_lo, ik_idx, it_idx, il_idx, ie_idx, is_idx
       use spfunc, only: j0
       use dist_fn_arrays, only: aj0_tdep
-      use kt_grids, only: ntheta0 ! NDCTEST
       
       implicit none
 
@@ -1876,9 +1843,9 @@ contains
       real :: arg
 
       do iglo = g_lo%llim_proc, g_lo%ulim_alloc
+          
           ik = ik_idx(g_lo,iglo)
           ! aj0 is constant if ky==0
-
           if (aky(ik) /= 0.0) then
 
               it = it_idx(g_lo,iglo)
@@ -1897,10 +1864,6 @@ contains
                   aj0_tdep%new(ig,iglo) = j0(arg)
               
               end do
-
-              ! if (it == ntheta0 .and. il == 1 .and. ie == 1 .and. is == 1) then ! NDCTEST
-                  ! write(*,*) 'aj0_tdep = ', aj0_tdep%new(:,iglo) ! NDCTEST
-              ! end if ! NDCTEST
 
           end if
       end do
@@ -4098,11 +4061,10 @@ contains
 
   subroutine allocate_arrays
     use kt_grids, only: naky,  box, explicit_flowshear, implicit_flowshear, mixed_flowshear, &
-        akx, aky, & ! NDCTESTnl
-        apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
+        akx, aky, apply_flowshear_nonlin
     use theta_grid, only: ntgrid, shat
     use dist_fn_arrays, only: g, gnew, &
-        t_last_jump, remap_period, & ! NDCTESTnl
+        t_last_jump, remap_period, &
         jump ! NDCTESTneighb
     use dist_fn_arrays, only: kx_shift, kx_shift_old, theta0_shift   ! MR
     use gs2_layouts, only: g_lo
@@ -4113,11 +4075,8 @@ contains
     implicit none
 !    logical :: alloc = .true.
 
-    integer :: ik ! NDCTESTnl
-    real :: dkx ! NDCTESTnl
-    ! NDCTESTremap_plot
-    logical :: remap_plot = .false.
-    ! endNDCTESTremap_plot
+    integer :: ik
+    real :: dkx
 
 !    if (alloc) then
     if (.not. allocated(g)) then
@@ -4176,17 +4135,14 @@ contains
              kx_shift = 0.
              allocate(kx_shift_old(naky))
              kx_shift_old = 0.
-             ! NDCTESTremap_plot: in if, remove last logical
-             if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. remap_plot .or. apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin
-             ! endNDCTESTremap_plot
-             !if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-                 allocate(t_last_jump(naky)) ! NDCTESTnl
-                 t_last_jump = 0. ! NDCTESTnl
-                 allocate(remap_period(naky)) ! NDCTESTnl
-                 remap_period = 0. ! NDCTESTnl
-                 dkx = akx(2) - akx(1) ! NDCTESTnl
+             if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
+                 allocate(t_last_jump(naky))
+                 t_last_jump = 0.
+                 allocate(remap_period(naky))
+                 remap_period = 0.
+                 dkx = akx(2) - akx(1)
                  do ik = 2, naky ! ky=0 is never re-mapped
-                     remap_period(ik) = abs(dkx/(g_exb*aky(ik))) ! NDCTESTnl
+                     remap_period(ik) = abs(dkx/(g_exb*aky(ik)))
                  end do
              end if
           else
@@ -4211,7 +4167,7 @@ contains
   !! adds hyper diffusion if present, and solfp1, from the collisions module,
   !! which adds collisions if present.
 
-  subroutine timeadv (phi, apar, bpar, phinew, aparnew, bparnew, istep, mode,trigger_aminv_opt, trigger_interp_opt) ! NDCTESTtime: added timers
+  subroutine timeadv (phi, apar, bpar, phinew, aparnew, bparnew, istep, mode)
 
     use theta_grid, only: ntgrid
     use le_derivatives, only: vspace_derivatives
@@ -4220,147 +4176,94 @@ contains
     use run_parameters, only: reset, immediate_reset
     use unit_tests, only: debug_message
     use collisions, only: split_collisions
-    use job_manage, only: time_message ! NDCTESTtime
-    use mp, only: proc0 ! NDCTESTtime
-    ! NDCTESTremap_plot
-    use gs2_time, only: code_dt
-    ! endNDCTESTremap_plot
     implicit none
     complex, dimension (-ntgrid:,:,:), intent (in) :: phi, apar, bpar
     complex, dimension (-ntgrid:,:,:), intent (in) :: phinew, aparnew, bparnew
     integer, intent (in) :: istep
     integer, optional, intent (in) :: mode
-    logical, intent(in), optional :: trigger_aminv_opt ! NDCTESTtime
-    logical, intent(in), optional :: trigger_interp_opt ! NDCTESTtime
     integer :: modep
     integer,save :: istep_last=-1
     integer, parameter :: verb = 3
-    ! NDCTESTremap_plot
-    logical :: remap_plot_nl = .false.
-    real :: c0,c1,c2,dt0,dt1,dt2
-    ! endNDCTESTremap_plot
 
-    ! NDCTESTremap_plot
-    if(remap_plot_nl) then
-        ! store NL term in gexp_1
-        call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
-            phi, apar, bpar, istep, bkdiff(1))
+    modep = 0
+    if (present(mode)) modep = mode
 
-        ! AB3 coeffs with cst dt
-        dt0 = code_dt
-        dt1 = code_dt
-        dt2 = code_dt
-        c0 = (1. / (dt1 +dt2)) * ( &
-             ((dt0 + dt1)**2./dt1)*( (dt0+dt1)/3. + dt2/2. ) &
-             - dt1*(dt1/3. + dt2/2.) )
-        c1 = - dt0**2. * ( dt0/3. + (dt1+dt2)/2. ) / (dt1*dt2)
-        c2 = dt0**2. * ( dt0/3. + dt1/2. ) / ( dt2*(dt1+dt2) )
-             
-        select case (istep)
-        case (0)
-            ! nothing
-        case (1)
-            gnew = g - code_dt * gexp_1
-        case (2) 
-            gnew = g - code_dt * (1.5*gexp_1 - 0.5*gexp_2)
-        case default
-            ! code_dt is already in the AB3 coeffs
-            gnew = g - (c0*gexp_1 + c1*gexp_2 + c2*gexp_3)
-        end select
-    else
-        ! NDCTESTtime
-        if(present(trigger_aminv_opt)) then
-            trigger_timer_aminv2 = trigger_aminv_opt
-        else
-            trigger_timer_aminv2 = .false.
-        end if
-        if(present(trigger_interp_opt)) then
-            trigger_timer_interp2 = trigger_interp_opt
-        else
-            trigger_timer_interp2 = .false.
-        end if
-        ! endNDCTESTtime
-
-        modep = 0
-        if (present(mode)) modep = mode
-
-        ! NDCQUEST: do collisions need the full phi[it+1]? Because in the explicit scheme, the second
-        ! GK solve is done with phi[it+1] containing phistar[it] instead of phistar[it+1].
-        ! If indeed they do need the full phi, there might be a problem: computing phistar[it+1]
-        ! requires the full g[it+1] ...
-        if (istep.eq.0 .or. .not.cllc) then
+    ! NDCQUEST: do collisions need the full phi[it+1]? Because in the explicit scheme, the second
+    ! GK solve is done with phi[it+1] containing phistar[it] instead of phistar[it+1].
+    ! If indeed they do need the full phi, there might be a problem: computing phistar[it+1]
+    ! requires the full g[it+1] ...
+    if (istep.eq.0 .or. .not.cllc) then
     !CMR do the usual LC when computing response matrix
-           !Calculate the explicit terms
-           call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
-             phi, apar, bpar, istep, bkdiff(1))
-           call debug_message(verb, &
-            'dist_fn::timeadv calculated nonlinear term')
-           if(reset .and. immediate_reset) return !Return if resetting
-           !Solve for gnew
-           call invert_rhs (phi, apar, bpar, phinew, aparnew, bparnew, istep)
-           call debug_message(verb, &
-            'dist_fn::timeadv calculated rhs')
+       !Calculate the explicit terms
+       call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
+         phi, apar, bpar, istep, bkdiff(1))
+       call debug_message(verb, &
+        'dist_fn::timeadv calculated nonlinear term')
+       if(reset .and. immediate_reset) return !Return if resetting
+       !Solve for gnew
+       call invert_rhs (phi, apar, bpar, phinew, aparnew, bparnew, istep)
+       call debug_message(verb, &
+        'dist_fn::timeadv calculated rhs')
 
-           !Add hyper terms (damping)
-           call hyper_diff (gnew, phinew)
-           call debug_message(verb, &
-            'dist_fn::timeadv calculated hypviscosity')
-           !Add collisions
-           if( .not. split_collisions) then
-             call vspace_derivatives (gnew, g, g0, phi, bpar, phinew, bparnew, modep)
-             call debug_message(verb, &
-              'dist_fn::timeadv calculated collisions etc')
-           end if
-        else if (istep.eq.1 .and. istep.ne.istep_last) then
+       !Add hyper terms (damping)
+       call hyper_diff (gnew, phinew)
+       call debug_message(verb, &
+        'dist_fn::timeadv calculated hypviscosity')
+       !Add collisions
+       if( .not. split_collisions) then
+         call vspace_derivatives (gnew, g, g0, phi, bpar, phinew, bparnew, modep)
+         call debug_message(verb, &
+          'dist_fn::timeadv calculated collisions etc')
+       end if
+    else if (istep.eq.1 .and. istep.ne.istep_last) then
     !CMR on first half step at istep=1 do CL with all redists
-           if( .not. split_collisions) then
-             call vspace_derivatives (gnew, g, g0, phi, bpar, phinew, bparnew, modep)
-           end if
-           !Calculate the explicit terms
-           call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
-             phi, apar, bpar, istep, bkdiff(1))
-           if(reset) return !Return if resetting
-           !Solve for gnew
-           call invert_rhs (phi, apar, bpar, phinew, aparnew, bparnew, istep)
-           !Add hyper terms (damping)
-           call hyper_diff (gnew, phinew)
-        else if (istep.ne.istep_last) then
+       if( .not. split_collisions) then
+         call vspace_derivatives (gnew, g, g0, phi, bpar, phinew, bparnew, modep)
+       end if
+       !Calculate the explicit terms
+       call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
+         phi, apar, bpar, istep, bkdiff(1))
+       if(reset) return !Return if resetting
+       !Solve for gnew
+       call invert_rhs (phi, apar, bpar, phinew, aparnew, bparnew, istep)
+       !Add hyper terms (damping)
+       call hyper_diff (gnew, phinew)
+    else if (istep.ne.istep_last) then
     !CMR on first half step do CL with all redists without gtoc redist
-           if( .not. split_collisions) then
-             call vspace_derivatives (gnew, g, g0, phi, bpar, phinew, bparnew, modep,gtoc=.false.)
-           end if
-           !Calculate the explicit terms
-           call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
-             phi, apar, bpar, istep, bkdiff(1))
-           if(reset) return !Return if resetting
-           !Solve for gnew
-           call invert_rhs (phi, apar, bpar, phinew, aparnew, bparnew, istep)
-           !Add hyper terms (damping)
-           call hyper_diff (gnew, phinew)
-        else if (istep.eq.istep_last) then
+       if( .not. split_collisions) then
+         call vspace_derivatives (gnew, g, g0, phi, bpar, phinew, bparnew, modep,gtoc=.false.)
+       end if
+       !Calculate the explicit terms
+       call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
+         phi, apar, bpar, istep, bkdiff(1))
+       if(reset) return !Return if resetting
+       !Solve for gnew
+       call invert_rhs (phi, apar, bpar, phinew, aparnew, bparnew, istep)
+       !Add hyper terms (damping)
+       call hyper_diff (gnew, phinew)
+    else if (istep.eq.istep_last) then
     !CMR on second half of all timesteps do LC without ctog redist
-           !Calculate the explicit terms 
-           !NB following call should be unnecessary as NL terms not added on second
-           !    half of istep: keeping for now as may be needed by some code
-           call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
-             phi, apar, bpar, istep, bkdiff(1))
-           if(reset) return !Return if resetting
+       !Calculate the explicit terms 
+       !NB following call should be unnecessary as NL terms not added on second
+       !    half of istep: keeping for now as may be needed by some code
+       call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
+         phi, apar, bpar, istep, bkdiff(1))
+       if(reset) return !Return if resetting
 
-           !Solve for gnew
-           call invert_rhs (phi, apar, bpar, phinew, aparnew, bparnew, istep)
-           !Add hyper terms (damping)
-           call hyper_diff (gnew, phinew)
-           if( .not. split_collisions) then
-             call vspace_derivatives (gnew, g, g0, phi, bpar, phinew, bparnew, modep, ctog=.false.)
-           end if
-        endif
+       !Solve for gnew
+       call invert_rhs (phi, apar, bpar, phinew, aparnew, bparnew, istep)
+       !Add hyper terms (damping)
+       call hyper_diff (gnew, phinew)
+       if( .not. split_collisions) then
+         call vspace_derivatives (gnew, g, g0, phi, bpar, phinew, bparnew, modep, ctog=.false.)
+       end if
+    endif
 
-        !Enforce parity if desired (also performed in invert_rhs, but this is required
-        !as collisions etc. may break parity?)
-        if (def_parity) call enforce_parity(parity_redist)
-          
-        istep_last=istep
-    end if ! NDCTESTnlfelix
+    !Enforce parity if desired (also performed in invert_rhs, but this is required
+    !as collisions etc. may break parity?)
+    if (def_parity) call enforce_parity(parity_redist)
+      
+    istep_last=istep
 
   end subroutine timeadv
 
@@ -4443,7 +4346,7 @@ contains
     use file_utils, only: error_unit
     use kt_grids, only: akx, aky, naky, ikx, ntheta0, box, theta0, &
         explicit_flowshear, implicit_flowshear,mixed_flowshear, &
-        apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
+        apply_flowshear_nonlin
     use le_grids, only: negrid, nlambda
     use species, only: nspec
     use run_parameters, only: fphi, fapar, fbpar
@@ -4451,7 +4354,6 @@ contains
         jump ! NDCTESTneighb
     use gs2_time, only: code_dt, code_dt_old, code_time
     use constants, only: twopi   
-    use theta_grid, only: theta ! NDCTEST 
 
     complex, dimension (-ntgrid:,:,:), intent (in out) :: phi,    apar,    bpar
     complex, dimension (-ntgrid:,:,g_lo%llim_proc:), intent (in out) :: g0
@@ -4472,15 +4374,7 @@ contains
     !logical, save :: exb_first = .true.
     complex , dimension(-ntgrid:ntgrid) :: z
     character(130) :: str
-    ! NDCTESTremap_plot
-    logical :: remap_plot_shear=.false.
-    real :: alpha_x, alpha_y
-    real :: dky
-    integer, dimension(:), allocatable :: mycount
-    ! endNDCTESTremap_plot
     logical :: undo_remap
-
-    integer :: ig=0 ! NDCTEST
 
     ierr = error_unit()
 
@@ -4531,7 +4425,7 @@ contains
     ! NDC 06/18
     undo_remap = .false.
     if (istep.eq.istep_last) then
-        if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin
+        if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
             ! Check whether we are undoing an ExB remap done with the old dt,
             ! or whether we are remapping with the new dt.
             if(present(undo_remap_opt)) then
@@ -4553,17 +4447,10 @@ contains
     ! necessary to get factor of 2 right in first time step and
     ! also to get things right after changing time step size
     ! added May 18, 2009 -- MAB
-    !gdt = code_dt ! NDCTEST
     gdt = 0.5*(code_dt + code_dt_old)
 
     !Update istep_last
     istep_last = istep
-    
-    ! NDCTESTkxshift
-    !if(implicit_flowshear .or. explicit_flowshear .or. mixed_flowshear) then
-    !    kx_shift_old = kx_shift ! first store the old kx_shift
-    !end if
-    ! endNDCTESTkxshift
 
 ! kx_shift is a function of time.   Update it here:  
 ! MR, 2007: kx_shift array gets saved in restart file
@@ -4757,17 +4644,6 @@ contains
     end if
     
     if (box .or. shat .eq. 0.0) then
-        ! NDCTESTremap_plot: if only plotting Gaussian phi, we know what to insert
-       if(remap_plot_shear) then
-          dky = aky(2)-aky(1)
-          alpha_x = 1./64. * (twopi/dkx)**2
-          alpha_y = 1./256. * (twopi/dky)**2
-          if(.not. allocated(mycount)) then
-              allocate(mycount(naky))
-              mycount = 0
-          end if
-       end if
-       ! endNDCTESTremap_plot
        do ik = naky, 2, -1
           if (jump(ik) < 0) then
              if (fphi > epsilon(0.0)) then
@@ -4775,15 +4651,7 @@ contains
                    phi(:,ikx_indexed(it),ik) = phi(:,ikx_indexed(it-jump(ik)),ik)
                 end do
                 do it = ntheta0 + jump(ik) + 1, ntheta0
-                   ! NDCTESTremap_plot
-                   if(remap_plot_shear) then
-                       phi(:,ikx_indexed(it),ik) = exp(-1.*alpha_x*((akx(ikx_indexed(it))-(jump(ik)+mycount(ik))*dkx)**2))*exp(-1.*alpha_y*(aky(ik)**2))
-                   else
-                       phi(:,ikx_indexed(it),ik) = 0.
-                   end if
-                   ! endNDCTESTremap_plot
-                   ! NDCTEST
-                   !phi(:,ikx_indexed(it),ik) = phi(-ntgrid,ikx_indexed(ntheta0+jump(ik)),ik)
+                   phi(:,ikx_indexed(it),ik) = 0.
                 end do
              end if
              if (fapar > epsilon(0.0)) then
@@ -4825,37 +4693,13 @@ contains
                       enddo
 
                       do it = ntheta0 + jump(ik) + 1, ntheta0
-                         ! NDCTEST
-                         !from_iglo = idx(g_lo,ik,ikx_indexed(ntheta0+jump(ik)),il,ie,is)
-                         
                          to_iglo = idx(g_lo, ik, ikx_indexed(it), il, ie, is)
-                         
-                         ! NDCTEST
-                         !if (idx_local(g_lo, from_iglo) .and. idx_local(g_lo, to_iglo)) then
-                         !    g0(:,1,to_iglo) = g0(-ntgrid,1,from_iglo)
-                         !    g0(:,2,to_iglo) = g0(-ntgrid,2,from_iglo)
-                         !elseif (idx_local(g_lo, from_iglo)) then
-                         !    do isgn = 1,2
-                         !       call send(g0(-ntgrid,isgn,from_iglo), proc_id(g_lo, to_iglo))
-                         !    enddo
-                         !else if (idx_local(g_lo, to_iglo)) then
-                         !    do isgn = 1,2
-                         !       call receive(g0(-ntgrid,isgn,to_iglo), proc_id(g_lo, from_iglo))
-                         !       g0(:,isgn,to_iglo) = g0(-ntgrid,isgn,to_iglo)
-                         !    enddo
-                         !endif
-                         
                          if (idx_local (g_lo, to_iglo)) g0(:,:,to_iglo) = 0.
                       enddo
 
                    enddo
                 enddo
              enddo
-             ! NDCTESTremap_plot
-             if(remap_plot_shear) then
-                 mycount(ik) = mycount(ik) + jump(ik)
-             end if
-             ! endNDCTESTremap_plot
           endif
 
           if (jump(ik) > 0) then 
@@ -4864,15 +4708,7 @@ contains
                    phi(:,ikx_indexed(it),ik) = phi(:,ikx_indexed(it-jump(ik)),ik)
                 end do
                 do it = jump(ik), 1, -1
-                   ! NDCTESTremap_plot
-                   if(remap_plot_shear) then
-                       phi(:,ikx_indexed(it),ik) = exp(-1.*alpha_x*((akx(ikx_indexed(it))-(jump(ik)+mycount(ik))*dkx)**2))*exp(-1.*alpha_y*(aky(ik)**2))
-                   else
-                       phi(:,ikx_indexed(it),ik) = 0.
-                   end if
-                   ! endNDCTESTremap_plot
-                   ! NDCTEST
-                   !phi(:,ikx_indexed(it),ik) = phi(ntgrid,ikx_indexed(jump(ik)+1),ik)
+                   phi(:,ikx_indexed(it),ik) = 0.
                 end do
              end if
              if (fapar > epsilon(0.0)) then
@@ -4914,25 +4750,7 @@ contains
                       enddo
 
                       do it = jump(ik), 1, -1
-                         ! NDCTEST
-                         !from_iglo = idx(g_lo, ik, ikx_indexed(jump(ik)+1), il, ie, is)
-
                          to_iglo = idx(g_lo, ik, ikx_indexed(it), il, ie, is)
-
-                         ! NDCTEST
-                         !if (idx_local(g_lo, from_iglo) .and. idx_local(g_lo, to_iglo)) then
-                         !    g0(:,1,to_iglo) = g0(ntgrid,1,from_iglo)
-                         !    g0(:,2,to_iglo) = g0(ntgrid,2,from_iglo)
-                         !elseif (idx_local(g_lo, from_iglo)) then
-                         !    do isgn = 1,2
-                         !       call send(g0(ntgrid,isgn,from_iglo), proc_id(g_lo, to_iglo))
-                         !    enddo
-                         !else if (idx_local(g_lo, to_iglo)) then
-                         !    do isgn = 1,2
-                         !       call receive(g0(ntgrid,isgn,to_iglo), proc_id(g_lo, from_iglo))
-                         !       g0(:,isgn,to_iglo) = g0(ntgrid,isgn,to_iglo)
-                         !    enddo
-                         !endif
 
                          if (idx_local (g_lo, to_iglo)) g0(:,:,to_iglo) = 0.
                       enddo
@@ -4940,19 +4758,8 @@ contains
                    enddo
                 enddo
              enddo
-             ! NDCTESTremap_plot
-             if(remap_plot_shear) then
-                 mycount(ik) = mycount(ik) + jump(ik)
-             end if
-             ! endNDCTESTremap_plot
           endif
        enddo
-
-       ! write(*,*) "SHIFTED" ! NDCTEST
-       ! do ig = -ntgrid,ntgrid
-       !    write(*,*) theta(ig)
-       !    write(*,*) phi(ig,1,2) ! NDCTEST
-       ! end do
 
     end if
 
@@ -4964,7 +4771,7 @@ contains
   subroutine update_kx_shift_and_jump(gdt, undo_remap_opt)
 
       use dist_fn_arrays, only: kx_shift, kx_shift_old, &
-          t_last_jump, remap_period ! NDCTESTnl
+          t_last_jump, remap_period
       
       implicit none
 
@@ -4973,9 +4780,6 @@ contains
       integer :: ik
       real :: dkx
       integer :: ierr
-      ! NDCTESTremap_plot
-      logical :: remap_plot_shear=.false.
-      ! endNDCTESTremap_plot
       integer :: undo_fac
       logical :: undo_remap
 
@@ -5002,19 +4806,11 @@ contains
          kx_shift(ik) = kx_shift(ik) - jump(ik)*dkx
          ! In flow-shear cases, kx_shift_old is kx_shift at the previous time-step with ExB jumps taken into account, ie:
          ! kx_shift_old(ik) is kx*[it]-kxbar[it+1] -- NDC 02/2018
-         ! NDCTESTkxshift
-             
-         !kx_shift_old(ik) = kx_shift_old(ik) - jump(ik)*dkx
          kx_shift_old(ik) = kx_shift(ik) + aky(ik)*g_exb*g_exbfac*gdt*tunits(ik) ! undo last time-step
-
-         ! endNDCTESTkxshift
          
-         ! NDCTESTnl 
-         ! NDCTESTremap_plot: in if, remove last logical
-         if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. remap_plot_shear .or. apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin
-             t_last_jump(ik) = t_last_jump(ik) + undo_fac*abs(jump(ik))*remap_period(ik)*g_exbfac ! NDCTEST: need gg_exbfac ?
+         if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
+             t_last_jump(ik) = t_last_jump(ik) + undo_fac*abs(jump(ik))*remap_period(ik)*g_exbfac ! NDCQUEST: need g_exbfac ..?
          end if
-         ! endNDCTESTnl
 
       end do
 
@@ -5287,7 +5083,7 @@ contains
     use dist_fn_arrays, only: aj0, aj1, vperp2, vpar, vpac, g, ittp, &
         aj0_tdep, kx_shift, kx_shift_old, &
         a, b ! NDCTESTneighb
-    use dist_fn_arrays, only: aj0_left, aj0_right ! NDCTESTfast
+    use dist_fn_arrays, only: aj0_left, aj0_right
     use theta_grid, only: ntgrid, shat, itor_over_B
     use kt_grids, only: aky, explicit_flowshear, implicit_flowshear, mixed_flowshear
     use le_grids, only: nlambda, ng2, lmax, anon, negrid
@@ -5297,8 +5093,6 @@ contains
     use gs2_time, only: dt0 => code_dt, dt1 => code_dt_prev1, dt2 => code_dt_prev2
     use hyper, only: D_res
     use constants, only: zi
-    use job_manage, only: time_message ! NDCTESTtime
-    use mp, only: proc0 ! NDCTESTtime
     use fields_arrays, only: phistar_old ! NDCTESTmichaelnew
     implicit none
     complex, dimension (-ntgrid:,:,:), intent (in) :: phi,    apar,    bpar
@@ -5410,13 +5204,7 @@ contains
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     case (source_option_full)
        if (il <= lmax) then
-          if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
-          if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
-          if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
           call set_source
-          if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
-          if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
-          if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
        else
           source = 0.0
        end if       
@@ -5477,8 +5265,6 @@ contains
           do ig = -ntgrid, ntgrid-1
 
              if (il < ittp(ig)) cycle
-             ! NDCQUEST: factors of 2 in those terms seem weird... In the non-ttp, there are no factors because
-             ! they're hidden in the bakdifing. Is there no factor of 2 here because how rhs is inverted for ttp ?
              source(ig) &
                   = g(ig,2,iglo)*a(ig,2,iglo) &
 #ifdef LOWFLOW
@@ -5490,50 +5276,25 @@ contains
              
              if(explicit_flowshear .or. mixed_flowshear) then 
          
-                 ! NDCQUEST: why is ttp treated differently ?
                  ! NDCQUEST: how do we check for CFL condition with new explicit terms ? Cannot add them to gexp_1 because it does not
                  ! get ExB re-mapped ... -> same issue with terms in set_source below.
 
-                 !if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
-                 !if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
-                 !if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
-                 !g_bd = calc_g_bd(ig,isgn,iglo,bd)
-                 !j0phi_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0,phi)
-                 !j0phi_tdep_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phi)
-                 !if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
-                 !if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
-                 !if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
-
-                 if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
-                 if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
-                 if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
                  source(ig) = source(ig) &
                      - zi * spec(is)%tz * vdrift_x(ig,isgn,iglo)/(2.*shat) * kx_shift_old(ik) * g(ig,2,iglo) &
                      - zi * ( vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik) + &
                          wdttpold(ig) ) * aj0_tdep%old(ig,iglo)*phi(ig,it,ik) & ! NDCTESTmichaelnew: replaced wdrift
                      + zi * wdttpold(ig) * aj0_old(ig)*phi(ig,it,ik) &
                      + zi * wstar(ik,ie,is) * (aj0_tdep%old(ig,iglo)-aj0_old(ig))*phi(ig,it,ik)
-                 if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
-                 if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
-                 if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
 
              end if
 
              ! NDCTESTmichaelnew
              if(explicit_flowshear .and. michael_exp) then
 
-                 if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
-                 if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
-                 if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
-
                  source(ig) = source(ig) &
                       - zi * ( vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik) + &
                           wdttpold(ig) ) * aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik) &
                       + zi * wstar(ik,ie,is) * aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik)
-
-                 if (proc0 .and. trigger_timer_aminv2) call time_message(.false.,timer_aminv_setsource,' Init_rhs') ! NDCTESTtime
-                 if (proc0 .and. trigger_timer_interp2) call time_message(.false.,timer_interp_setsource,' Init_rhs') ! NDCTESTtime
-                 if (proc0 .and. istep > 0) call time_message(.false.,timer_adv_setsource,' Init_rhs') ! NDCTESTtime for advance set_source
 
              end if
 #endif             
@@ -5737,16 +5498,6 @@ contains
          !
          ! For more details, see notes from Nicolas Christen 11/2017
 
-         ! NDCTESTtime 
-         !!g_bd = calc_g_bd(ig,isgn,iglo,bd)
-         !!j0phi_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0,phi)
-         !!j0phi_tdep_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phi)
-         !g_bd = 0.5 * (bdfac_p*g(ig+1,isgn,iglo) + bdfac_m*g(ig,isgn,iglo))
-         !j0phi_bd = fphi * 0.5 * ( bdfac_p*aj0(ig+1,iglo)*phi(ig+1,it,ik) &
-         !    + bdfac_m*aj0(ig,iglo)*phi(ig,it,ik) )
-         !j0phi_tdep_bd = fphi * 0.5 * ( bdfac_p*aj0_tdep%old(ig+1,iglo)*phi(ig+1,it,ik) &
-         !    + bdfac_m*aj0_tdep%old(ig,iglo)*phi(ig,it,ik) )
-
          if(mixed_flowshear .or. explicit_flowshear) then
 
              g_bd = bdfac_r*g(ig+1,isgn,iglo) + bdfac_l*g(ig,isgn,iglo)
@@ -5787,28 +5538,6 @@ contains
 
          end if
 
-         ! NDCTEST: either use following or wdrift_tdep above. !!! FOLLOWING HAS A MISTAKE SOMEWHERE !!!
-         ! With the implicit implementation of flow-shear, we add here all new time-dependent terms from the RHS
-         ! of the GK eq. In mixed and explicit implementations, those are treated explicitly similarly to the
-         ! nonlinear term (see add_flowshear_explicit). -- NDC 02/2018
-         !if(implicit_flowshear) then
-         !    source(ig) = source(ig) &
-         !        + (-1.)*zi*vdrift_x(ig,isgn,iglo)/shat * ( &
-         !        (1.0-fexp(is))*kx_shift(ik)*calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%new,phinew) + &
-         !        fexp(is)*kx_shift_old(ik)*calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phi) ) &
-         !        + (-2.)*zi*wdrift(ig,isgn,iglo) * ( (1.0-fexp(is))*calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%new,phinew) + &
-         !        fexp(is)*calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phi) ) &
-         !        + 2.*zi*wdrift(ig,isgn,iglo) * ( (1.0-fexp(is))*calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0,phinew) + &
-         !        fexp(is)*calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0,phi) ) &
-         !        + 2.*code_dt * vpar(ig,isgn,iglo) * ( (1.0-fexp(is))*calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%new,phinew) + &
-         !        fexp(is)*calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old,phi) ) &
-         !        + (-2.)*code_dt*zi*aky(ik)/spec(is)%stm*itor_over_B(ig)*vpac(ig,isgn,iglo)*g_exb* ( &
-         !        (1.0-fexp(is))*calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%new-aj0,phinew) + &
-         !        fexp(is)*calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old-aj0,phi) ) &
-         !        + 2.*zi*wstar(ik,ie,is) * ( (1.0-fexp(is))*calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%new-aj0,phinew) + &
-         !        fexp(is)*calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,aj0_tdep%old-aj0,phi) )
-         !end if
-
 #endif
       end do
 
@@ -5848,13 +5577,11 @@ contains
          case (1)
             do ig = -ntgrid, ntgrid-1
                source(ig) = source(ig) + 2.*code_dt*gexp_1(ig,isgn,iglo)
-               !write(*,*) 'case 1:', '  ', 0.5*code_dt*gexp_1(ig,isgn,iglo) ! NDCTEST
             end do
          case (2) 
             do ig = -ntgrid, ntgrid-1
                source(ig) = source(ig) + 2.*code_dt*( &
                     1.5*gexp_1(ig,isgn,iglo) - 0.5*gexp_2(ig,isgn,iglo))
-               !write(*,*) 'case 2:', '  ', 0.5*code_dt*(1.5*gexp_1(ig,isgn,iglo)-0.5*gexp_2(ig,isgn,iglo)) ! NDCTEST
             end do
          case default
             do ig = -ntgrid, ntgrid-1
@@ -5868,50 +5595,12 @@ contains
                           c0*gexp_1(ig,isgn,iglo) &
                         + c1*gexp_2(ig,isgn,iglo) &
                         + c2*gexp_3(ig,isgn,iglo))
-                 !write(*,*) 'case 3:', '  ', 0.5*(c0*gexp_1(ig,isgn,iglo)+c1*gexp_2(ig,isgn,iglo)+c2*gexp_3(ig,isgn,iglo)) ! NDCTEST
-                 !write(*,*) 'ADDING STUFF' ! NDCTEST
             end do
          end select
       end if
 #endif
 
     end subroutine set_source
-  
-    !! Bakdif'ed version of J0*phi
-    !function calc_j0phi_bd(ig,isgn,it,ik,iglo,bd,my_aj0,my_phi)
-    !    
-    !    use run_parameters, only: fphi
-    !    use gs2_layouts, only: g_lo
-    !    use theta_grid, only: ntgrid
-    !    
-    !    implicit none
-
-    !    integer, intent(in) :: ig, isgn, it, ik, iglo
-    !    real, intent(in) :: bd
-    !    real, dimension(-ntgrid:,g_lo%llim_proc:), intent(in) :: my_aj0
-    !    complex, dimension(-ntgrid:,:,:), intent(in) :: my_phi
-    !    complex :: calc_j0phi_bd
-
-    !    calc_j0phi_bd = fphi * 0.5 * ( (1+bd*(3-2*isgn))*my_aj0(ig+1,iglo)*my_phi(ig+1,it,ik) + &
-    !       (1-bd*(3-2*isgn))*my_aj0(ig,iglo)*my_phi(ig,it,ik) )
-
-    !end function calc_j0phi_bd
-    !  
-    !! Bakdif'ed version of g
-    !function calc_g_bd(ig,isgn,iglo,bd)
-    !    
-    !    use dist_fn_arrays, only: g
-
-    !    implicit none
-
-    !    integer, intent(in) :: ig, isgn, iglo
-    !    real, intent(in) :: bd
-    !    complex :: calc_g_bd
-
-    !    calc_g_bd = 0.5 * ((1+bd*(3-2*isgn))*g(ig+1,isgn,iglo) + (1-bd*(3-2*isgn))*g(ig,isgn,iglo))
-
-    !end function calc_g_bd
-
 
   end subroutine get_source_term
 
@@ -6163,7 +5852,7 @@ contains
       use gs2_layouts, only: g_lo
       use nonlinear_terms, only: nonlinear_mode_switch, nonlinear_mode_none, nonlinear_mode_on
       use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear, &
-          apply_flowshear_nonlin ! NDCTEST_nl_vslin
+          apply_flowshear_nonlin
       use gs2_time, only: save_dt_cfl
 
       implicit none
@@ -6220,7 +5909,7 @@ contains
 
           if (istep /= istep_last) then
 
-              g3 = g2 ! NDCQUEST: how is this undone if time-step is being re-set ? -> with if condition above ?
+              g3 = g2 ! NDCQUEST: cannot be undone if time-step is being re-set ...
               g2 = g1
  
               call debug_message(verb, 'dist_fn::add_explicit copied old terms')
@@ -6231,21 +5920,17 @@ contains
               ! Nonlinear term
               if(nonlinear_mode_switch == nonlinear_mode_on) then
                   call debug_message(verb, 'dist_fn::add_explicit calling nonlinear_terms::add_nl')
-                  ! NDCTESTnl
-                  if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then ! NDCTEST_nl_vslin: remove last case
+                  if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
                       call update_flowshear_phase_fac(g_exb)
                   end if
-                  ! endNDCTESTnl
                   if(gryfx_zonal%on) then
                       call add_nl_gryfx (g1) 
                   else
-                      ! NDCTESTnl: added flowshear case
-                      if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin: remove last logical
+                      if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
                           call add_nl(g1, phi, apar, bpar, g_exb)
                       else
                           call add_nl(g1, phi, apar, bpar)
                       end if
-                      ! endNDCTESTnl
                   endif
                   
                   ! Takes g1 containing the nonlinear term at grid points and returns g1 at cell centers.
@@ -6255,26 +5940,7 @@ contains
                       call center (g1)
                   end if
 
-              ! NDCTEST: remove ringing
-              !else
-
-              !    ! If add_nl did not re-compute g1, need to zero it for add_flowshear_explicit -- NDC 02/2018
-              !    do iglo = g_lo%llim_proc, g_lo%ulim_alloc ! NDCQUEST: alloc or proc ?
-              !        do isgn = 1, 2
-              !            g1(:,isgn,iglo) = 0.
-              !        end do
-              !    end do
-
               end if
-
-              ! NDCTEST: remove ringing
-              ! Terms from continuous flow-shear implementation
-              !if(explicit_flowshear .or. mixed_flowshear) then
-              !    call debug_message(verb, &
-              !        'dist_fn::add_explicit calling add_flowshear_explicit')
-              !    call add_flowshear_explicit(g1,g,phi,bd)
-              !    !write(*,*) g1(0,1,g_lo%llim_proc:g_lo%llim_proc+10) ! NDCTEST
-              !end if
  
               if(reset) return !Return if resetting
  
@@ -6306,142 +5972,6 @@ contains
 
       end subroutine add_explicit
    
-      ! NDCTEST: remove ringing 
-      !subroutine add_flowshear_explicit(g1,g,phi,bd)
-      !    
-      !    use theta_grid, only: ntgrid, shat, itor_over_B
-      !    use gs2_layouts, only: g_lo, is_idx, it_idx, ik_idx, ie_idx
-      !    use constants, only: zi
-      !    use species, only: spec
-      !    use gs2_time, only: code_dt
-      !    use dist_fn_arrays, only: kx_shift_old, vpar, aj0, aj0_tdep, vpac, &
-      !        gamtot_tdep
-      !    use kt_grids, only: aky, naky, ntheta0, explicit_flowshear
-      !    use run_parameters, only: wunits
-
-      !    implicit none
-
-      !    complex, dimension(-ntgrid:,:,g_lo%llim_proc:), intent(inout) :: g1
-      !    complex, dimension(-ntgrid:,:,g_lo%llim_proc:), intent(in) :: g
-      !    complex, dimension(-ntgrid:,:,:), intent(in) :: phi
-      !    real, intent(in) :: bd
-      !    integer :: ig, iglo, isgn, is, it, ik, ie
-      !    complex :: g_bd, j0phi_bd, j0phi_tdep_bd
-      !            
-      !    ! In the GK eq, operators with a time-dependence due to flowshear
-      !    ! are split into L_tdep = L + (L_tdep - L). The first term is treated
-      !    ! by the standard algorithm. The second term is treated explicitly and
-      !    ! added here to gexp_1.
-      !    !
-      !    ! The added terms are:
-      !    ! -i * V_B . (k_tdep - k) * g
-      !    ! -i * Z*e*F0/T * (V_B+V_Cor) . k_tdep * J0_tdep * phi
-      !    ! +i * Z*e*F0/T * (V_B+V_Cor) . k * J0 * phi
-      !    ! -Z*e*F0/T * wpar * b . grad(theta) * d/dthetha [(J0_tdep - J0) * phi]
-      !    ! -i*c*k_alpha * m*F0/T * I*wpar/B * dOmega/dpsi * (J0_tdep - J0) * phi
-      !    ! -i*c*k_alpha * dF0/dpsi * (J0_tdep - J0) * phi
-      !    !
-      !    ! For more details, see notes from Nicolas Christen 11/2017
-      !    !write(*,*) "we're in" ! NDCTEST
-
-      !    do ig = -ntgrid, ntgrid-1
-      !    
-      !        do iglo = g_lo%llim_proc, g_lo%ulim_alloc ! NDCQUEST: alloc or proc ?
-
-      !            do isgn = 1, 2
-      !            
-      !                is = is_idx(g_lo,iglo)
-      !                it = it_idx(g_lo,iglo)
-      !                ik = ik_idx(g_lo,iglo)
-      !                ie = ie_idx(g_lo,iglo)
-
-      !                g_bd = calc_g_bd(ig,isgn,iglo,bd)
-      !                j0phi_bd = calc_j0phi_bd(ig,isgn,it,ik,iglo,bd)
-      !                j0phi_tdep_bd = calc_j0phi_tdep_bd(ig,isgn,it,ik,iglo,bd)
-
-      !                !write(*,*) "Term1: ", (-1.)*zi * spec(is)%tz * vdrift_x(ig,isgn,iglo)/(2.*shat*code_dt) * kx_shift(ik) * g_bd ! NDCTEST
-      !                !write(*,*) "Term2: ", (-1.)*zi * ( vdrift_x(ig,isgn,iglo)/(2.*shat*code_dt)*kx_shift(ik) + wdrift(ig,isgn,iglo)/code_dt ) * j0phi_tdep_bd
-      !                !write(*,*) "Term3: ", zi * wdrift(ig,isgn,iglo)/code_dt * j0phi_bd
-      !                !write(*,*) "Term4: ", (-1.)*vpar(ig,isgn,iglo)/code_dt*((aj0_tdep%old(ig+1,iglo)-aj0(ig+1,iglo))*phi(ig+1,it,ik)-(aj0_tdep%old(ig,iglo)-aj0(ig,iglo))*phi(ig,it,ik))
-      !                !write(*,*) "Term5: ", (-1.)*zi * aky(ik)/spec(is)%stm * itor_over_B(ig) * vpac(ig,isgn,iglo) * g_exb * (j0phi_tdep_bd-j0phi_bd)
-      !                !write(*,*) "Term6: ", zi * wstar(ik,ie,is)/code_dt * (j0phi_tdep_bd-j0phi_bd)
-
-      !                g1(ig,isgn,iglo) = g1(ig,isgn,iglo) + &
-      !                    (-1.)*zi * spec(is)%tz * vdrift_x(ig,isgn,iglo)/(2.*shat*code_dt) * kx_shift_old(ik) * g_bd + &
-      !                    (-1.)*zi * ( vdrift_x(ig,isgn,iglo)/(2.*shat*code_dt)*kx_shift_old(ik) + &
-      !                        wdrift(ig,isgn,iglo)/code_dt ) * j0phi_tdep_bd + &
-      !                    zi * wdrift(ig,isgn,iglo)/code_dt * j0phi_bd + &
-      !                    (-1.)*vpar(ig,isgn,iglo)/code_dt * ( (aj0_tdep%old(ig+1,iglo)-aj0(ig+1,iglo))*phi(ig+1,it,ik) - &
-      !                        (aj0_tdep%old(ig,iglo)-aj0(ig,iglo))*phi(ig,it,ik) ) + & ! NDCQUEST: worked without 1./code_dt
-      !                    (-1.)*zi * 2.*wunits(ik)/spec(is)%stm * omprimfac * itor_over_B(ig) * vpac(ig,isgn,iglo) * g_exb * &
-      !                        (j0phi_tdep_bd-j0phi_bd) + &
-      !                    zi * wstar(ik,ie,is)/code_dt * (j0phi_tdep_bd-j0phi_bd)
-
-      !            end do
-
-      !        end do
-
-      !    end do
-
-      !end subroutine add_flowshear_explicit
-
-      ! Bakdif'ed version of g
-      !function calc_g_bd(ig,isgn,iglo,bd)
-      !    
-      !    use dist_fn_arrays, only: g
-
-      !    implicit none
-
-      !    integer, intent(in) :: ig, isgn, iglo
-      !    real, intent(in) :: bd
-      !    complex :: calc_g_bd
-
-      !    calc_g_bd = 0.5 * ((1+bd*(3-2*isgn))*g(ig+1,isgn,iglo) + (1-bd*(3-2*isgn))*g(ig,isgn,iglo))
-
-      !end function calc_g_bd
-
-      !! Bakdif'ed version of J0*phi
-      !function calc_j0phi_bd(ig,isgn,it,ik,iglo,bd)
-      !    
-      !    use run_parameters, only: fphi
-      !    use fields_arrays, only: phi
-      !    use dist_fn_arrays, only: aj0
-      !    
-      !    implicit none
-
-      !    integer, intent(in) :: ig, isgn, it, ik, iglo
-      !    real, intent(in) :: bd
-      !    complex :: calc_j0phi_bd
-
-      !    calc_j0phi_bd = fphi * 0.5 * ( (1+bd*(3-2*isgn))*aj0(ig+1,iglo)*phi(ig+1,it,ik) + &
-      !       (1-bd*(3-2*isgn))*aj0(ig,iglo)*phi(ig,it,ik) )
-
-      !end function calc_j0phi_bd
-
-      !! Bakdif'ed version of J0_tdep*phi
-      !function calc_j0phi_tdep_bd(ig,isgn,it,ik,iglo,bd)
-      !    
-      !    use run_parameters, only: fphi
-      !    use fields_arrays, only: phi
-      !    use dist_fn_arrays, only: aj0_tdep
-      !    
-      !    implicit none
-
-      !    integer, intent(in) :: ig, isgn, it, ik, iglo
-      !    real, intent(in) :: bd
-      !    complex :: calc_j0phi_tdep_bd
-
-      !    calc_j0phi_tdep_bd = fphi * 0.5 * ( (1+bd*(3-2*isgn))*aj0_tdep%old(ig+1,iglo)*phi(ig+1,it,ik) + &
-      !       (1-bd*(3-2*isgn))*aj0_tdep%old(ig,iglo)*phi(ig,it,ik) )
-
-      !end function calc_j0phi_tdep_bd
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-      ! subroutine 'center' takes input array evaluated at theta grid points
-      ! and overwrites it with array evaluated at cell centers
-
-      ! Removed confusing factor of 2. --NDC 11/2017
-
       subroutine center (gtmp)
 !
 !CMR, 13/10/2014
@@ -6538,11 +6068,9 @@ contains
     integer, intent (in) :: istep
     integer, intent (in) :: iglo
     complex, intent (in) :: sourcefac
-    ! NDCTESTfast
     real, dimension(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc), intent(in) :: aj0_input
     complex, dimension(-ntgrid:ntgrid,ntheta0,naky), intent(in) :: phi_input
     complex, dimension(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc), intent(in) :: r_input, ainv_input
-    ! endNDCTESTfast
 
     integer :: ig, ik, it, il, ie, isgn, is
     integer :: ilmin
@@ -6557,9 +6085,7 @@ contains
     real :: aj0_l, aj0_r
     complex :: phi_l, phi_r
     ! endNDCTESTneighb
-    ! NDCTESTfast
     complex, dimension(-ntgrid:ntgrid,2) :: my_r, my_ainv
-    ! endNDCTESTfast
           
 !    call prof_entering ("invert_rhs_1", "dist_fn")
 
@@ -6618,7 +6144,6 @@ contains
     ! gnew is the inhomogeneous solution
     gnew(:,:,iglo) = 0.0
 
-    ! NDCTESTfast
     aj0_l = aj0_input(-ntgrid,iglo)
     aj0_r = aj0_input(ntgrid,iglo)
     do isgn = 1,2
@@ -6627,7 +6152,6 @@ contains
     end do
     phi_l = phi_input(-ntgrid,it,ik)
     phi_r = phi_input(ntgrid,it,ik)
-    ! endNDCTESTfast
     
 !CMR, 18/4/2012:
 ! What follows is a selectable improved parallel bc for passing particles.
@@ -6910,11 +6434,9 @@ endif
   subroutine invert_rhs_linked &
        (phi, apar, bpar, phinew, aparnew, bparnew, istep, sourcefac)
     use dist_fn_arrays, only: gnew
-    ! NDCTESTfast
     use dist_fn_arrays, only: kperp2_left, aj0_left, r_left, ainv_left, &
         kperp2_right, aj0_right, r_right, ainv_right, &
         aj0, aj0_tdep, r, ainv
-    ! endNDCTESTfast
     use theta_grid, only: bmag, ntgrid
     use le_grids, only: energy, al, nlambda, ng2, anon
     use gs2_layouts, only: g_lo, ik_idx, it_idx, il_idx, ie_idx, is_idx, idx
@@ -6950,7 +6472,6 @@ endif
     ! endNDCTESTneighb
     logical :: michael_exp = .true. ! NDCTESTswitchexp
     
-    ! NDCTESTfast
     if(implicit_flowshear .or. mixed_flowshear) then
 
         ! When computing the shifted aminvs for interpolation,
@@ -7001,7 +6522,6 @@ endif
         end do
     
     end if
-    ! endNDCTESTfast
 
     if (no_comm) then
        ! nothing
@@ -7262,13 +6782,11 @@ endif
     use gs2_time, only: code_time
     use constants, only: zi, pi
     use prof, only: prof_entering, prof_leaving
-    ! NDCTESTfast
     use dist_fn_arrays, only: kperp2_left, aj0_left, r_left, ainv_left, &
         kperp2_right, aj0_right, r_right, ainv_right, &
         aj0, aj0_tdep, r, ainv
     use fields_arrays, only: phistar_old
     use kt_grids, only: ntheta0, naky, explicit_flowshear, implicit_flowshear, mixed_flowshear
-    ! endNDCTESTfast
     implicit none
     complex, dimension (-ntgrid:,:,:), intent (in) :: phi,    apar,    bpar
     complex, dimension (-ntgrid:,:,:), intent (in) :: phinew, aparnew, bparnew
@@ -7278,10 +6796,8 @@ endif
 
     real :: time
     complex :: sourcefac
-    ! NDCTESTfast
     logical :: michael_exp = .true.
     complex, dimension(-ntgrid:ntgrid,ntheta0,naky) :: phi_input
-    ! endNDCTESTfast
 
     call prof_entering ("invert_rhs", "dist_fn")
 
@@ -7301,59 +6817,11 @@ endif
     case (boundary_option_linked)
        call invert_rhs_linked &
             (phi, apar, bpar, phinew, aparnew, bparnew, istep, sourcefac) 
-    case default
-       ! NDCTESTfast
-       if(implicit_flowshear .or. mixed_flowshear) then
-
-           ! When computing the shifted aminvs for interpolation,
-           ! for_interp_left/right are set to true in fields_implicit::init_response_matrix
-           if(for_interp_left) then
-               do iglo = g_lo%llim_proc, g_lo%ulim_proc
-                  call invert_rhs_1 (phi, apar, bpar, phinew, aparnew, bparnew, &
-                       istep, iglo, sourcefac, aj0_left, phinew, r_left, ainv_left)
-               end do
-           elseif(for_interp_right) then
-               do iglo = g_lo%llim_proc, g_lo%ulim_proc
-                  call invert_rhs_1 (phi, apar, bpar, phinew, aparnew, bparnew, &
-                       istep, iglo, sourcefac, aj0_right, phinew, r_right, ainv_right)
-               end do
-           else
-               do iglo = g_lo%llim_proc, g_lo%ulim_proc
-                  call invert_rhs_1 (phi, apar, bpar, phinew, aparnew, bparnew, &
-                       istep, iglo, sourcefac, aj0_tdep%new, phinew, r, ainv)
-               end do
-           end if
-
-       elseif(explicit_flowshear) then
-           
-           if(michael_exp) then
-               if (first_gk_solve) then
-                   phi_input = phinew + phistar_old
-               else
-                   ! NDCQUEST: the next line is wrong. For the second GK-solve, we should be adding 
-                   ! phistar_new to store the full phi[it+1] in phinew. But we do not know phistar_new
-                   ! until we know the full g[it+1], so approximate to phistar_old.
-                   ! I suspect this has very little impact on solutions.
-                   phi_input = phinew + phistar_old
-               end if
-           else
-               phi_input = phinew
-           end if
-                   
-           do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              call invert_rhs_1 (phi, apar, bpar, phinew, aparnew, bparnew, &
-                   istep, iglo, sourcefac, aj0_tdep%new, phi_input, r, ainv)
-           end do
-
-       else
-                   
-           do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              call invert_rhs_1 (phi, apar, bpar, phinew, aparnew, bparnew, &
-                   istep, iglo, sourcefac, aj0, phinew, r, ainv)
-           end do
-       
-       end if
-       ! endNDCTESTfast
+    case default ! NDCQUEST: only support linked BC with new flow shear -- NDC 08/18
+       do iglo = g_lo%llim_proc, g_lo%ulim_proc
+          call invert_rhs_1 (phi, apar, bpar, phinew, aparnew, bparnew, &
+               istep, iglo, sourcefac, aj0, phinew, r, ainv)
+       end do
     end select
 
     call prof_leaving ("invert_rhs", "dist_fn")
@@ -7407,7 +6875,7 @@ endif
 
   subroutine getan (antot, antota, antotp, expflow_opt)
     use dist_fn_arrays, only: vpa, vperp2, aj0, aj1, gnew, aj0_tdep, g, &
-        aj0_left, aj0_right ! NDCTESTfast
+        aj0_left, aj0_right
     use kt_grids, only: kperp2, implicit_flowshear, mixed_flowshear
     use species, only: nspec, spec
     use theta_grid, only: ntgrid
@@ -7415,7 +6883,6 @@ endif
     use run_parameters, only: beta, fphi, fapar, fbpar
     use prof, only: prof_entering, prof_leaving
     use gs2_layouts, only: g_lo
-    use mp, only: proc0 ! NDCTEST
     implicit none
     complex, dimension (-ntgrid:,:,:), intent (out) :: antot, antota, antotp
     integer, intent(in), optional :: expflow_opt
@@ -7477,7 +6944,7 @@ endif
                   do isgn = 1, 2
                      do ig=-ntgrid, ntgrid       
                          g0(ig,isgn,iglo) = (aj0_tdep%old(ig,iglo) - aj0(ig,iglo)) * g(ig,isgn,iglo) &
-                             + aj0(ig,iglo)*gnew(ig,isgn,iglo) ! NDCQUEST: Felix's method ringing ?
+                             + aj0(ig,iglo)*gnew(ig,isgn,iglo)
                      end do
                   end do
                end do
@@ -7521,7 +6988,7 @@ endif
 
        else
              
-           ! Old behaviour  
+           ! Behaviour without new flow shear algorithm.
            do iglo = g_lo%llim_proc, g_lo%ulim_proc
               do isgn = 1, 2
                  do ig=-ntgrid, ntgrid       
@@ -8139,9 +7606,7 @@ endif
     use le_grids, only: anon, integrate_species
     use gs2_layouts, only: g_lo, ie_idx, is_idx
     use run_parameters, only: tite
-    use gs2_layouts, only: ik_idx, il_idx, it_idx, is_idx ! NDCTEST
-    use job_manage, only: time_message ! NDCTESTtime
-    use mp, only: proc0 ! NDCTESTtime
+    use gs2_layouts, only: ik_idx, il_idx, it_idx, is_idx
     implicit none
     integer :: iglo, isgn
     integer :: ik, it, ie, is
@@ -8178,11 +7643,6 @@ endif
     if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
        allocate (gamtot3(-ntgrid:ntgrid,ntheta0,naky))
     endif
-    
-    !write(*,*) 'interp_shift_kx_down = ', interp_shift_kx_down ! NDCTEST
-    !write(*,*) 'interp_shift_kx_up = ', interp_shift_kx_up ! NDCTEST
-    
-    !write(*,*) 'entering loop' ! NDCTEST
     
     do iglo = g_lo%llim_proc, g_lo%ulim_proc
        ie = ie_idx(g_lo,iglo)
@@ -8313,10 +7773,7 @@ endif
     use run_parameters, only: fphi, fapar, fbpar
     use run_parameters, only: beta, tite
     use species, only: spec, has_electron_species
-    use dist_fn_arrays, only: gamtot_tdep, &
-        gamtot_left, gamtot_right ! NDCTESTfast
-    use dist_fn_arrays, only: kx_shift ! NDCTEST
-    use kt_grids, only: akx ! NDCTEST
+    use dist_fn_arrays, only: gamtot_tdep, gamtot_left, gamtot_right
     implicit none
     complex, dimension (-ntgrid:,:,:), intent (in) :: phi, apar, bpar
     complex, dimension (-ntgrid:,:,:), intent (in) :: antot, antota, antotp
@@ -8324,20 +7781,13 @@ endif
     integer, intent(in), optional :: expflow_opt
 
     integer :: ik, it
-    real :: dkx ! NDCTEST
 !    logical :: first = .true.
     
 !    if (first) allocate (fl_avg(ntheta0, naky))
     if (.not. allocated(fl_avg)) allocate (fl_avg(ntheta0, naky))
     fl_avg = 0.
 
-<<<<<<< HEAD
-    if (.not. has_electron_species(spec)) then ! NDCQUEST: no effect of flow shear here. But should make adiab. elec. compatible with flowshear ? And EM ? And LOWFLOW ?
-||||||| merged common ancestors
-    if (.not. has_electron_species(spec)) then ! NDCQUEST: should make this compatible with flowshear ? And EM ? And LOWFLOW ?
-=======
-    if (.not. has_electron_species(spec)) then ! NDCQUEST: no effect of flowshear here. But should make this compatible with adiab. elec. ? And EM ? And LOWFLOW ?
->>>>>>> no_neighbours_explicit
+    if (.not. has_electron_species(spec)) then
        if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
           
 !          if (first) then 
@@ -8927,7 +8377,7 @@ endif
     use run_parameters, only: beta, fphi, fapar, fbpar
     use theta_grid, only: ntgrid, bmag
     use kt_grids, only: ntheta0, naky, kperp2, &
-        implicit_flowshear, mixed_flowshear
+        explicit_flowshear, implicit_flowshear, mixed_flowshear
     use dist_fn_arrays, only: gamtot_tdep
     
     complex, dimension (-ntgrid:,:,:), intent (out) :: phi, apar, bpar
@@ -8960,7 +8410,10 @@ endif
 
 !CMR, 1/8/2011:  bmag corrections here: 
        ! NDCQUEST: should those beta corrections still be there for ES runs with beta/=0 ?
-       if(implicit_flowshear .or. mixed_flowshear) then ! NDCQUEST: what to do for explicit?
+       ! NDCQUEST: with the mixed flow shear algorithm, phi calculated here will differ slightly
+       ! from the one saved in the restart file (because part of the time dependence in QN
+       ! has been made explicit and moved to the GK eq).
+       if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
            numerator = (beta * gamtot2 + bmagsp**2) * antot - (beta * gamtot1) * antotp
            denominator = (beta * gamtot2 + bmagsp**2) * gamtot_tdep%new + (beta/2.0) * gamtot1 * gamtot1
        else

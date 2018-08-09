@@ -21,16 +21,14 @@ module dist_fn_arrays
   public :: kx_shift_old
   public :: aj0_tdep
   public :: gamtot_tdep
-  public :: t_last_jump ! NDCTESTnl
-  public :: remap_period ! NDCTESTnl
+  public :: t_last_jump
+  public :: remap_period
   ! NDCTESTneighb
   public :: jump
   public :: a, b, r, ainv
   ! endNDCTESTneighb
-  ! NDCTESTfast
   public :: kperp2_left, aj0_left, gamtot_left, r_left, ainv_left
   public :: kperp2_right, aj0_right, gamtot_right, r_right, ainv_right
-  ! endNDCTESTfast
   
   ! dist fn
   complex, dimension (:,:,:), allocatable :: g, gnew, g_restart_tmp
@@ -84,21 +82,19 @@ module dist_fn_arrays
 
   real, dimension(:), allocatable :: kx_shift_old
 
-  real, dimension(:), allocatable :: t_last_jump ! NDCTESTnl
-  real, dimension(:), allocatable :: remap_period ! NDCTESTnl
+  real, dimension(:), allocatable :: t_last_jump
+  real, dimension(:), allocatable :: remap_period
 
   ! NDCTESTneighb
   integer, dimension(:), allocatable :: jump
   complex, dimension (:,:,:), allocatable :: a, b, r, ainv
   ! endNDCTESTneighb
   
-  ! NDCTESTfast
   real, dimension(:,:,:), allocatable :: kperp2_left, kperp2_right
   real, dimension(:,:), allocatable :: aj0_left, aj0_right
   real, dimension(:,:,:), allocatable :: gamtot_left, gamtot_right
   complex, dimension(:,:,:), allocatable :: r_left, r_right
   complex, dimension(:,:,:), allocatable :: ainv_left, ainv_right
-  ! endNDCTESTfast
   
 contains
 
