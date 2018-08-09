@@ -102,7 +102,7 @@ module dist_fn_arrays
   
 contains
 
-  subroutine g_adjust (g, phi, bpar, facphi, facbpar)
+  subroutine g_adjust (g, phi, bpar, facphi, facbpar, aj0_opt)
     !CMR, 17/4/2012: 
     ! g_adjust transforms between representations of perturbed dist'n func'n.
     !    <delta_f> = g_wesson J0(Z) - q phi/T F_m  where <> = gyroaverage
@@ -120,10 +120,12 @@ contains
     use theta_grid, only: ntgrid
     use le_grids, only: anon, jend, ng2
     use gs2_layouts, only: g_lo, ik_idx, it_idx, ie_idx, is_idx, il_idx
+    use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear
     implicit none
     complex, dimension (-ntgrid:,:,g_lo%llim_proc:), intent (in out) :: g
     complex, dimension (-ntgrid:,:,:), intent (in) :: phi, bpar
     real, intent (in) :: facphi, facbpar
+    real, dimension(-ntgrid:,g_lo%llim_proc:), intent(in), optional :: aj0_opt
 
     integer :: iglo, ig, ik, it, ie, is, il
     complex :: adj
@@ -131,30 +133,52 @@ contains
 
     if (minval(jend) .gt. ng2) trapped=.true.
 
-    do iglo = g_lo%llim_proc, g_lo%ulim_proc
-       ik = ik_idx(g_lo,iglo)
-       it = it_idx(g_lo,iglo)
-       ie = ie_idx(g_lo,iglo)
-       is = is_idx(g_lo,iglo)
-       il = il_idx(g_lo,iglo)
+    ! Flowshear cases: we can pass time dependent J0 as argument -- NDC 08/18
+    if(present(aj0_opt)) then
+        do iglo = g_lo%llim_proc, g_lo%ulim_proc
+           ik = ik_idx(g_lo,iglo)
+           it = it_idx(g_lo,iglo)
+           ie = ie_idx(g_lo,iglo)
+           is = is_idx(g_lo,iglo)
+           il = il_idx(g_lo,iglo)
 
-       ! BD:  bpar == delta B_parallel / B_0(theta) so no extra factor of 
-       ! 1/bmag is needed here.
-       do ig = -ntgrid, ntgrid
-          !<DD>Don't adjust in the forbidden region as we don't set g/h here
+           do ig = -ntgrid, ntgrid
+              if ( trapped .and. il > jend(ig)) cycle 
+
+              adj = anon(ie)*2.0*vperp2(ig,iglo)*aj1(ig,iglo) &
+                   *bpar(ig,it,ik)*facbpar &
+                   + spec(is)%z*anon(ie)*phi(ig,it,ik)*aj0_opt(ig,iglo) &
+                   /spec(is)%temp*facphi
+              g(ig,1,iglo) = g(ig,1,iglo) + adj
+              g(ig,2,iglo) = g(ig,2,iglo) + adj
+           end do
+        end do
+    else ! previous usage with aj0
+        do iglo = g_lo%llim_proc, g_lo%ulim_proc
+           ik = ik_idx(g_lo,iglo)
+           it = it_idx(g_lo,iglo)
+           ie = ie_idx(g_lo,iglo)
+           is = is_idx(g_lo,iglo)
+           il = il_idx(g_lo,iglo)
+
+           ! BD:  bpar == delta B_parallel / B_0(theta) so no extra factor of 
+           ! 1/bmag is needed here.
+           do ig = -ntgrid, ntgrid
+              !<DD>Don't adjust in the forbidden region as we don't set g/h here
 !CMR, 13/10/2014: attempting minor reduction in memory bandwidth by replacing 
-!         if( forbid(ig,il) ) cycle with 
-!         if ( trapped .and. il > jend(ig))
-          if ( trapped .and. il > jend(ig)) cycle 
+!             if( forbid(ig,il) ) cycle with 
+!             if ( trapped .and. il > jend(ig))
+              if ( trapped .and. il > jend(ig)) cycle 
 
-          adj = anon(ie)*2.0*vperp2(ig,iglo)*aj1(ig,iglo) &
-               *bpar(ig,it,ik)*facbpar &
-               + spec(is)%z*anon(ie)*phi(ig,it,ik)*aj0(ig,iglo) &
-               /spec(is)%temp*facphi
-          g(ig,1,iglo) = g(ig,1,iglo) + adj
-          g(ig,2,iglo) = g(ig,2,iglo) + adj
-       end do
-    end do
+              adj = anon(ie)*2.0*vperp2(ig,iglo)*aj1(ig,iglo) &
+                   *bpar(ig,it,ik)*facbpar &
+                   + spec(is)%z*anon(ie)*phi(ig,it,ik)*aj0(ig,iglo) &
+                   /spec(is)%temp*facphi
+              g(ig,1,iglo) = g(ig,1,iglo) + adj
+              g(ig,2,iglo) = g(ig,2,iglo) + adj
+           end do
+        end do
+    end if
   end subroutine g_adjust
 
   subroutine check_g_bouncepoints(g, ik,it,il,ie,is,err,tol)

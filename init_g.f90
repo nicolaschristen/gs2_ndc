@@ -912,7 +912,7 @@ contains
     chop_side = .true.
     left = .true.
     even = .true.
-    clean_init=.false.
+    clean_init=.true.
     new_field_init = .true.
     ikk(1) = 1
     ikk(2) = 2
@@ -3534,12 +3534,13 @@ contains
   end subroutine ginit_restart_file
 
   subroutine ginit_restart_many
-    use dist_fn_arrays, only: g, gnew
+    use dist_fn_arrays, only: g, gnew, kx_shift, kx_shift_old
     use fields_arrays, only: phi, apar, bpar, phinew, aparnew, bparnew
     use gs2_save, only: gs2_restore
     use mp, only: proc0, job
     use file_utils, only: error_unit
     use run_parameters, only: fphi, fapar, fbpar
+    use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear
     implicit none
     integer :: istatus, ierr
 
@@ -3554,6 +3555,10 @@ contains
     end if
     gnew = g
     phi=phinew ; apar=aparnew ; bpar=bparnew
+    ! When restarting flowshear cases -- NDC 08/18
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+        kx_shift_old = kx_shift
+    endif
   end subroutine ginit_restart_many
 
   subroutine ginit_restart_eig

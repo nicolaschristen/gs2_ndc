@@ -67,6 +67,7 @@ module gs2_save
   integer (kind_nf) :: ncid, thetaid, signid, gloid, kyid, kxid, nk_stir_dim
   integer (kind_nf) :: phir_id, phii_id, aparr_id, apari_id, bparr_id, bpari_id
   integer (kind_nf) :: kx_shift_id   ! MR: added to save kx_shift variable
+  integer (kind_nf) :: t_last_jump_id
   integer (kind_nf) :: t0id, gr_id, gi_id, vnm1id, vnm2id, delt0id
   integer (kind_nf) :: current_scan_parameter_value_id
   integer (kind_nf) :: a_antr_id, b_antr_id, a_anti_id, b_anti_id
@@ -103,7 +104,8 @@ contains
 !MR, 2007: save kx_shift array in restart file if allocated    
 # ifdef NETCDF
     use fields_arrays, only: phinew, aparnew, bparnew
-    use dist_fn_arrays, only: kx_shift  !MR
+    use dist_fn_arrays, only: kx_shift, &  !MR
+        t_last_jump
     use kt_grids, only: naky, ntheta0
     use antenna_data, only: nk_stir, a_ant, b_ant, ant_on
 # else
@@ -596,6 +598,14 @@ contains
           goto 1
        endif
 !       endif   ! MR end 
+
+       istatus = nf90_def_var (ncid, "t_last_jump", netcdf_real, &
+            (/ kyid /), t_last_jump_id)
+       if (istatus /= NF90_NOERR) then
+          ierr = error_unit()
+          write(ierr,*) "nf90_def_var t_last_jump error: ", nf90_strerror(istatus)
+          goto 1
+       endif
         
 !    if (proc0) then
 !      write (*,*) "Finished definitions"
@@ -835,6 +845,20 @@ contains
           if (istatus /= NF90_NOERR) call netcdf_error &
             (istatus, ncid, kx_shift_id, var = 'kx_shift dummy')
        endif ! MR end
+       
+       if (allocated(t_last_jump)) then
+          if (.not. allocated(stmp)) allocate (stmp(naky))   
+          stmp = t_last_jump
+          istatus = nf90_put_var (ncid, t_last_jump_id, stmp)
+          if (istatus /= NF90_NOERR) call netcdf_error &
+            (istatus, ncid, t_last_jump_id, var = 't_last_jump put')
+       else
+          if (.not. allocated(stmp)) allocate (stmp(naky))
+          stmp = 0.
+          istatus = nf90_put_var (ncid, t_last_jump_id, stmp)
+          if (istatus /= NF90_NOERR) call netcdf_error &
+            (istatus, ncid, t_last_jump_id, var = 't_last_jump dummy')
+       endif
 # ifdef NETCDF_PARALLEL
     end if
 # endif
@@ -872,7 +896,8 @@ contains
     use mp, only: iproc
     use fields_arrays, only: phinew, aparnew, bparnew
     use fields_arrays, only: phi, apar, bpar
-    use dist_fn_arrays, only: kx_shift   ! MR
+    use dist_fn_arrays, only: kx_shift, &   ! MR
+        t_last_jump
     use kt_grids, only: naky, ntheta0
 # endif
     use theta_grid, only: ntgrid
@@ -1004,6 +1029,11 @@ contains
           if (istatus /= NF90_NOERR) call netcdf_error (istatus, var='kx_shift')
        endif   ! MR end
 
+       if (allocated(t_last_jump)) then
+          istatus = nf90_inq_varid (ncid, "t_last_jump", t_last_jump_id)
+          if (istatus /= NF90_NOERR) call netcdf_error (istatus, var='t_last_jump')
+       endif
+
        istatus = nf90_inq_varid (ncid, "gr", gr_id)
        if (istatus /= NF90_NOERR) call netcdf_error (istatus, var='gr',&
          abort=abort_on_restart_fail)
@@ -1059,6 +1089,14 @@ contains
          call netcdf_error (istatus, ncid, kx_shift_id, var='kx_shift')
        kx_shift = stmp
     endif   ! MR end
+
+    if (allocated(t_last_jump)) then
+       if (.not. allocated(stmp)) allocate (stmp(naky))
+       istatus = nf90_get_var (ncid, t_last_jump_id, stmp)
+       if (istatus /= NF90_NOERR) &
+         call netcdf_error (istatus, ncid, t_last_jump_id, var='t_last_jump')
+       t_last_jump = stmp
+    endif
 
     if (fphi > epsilon(0.)) then
        istatus = nf90_get_var (ncid, phir_id, ftmpr)

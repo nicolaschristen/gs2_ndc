@@ -323,13 +323,13 @@ contains
     use gs2_layouts, only: accelx_lo, yxf_lo, &
         ie_idx,il_idx,is_idx,isign_idx,ig_idx ! NDCTESTremap_plot
     use dist_fn_arrays, only: g, g_adjust, &
-        t_last_jump ! NDCTESTnl
+        t_last_jump, aj0_tdep ! NDCTESTnl
     use species, only: spec
     use gs2_transforms, only: transform2, inverse2
     use run_parameters, only: fapar, fbpar, fphi, reset, immediate_reset
     use kt_grids, only: aky, akx, &
         ny ! NDCTESTremap_plot
-    use gs2_time, only: save_dt_cfl, check_time_step_too_large
+    use gs2_time, only: save_dt_cfl, check_time_step_too_large, code_time
     use constants, only: zi
     use unit_tests, only: debug_message
     implicit none
@@ -375,7 +375,11 @@ contains
     
     !Form g1=i*ky*g_wesson
     g1=g
-    call g_adjust(g1,phi,bpar,fphi,fbpar)
+    if(present(g_exb_opt)) then ! case with new flowshear algo -- NDC 08/18
+        call g_adjust(g1,phi,bpar,fphi,fbpar,aj0_tdep%old)
+    else
+        call g_adjust(g1,phi,bpar,fphi,fbpar)
+    end if
     do iglo = g_lo%llim_proc, g_lo%ulim_proc
        ik = ik_idx(g_lo,iglo)
        g1(:,:,iglo)=g1(:,:,iglo)*zi*aky(ik)
@@ -440,18 +444,26 @@ contains
 
     !Form g1=i*kx*g_wesson
     g1=g
-    call g_adjust(g1,phi,bpar,fphi,fbpar)
-    do iglo = g_lo%llim_proc, g_lo%ulim_proc
-       it = it_idx(g_lo,iglo)
-       ! NDCTESTnl
-       if(present(g_exb_opt)) then
+    if(present(g_exb_opt)) then ! case with new flowshear algo -- NDC 08/18
+        call g_adjust(g1,phi,bpar,fphi,fbpar,aj0_tdep%old)
+    else
+        call g_adjust(g1,phi,bpar,fphi,fbpar)
+    end if
+    if(present(g_exb_opt)) then
+        do iglo = g_lo%llim_proc, g_lo%ulim_proc
+           ! Need to take derivatives at fixed x,y so that terms taken into
+           ! account by the CFL condition are not secularly growing over time.
+           ! NDC 08/18
+           it = it_idx(g_lo,iglo)
            ik = ik_idx(g_lo,iglo)
-           g1(:,:,iglo) = g1(:,:,iglo)*zi*(akx(it)+g_exb_opt*t_last_jump(ik)*aky(ik))
-       else
+           g1(:,:,iglo) = g1(:,:,iglo)*zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))
+        enddo
+    else
+        do iglo = g_lo%llim_proc, g_lo%ulim_proc
+           it = it_idx(g_lo,iglo)
            g1(:,:,iglo)=g1(:,:,iglo)*zi*akx(it)
-       end if
-       ! endNDCTESTnl
-    enddo
+        enddo
+    end if
     
     !Transform to real space
     if (accelerated) then
@@ -544,21 +556,31 @@ contains
       use dist_fn_arrays, only: aj0
       complex :: fac
 
-      do iglo = g_lo%llim_proc, g_lo%ulim_proc
-         it = it_idx(g_lo,iglo)
-         ik = ik_idx(g_lo,iglo)
-         do ig = -ntgrid, ntgrid
-            ! NDCTESTnl
-            if(present(g_exb_opt)) then
-                fac = zi*(akx(it)+g_exb_opt*t_last_jump(ik)*aky(ik))*aj0(ig,iglo)*phi(ig,it,ik)*fphi
-            else
+      ! Flowshear cases: J0 has to be time dependent -- NDC 8/18
+      if(present(g_exb_opt)) then
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+             it = it_idx(g_lo,iglo)
+             ik = ik_idx(g_lo,iglo)
+             do ig = -ntgrid, ntgrid
+                ! Need to take derivatives at fixed x,y so that terms taken into
+                ! account by the CFL condition are not secularly growing over time.
+                ! NDC 08/18
+                fac = zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))*aj0_tdep%old(ig,iglo)*phi(ig,it,ik)*fphi
+                g1(ig,1,iglo) = fac
+                g1(ig,2,iglo) = fac
+             end do
+          end do
+      else
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+             it = it_idx(g_lo,iglo)
+             ik = ik_idx(g_lo,iglo)
+             do ig = -ntgrid, ntgrid
                 fac = zi*akx(it)*aj0(ig,iglo)*phi(ig,it,ik)*fphi
-            end if
-            ! endNDCTESTnl
-            g1(ig,1,iglo) = fac
-            g1(ig,2,iglo) = fac
-         end do
-      end do
+                g1(ig,1,iglo) = fac
+                g1(ig,2,iglo) = fac
+             end do
+          end do
+      end if
 
     end subroutine load_kx_phi
 
@@ -567,15 +589,28 @@ contains
       use dist_fn_arrays, only: aj0
       complex :: fac
 
-      do iglo = g_lo%llim_proc, g_lo%ulim_proc
-         it = it_idx(g_lo,iglo)
-         ik = ik_idx(g_lo,iglo)
-         do ig = -ntgrid, ntgrid
-            fac = zi*aky(ik)*aj0(ig,iglo)*phi(ig,it,ik)*fphi
-            g1(ig,1,iglo) = fac
-            g1(ig,2,iglo) = fac
-         end do
-      end do
+      ! Flowshear cases: J0 has to be time dependent -- NDC 8/18
+      if(present(g_exb_opt)) then
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+             it = it_idx(g_lo,iglo)
+             ik = ik_idx(g_lo,iglo)
+             do ig = -ntgrid, ntgrid
+                fac = zi*aky(ik)*aj0_tdep%old(ig,iglo)*phi(ig,it,ik)*fphi
+                g1(ig,1,iglo) = fac
+                g1(ig,2,iglo) = fac
+             end do
+          end do
+      else
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+             it = it_idx(g_lo,iglo)
+             ik = ik_idx(g_lo,iglo)
+             do ig = -ntgrid, ntgrid
+                fac = zi*aky(ik)*aj0(ig,iglo)*phi(ig,it,ik)*fphi
+                g1(ig,1,iglo) = fac
+                g1(ig,2,iglo) = fac
+             end do
+          end do
+      end if
 
     end subroutine load_ky_phi
 

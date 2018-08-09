@@ -4098,7 +4098,8 @@ contains
 
   subroutine allocate_arrays
     use kt_grids, only: naky,  box, explicit_flowshear, implicit_flowshear, mixed_flowshear, &
-        akx, aky ! NDCTESTnl
+        akx, aky, & ! NDCTESTnl
+        apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
     use theta_grid, only: ntgrid, shat
     use dist_fn_arrays, only: g, gnew, &
         t_last_jump, remap_period, & ! NDCTESTnl
@@ -4176,7 +4177,7 @@ contains
              allocate(kx_shift_old(naky))
              kx_shift_old = 0.
              ! NDCTESTremap_plot: in if, remove last logical
-             if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. remap_plot) then
+             if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. remap_plot .or. apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin
              ! endNDCTESTremap_plot
              !if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
                  allocate(t_last_jump(naky)) ! NDCTESTnl
@@ -4441,7 +4442,8 @@ contains
     use theta_grid, only: ntgrid, ntheta, shat
     use file_utils, only: error_unit
     use kt_grids, only: akx, aky, naky, ikx, ntheta0, box, theta0, &
-        explicit_flowshear, implicit_flowshear,mixed_flowshear
+        explicit_flowshear, implicit_flowshear,mixed_flowshear, &
+        apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
     use le_grids, only: negrid, nlambda
     use species, only: nspec
     use run_parameters, only: fphi, fapar, fbpar
@@ -4529,7 +4531,7 @@ contains
     ! NDC 06/18
     undo_remap = .false.
     if (istep.eq.istep_last) then
-        if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+        if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin
             ! Check whether we are undoing an ExB remap done with the old dt,
             ! or whether we are remapping with the new dt.
             if(present(undo_remap_opt)) then
@@ -5009,7 +5011,7 @@ contains
          
          ! NDCTESTnl 
          ! NDCTESTremap_plot: in if, remove last logical
-         if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. remap_plot_shear) then
+         if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. remap_plot_shear .or. apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin
              t_last_jump(ik) = t_last_jump(ik) + undo_fac*abs(jump(ik))*remap_period(ik)*g_exbfac ! NDCTEST: need gg_exbfac ?
          end if
          ! endNDCTESTnl
@@ -6160,7 +6162,8 @@ contains
       use theta_grid, only: ntgrid
       use gs2_layouts, only: g_lo
       use nonlinear_terms, only: nonlinear_mode_switch, nonlinear_mode_none, nonlinear_mode_on
-      use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear
+      use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear, &
+          apply_flowshear_nonlin ! NDCTEST_nl_vslin
       use gs2_time, only: save_dt_cfl
 
       implicit none
@@ -6229,7 +6232,7 @@ contains
               if(nonlinear_mode_switch == nonlinear_mode_on) then
                   call debug_message(verb, 'dist_fn::add_explicit calling nonlinear_terms::add_nl')
                   ! NDCTESTnl
-                  if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+                  if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then ! NDCTEST_nl_vslin: remove last case
                       call update_flowshear_phase_fac(g_exb)
                   end if
                   ! endNDCTESTnl
@@ -6237,7 +6240,7 @@ contains
                       call add_nl_gryfx (g1) 
                   else
                       ! NDCTESTnl: added flowshear case
-                      if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+                      if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin: remove last logical
                           call add_nl(g1, phi, apar, bpar, g_exb)
                       else
                           call add_nl(g1, phi, apar, bpar)
@@ -8328,7 +8331,13 @@ endif
     if (.not. allocated(fl_avg)) allocate (fl_avg(ntheta0, naky))
     fl_avg = 0.
 
+<<<<<<< HEAD
     if (.not. has_electron_species(spec)) then ! NDCQUEST: no effect of flow shear here. But should make adiab. elec. compatible with flowshear ? And EM ? And LOWFLOW ?
+||||||| merged common ancestors
+    if (.not. has_electron_species(spec)) then ! NDCQUEST: should make this compatible with flowshear ? And EM ? And LOWFLOW ?
+=======
+    if (.not. has_electron_species(spec)) then ! NDCQUEST: no effect of flowshear here. But should make this compatible with adiab. elec. ? And EM ? And LOWFLOW ?
+>>>>>>> no_neighbours_explicit
        if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
           
 !          if (first) then 
@@ -8917,7 +8926,9 @@ endif
     ! I haven't made any check for use_Bpar=T case.
     use run_parameters, only: beta, fphi, fapar, fbpar
     use theta_grid, only: ntgrid, bmag
-    use kt_grids, only: ntheta0, naky, kperp2
+    use kt_grids, only: ntheta0, naky, kperp2, &
+        implicit_flowshear, mixed_flowshear
+    use dist_fn_arrays, only: gamtot_tdep
     
     complex, dimension (-ntgrid:,:,:), intent (out) :: phi, apar, bpar
     logical, optional :: gf_lo
@@ -8948,8 +8959,14 @@ endif
     if (fphi > epsilon(0.0)) then
 
 !CMR, 1/8/2011:  bmag corrections here: 
-       numerator = (beta * gamtot2 + bmagsp**2) * antot - (beta * gamtot1) * antotp
-       denominator = (beta * gamtot2 + bmagsp**2) * gamtot + (beta/2.0) * gamtot1 * gamtot1
+       ! NDCQUEST: should those beta corrections still be there for ES runs with beta/=0 ?
+       if(implicit_flowshear .or. mixed_flowshear) then ! NDCQUEST: what to do for explicit?
+           numerator = (beta * gamtot2 + bmagsp**2) * antot - (beta * gamtot1) * antotp
+           denominator = (beta * gamtot2 + bmagsp**2) * gamtot_tdep%new + (beta/2.0) * gamtot1 * gamtot1
+       else
+           numerator = (beta * gamtot2 + bmagsp**2) * antot - (beta * gamtot1) * antotp
+           denominator = (beta * gamtot2 + bmagsp**2) * gamtot + (beta/2.0) * gamtot1 * gamtot1
+       end if
 
        where (abs(denominator) < epsilon(0.0)) ! it == ik == 1 only
           !NOTE: denominator=0 for the it==ik==1 only in certain circumstances
