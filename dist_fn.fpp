@@ -8920,7 +8920,9 @@ endif
     ! I haven't made any check for use_Bpar=T case.
     use run_parameters, only: beta, fphi, fapar, fbpar
     use theta_grid, only: ntgrid, bmag
-    use kt_grids, only: ntheta0, naky, kperp2
+    use kt_grids, only: ntheta0, naky, kperp2, &
+        implicit_flowshear, mixed_flowshear
+    use dist_fn_arrays, only: gamtot_tdep
     
     complex, dimension (-ntgrid:,:,:), intent (out) :: phi, apar, bpar
     logical, optional :: gf_lo
@@ -8951,8 +8953,14 @@ endif
     if (fphi > epsilon(0.0)) then
 
 !CMR, 1/8/2011:  bmag corrections here: 
-       numerator = (beta * gamtot2 + bmagsp**2) * antot - (beta * gamtot1) * antotp
-       denominator = (beta * gamtot2 + bmagsp**2) * gamtot + (beta/2.0) * gamtot1 * gamtot1
+       ! NDCQUEST: should those beta corrections still be there for ES runs with beta/=0 ?
+       if(implicit_flowshear .or. mixed_flowshear) then ! NDCQUEST: what to do for explicit?
+           numerator = (beta * gamtot2 + bmagsp**2) * antot - (beta * gamtot1) * antotp
+           denominator = (beta * gamtot2 + bmagsp**2) * gamtot_tdep%new + (beta/2.0) * gamtot1 * gamtot1
+       else
+           numerator = (beta * gamtot2 + bmagsp**2) * antot - (beta * gamtot1) * antotp
+           denominator = (beta * gamtot2 + bmagsp**2) * gamtot + (beta/2.0) * gamtot1 * gamtot1
+       end if
 
        where (abs(denominator) < epsilon(0.0)) ! it == ik == 1 only
           !NOTE: denominator=0 for the it==ik==1 only in certain circumstances
