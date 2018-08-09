@@ -454,7 +454,7 @@ contains
     use unit_tests, only: debug_message
     use mp, only: iproc
     use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear, &
-        naky, ntheta0, & ! NDCTESTmichael
+        aky, naky, ntheta0, & ! NDCTESTmichael
         apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
     use theta_grid, only: ntgrid ! NDCTESTmichael
     use gs2_time, only: code_dt, code_dt_old
@@ -1148,6 +1148,7 @@ contains
     logical, intent(in), optional :: tadv_opt
     complex, dimension (:,:,:), allocatable :: fieldeq, fieldeqa, fieldeqp
     integer :: irow, istart, iflo, ik, it, ifin, m, nn
+    logical :: tadv ! NDCTESTshift
 
     if(present(tadv_opt)) then
         tadv = tadv_opt
