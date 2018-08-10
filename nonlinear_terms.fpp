@@ -16,6 +16,7 @@ module nonlinear_terms
   public :: nonlinear_terms_unit_test_time_add_nl, cfl
   public :: nonlinear_mode_none, nonlinear_mode_on
   public :: gryfx_zonal
+  public :: cfl_req_hand, nb_check_time_step_too_large
   
   ! Needed for dist_fn::add_explicit_terms
   public :: initializing
@@ -63,6 +64,8 @@ module nonlinear_terms
 
 ! CFL coefficients
   real :: cfl, cflx, cfly
+  real :: max_vel, zero
+  integer :: cfl_req_hand
 
 ! hyperviscosity coefficients
   real :: C_par, C_perp, p_x, p_y, p_z
@@ -317,7 +320,7 @@ contains
   end subroutine nonlinear_terms_unit_test_time_add_nl
 
   subroutine add_nl (g1, phi, apar, bpar, g_exb_opt)
-    use mp, only: max_allreduce, iproc
+    use mp, only: max_allreduce, nb_max_allreduce, iproc, nproc
     use theta_grid, only: ntgrid, kxfac
     use gs2_layouts, only: g_lo, ik_idx, it_idx
     use gs2_layouts, only: accelx_lo, yxf_lo
@@ -335,7 +338,6 @@ contains
     complex, dimension (-ntgrid:,:,:), intent (in) :: phi, apar, bpar
     real, intent(in), optional :: g_exb_opt
     integer :: i, j, k
-    real :: max_vel, zero
     real :: dt_cfl
     integer, parameter :: verb = 4
 
@@ -491,20 +493,23 @@ contains
       'nonlinear_terms::add_nl calculated dphi/dx.dg/dy.dphi/dy.dg/dx')
 
     !Estimate the global cfl limit based on max_vel
-    !write (*,*) 'Calling max_allreduce', iproc, immediate_reset
-    call max_allreduce(max_vel)    
-    dt_cfl = 1./max_vel
-    call save_dt_cfl (dt_cfl)
-
-    !Now check to see if we've violated the 
-    !cfl condition if requested
+    !If immediate_reset, do a max allreduce.
+    !If not, overlap comms and work, and check for 
+    ! reset at the end of the timestep.
     if(immediate_reset)then
-       call check_time_step_too_large(reset)
+       call max_allreduce(max_vel)    
+       dt_cfl = 1./max_vel
+       call save_dt_cfl (dt_cfl)
 
+       !Now check to see if we've violated the 
+       !cfl condition if requested
+       call check_time_step_too_large(reset)
        !If we have violated cfl then return immediately
        if(reset)return
+    else
+       !Do a nonblocking reduce and check later
+       call nb_max_allreduce(max_vel, cfl_req_hand)    
     endif
-    !write (*,*) 'didnt return', iproc
 
     !Transform NL source back to spectral space
     if (accelerated) then
@@ -699,7 +704,6 @@ contains
     implicit none
     complex, dimension (-ntgrid:,:,g_lo%llim_proc:), intent (out) :: g1
     integer :: i, j, k
-    real :: max_vel, zero
     real :: dt_cfl
 
     integer :: iglo, ik, it, ig, iz, is, isgn, index_gryfx
@@ -768,7 +772,40 @@ contains
     
   end subroutine add_nl_gryfx
 
+!---------------------------------------------------------------------------  
+!> @author 
+!> Joseph Parker, STFC
+!
+! DESCRIPTION: 
+!> Nonblocking version of check_time_step_too_large
+!> @brief
+!> This receives the mpi_iallreduce of the maximum velocity and calculates
+!> the CFL condition.
+!
+!--------------------------------------------------------------------------- 
+  subroutine nb_check_time_step_too_large
+    use mp, only: iproc
+    use run_parameters, only: reset, immediate_reset
+    use gs2_time, only: save_dt_cfl, check_time_step_too_large
+    use mp, only: wait
+    implicit none
+    real :: dt_cfl
+
+    !Estimate the global cfl limit based on max_vel
+    !If immediate_reset, this check has already been done during the timestep.
+    if(immediate_reset) return
+
+    !write (*,*) 'Receiving max_iallreduce', iproc, immediate_reset, max_vel
+    call wait(cfl_req_hand)    
+    !write (*,*) 'Received max_iallreduce', iproc, immediate_reset, max_vel
+    dt_cfl = 1./max_vel
+    call save_dt_cfl (dt_cfl)
+
+    !Now check to see if we've violated the 
+    !cfl condition if requested
+    call check_time_step_too_large(reset)
   
+  end subroutine nb_check_time_step_too_large
 
   subroutine reset_init
     

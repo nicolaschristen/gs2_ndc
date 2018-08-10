@@ -111,6 +111,10 @@ parameter_list_geo = [
 ['real', 'thetam'],
 ['real', 'thetan'],
 ['real', 'betaprim'],
+['real', 'akappa'], #For backwards compatibility with Trinity
+['real', 'akappri'], #For backwards compatibility with Trinity
+['real', 'tri'], #For backwards compatibility with Trinity
+['real', 'tripri'], #For backwards compatibility with Trinity
 ].compact.map{|p| Generator.new(p)}
 
 parameter_list_profs = [

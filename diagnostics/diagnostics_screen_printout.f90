@@ -52,12 +52,13 @@ contains
     if (gnostics%distributed) call sum_reduce(phitot, 0)
     
     if(.not.(proc0 .and. gnostics%wryte)) return
+    write (unit=outunit, fmt="('time=',1pe12.4)") gnostics%user_time
     do ik = 1, naky
        do it = 1, ntheta0
-          write (unit=outunit, fmt="('ky=',1pe9.2, ' kx=',1pe9.2, &
-               & ' om=',e9.2,1x,e9.2,' omav=',e9.2,1x,e9.2, &
-               & ' phtot=',e9.2,' theta0=',1pe9.2)") &
-               aky(ik), akx(it), &
+          write (unit=outunit, fmt="('t=',1pe11.4,' ky=',1pe9.2, ' kx=',1pe9.2, &
+               & ' om= ',e9.2,1x,e9.2,' omav= ',e9.2,1x,e9.2, &
+               & ' phtot= ',e9.2,' theta0= ',1pe9.2)") &
+               gnostics%user_time, aky(ik), akx(it), &
                real( omegahist(mod(gnostics%istep,gnostics%navg),it,ik)*woutunits(ik)), &
                aimag(omegahist(mod(gnostics%istep,gnostics%navg),it,ik)*woutunits(ik)), &
                real( omega_average(it,ik)*woutunits(ik)), &

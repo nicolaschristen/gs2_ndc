@@ -5,14 +5,17 @@ helplocal:
 		# You are using  Makefile.marconi to build gs2 executables on MARCONI.
 
 define STANDARD_SYSTEM_CONFIGURATION
+module load env-skl;\
 module load intel/pe-xe-2017--binary;\
 module load intelmpi/2017--binary;\
 module load netcdf/4.4.1--intel--pe-xe-2017--binary;\
 module load netcdff/4.4.4--intel--pe-xe-2017--binary;\
 module load fftw/3.3.4--intelmpi--2017--binary;\
+module load lapack;\
+module load blas;\
 echo Module configuration complete;\
 export MAKEFLAGS='-j -IMakefiles';\
-export TESTEXEC='mpirun -N 36 -n 36';
+export TESTEXEC='mpirun -n 48';
 endef
 
 COMPILER=intel
@@ -37,8 +40,8 @@ endif
 ifeq ($(USE_FFT),fftw3)	
 	FFT_INC = 
 	FFT_DIR = $(FFTW_HOME)
-	FFT_LIB = -lfftw3 #-lfftw3_mpi
-        CPPFLAGS   += -I $$FFTW_INC
+	FFT_LIB = -L$(FFTW_HOME)/lib -lfftw3f -lfftw3 #-lfftw3_mpi
+	CPPFLAGS   += -I $$FFTW_INC
 endif	
 
 USE_HDF5=
@@ -49,4 +52,9 @@ ifdef USE_NETCDF
   NETCDF_DIR=$(NETCDFF_HOME)
   NETCDF_INC= -I $(NETCDF_DIR)/include/ -I$(NETCDF_INCLUDE)
   NETCDF_LIB= -L $(NETCDF_DIR)/lib/ -lnetcdff -L$(NETCDF_HOME)/lib/ -lnetcdf
+endif
+
+ifdef GENQUAD
+  GENQUAD_LIB = -L $(LAPACK_HOME)/lib -llapack -L $(BLAS_HOME)/lib -lblas
+  GENQUAD_INC = -I $(LAPACK_HOME)/include -I $(BLAS_HOME)/include
 endif

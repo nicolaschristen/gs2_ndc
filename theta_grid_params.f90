@@ -81,7 +81,7 @@ contains
     qinp = 1.5
     shat = 0.75
     pk = 0.3
-    geoType = 0
+    geoType = 0 ! NB The default for this MUST be zero otherwise the Trinity interface will break
     aSurf = 1.0
     shift = 0.0
     shiftVert = 0.0
@@ -282,10 +282,26 @@ contains
     if (mgeo_ov%override_shiftVert) shiftVert = mgeo_ov%shiftVert
     if (mgeo_ov%override_mMode) mMode = mgeo_ov%mMode
     if (mgeo_ov%override_nMode) nMode = mgeo_ov%nMode
-    if (mgeo_ov%override_deltam) deltam = mgeo_ov%deltam
-    if (mgeo_ov%override_deltan) deltan = mgeo_ov%deltan
-    if (mgeo_ov%override_deltampri) deltampri = mgeo_ov%deltampri
-    if (mgeo_ov%override_deltanpri) deltanpri = mgeo_ov%deltanpri
+    if (mgeo_ov%override_deltam) then
+      deltam = mgeo_ov%deltam
+    else if (mgeo_ov%override_akappa) then
+      deltam = mgeo_ov%akappa
+    end if
+    if (mgeo_ov%override_deltan) then
+      deltan = mgeo_ov%deltan
+    else if (mgeo_ov%override_tri) then
+      deltan = mgeo_ov%tri
+    end if
+    if (mgeo_ov%override_deltampri) then 
+      deltampri = mgeo_ov%deltampri
+    else if (mgeo_ov%override_akappri) then 
+      deltampri = mgeo_ov%akappri
+    end if
+    if (mgeo_ov%override_deltanpri) then 
+      deltanpri = mgeo_ov%deltanpri
+    else if (mgeo_ov%override_tripri) then 
+      deltanpri = mgeo_ov%tripri
+    end if
     if (mgeo_ov%override_thetam) thetam = mgeo_ov%thetam
     if (mgeo_ov%override_thetan) thetan = mgeo_ov%thetan
     if (mgeo_ov%override_betaprim) betaprim = mgeo_ov%betaprim

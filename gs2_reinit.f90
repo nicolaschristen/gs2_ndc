@@ -176,7 +176,7 @@ contains
 
   subroutine check_time_step (reset, exit)
     use gs2_time, only: code_dt_cfl, code_dt
-    use nonlinear_terms, only: gryfx_zonal
+    use nonlinear_terms, only: gryfx_zonal, nb_check_time_step_too_large
     use mp, only: broadcast
     implicit none
     logical, intent(in) :: exit
@@ -199,6 +199,9 @@ contains
 
 ! nothing to do if exiting in this iteration
     if (exit) return
+
+! If doing nonblocking CFL check, finish it here
+    call nb_check_time_step_too_large
 
 ! If timestep is too big, make it smaller
     if (code_dt*fac > code_dt_cfl) reset = .true. !Note this logic is repeated in gs2_time::check_time_step_too_large

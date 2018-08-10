@@ -32,6 +32,10 @@ module overrides
     logical :: override_thetam
     logical :: override_thetan
     logical :: override_betaprim
+    logical :: override_akappa
+    logical :: override_akappri
+    logical :: override_tri
+    logical :: override_tripri
     real :: rhoc
     real :: qinp
     real :: shat
@@ -50,6 +54,10 @@ module overrides
     real :: thetam
     real :: thetan
     real :: betaprim
+    real :: akappa
+    real :: akappri
+    real :: tri
+    real :: tripri
     
   end type miller_geometry_overrides_type
 
@@ -238,6 +246,10 @@ contains
     overrides_obj%override_thetam = .false.
     overrides_obj%override_thetan = .false.
     overrides_obj%override_betaprim = .false.
+    overrides_obj%override_akappa = .false.
+    overrides_obj%override_akappri = .false.
+    overrides_obj%override_tri = .false.
+    overrides_obj%override_tripri = .false.
   end subroutine init_miller_geometry_overrides
 
 
@@ -266,6 +278,10 @@ contains
     overrides_obj%override_thetam = .false.
     overrides_obj%override_thetan = .false.
     overrides_obj%override_betaprim = .false.
+    overrides_obj%override_akappa = .false.
+    overrides_obj%override_akappri = .false.
+    overrides_obj%override_tri = .false.
+    overrides_obj%override_tripri = .false.
   end subroutine finish_miller_geometry_overrides
 
 

@@ -2,13 +2,18 @@
 
 !
 ! special function wrapper routine written by Tomo Tatsuno (5/7/08)
-! only has Bessel function at the moment
 !
+! RN 2018/08/01: Added _SPF200X_ for SPFUNC to use Fortran 2003/2008 standard functions,
+!                bessel_j0, log_gamma etc.
+! RN 2018/07/31: Added partial support for quad precision functions
+!                define QUAD_PRECISION to use quad precision functions if available
+! RN         ??: Added Log Gamma function
 ! RN 2008/07/01: Error function is added 
 ! RN 2008/07/01: Compilers not having intrinsic those special functions
 !                must choose one of the following
 !                 1: local [USE_LOCAL_SPFUNC=on]
 !                 2: NAG Library [USE_NAGLIB=spfunc]
+! TT 2008/05/07: Only has Bessel function at the moment
 !
 ! Unfortunately we do not support elemental feature for ifort...
 ! XL-fortran does not seem to have intrinsic Bessel function
@@ -22,6 +27,9 @@
 
 module spfunc
   use constants, only: kind_rs, kind_rd
+# ifdef QUAD_PRECISION
+  use constants, only: kind_rq
+# endif
 # if SPFUNC == _SPNAG_
   use constants, only: nag_kind
 # endif
@@ -46,9 +54,39 @@ module spfunc
 ! define interface
 # if SPFUNC == _SPLOCAL_ 
 # elif SPFUNC == _SPNAG_
-# else /* if not _SPLOCAL_ and not _SPNAG_ */
-# if (FCOMPILER == _GFORTRAN_ || FCOMPILER == _INTEL_ \
-  || FCOMPILER == _PATHSCALE_)
+# elif SPFUNC == _SPF200X_
+
+  interface j0
+     module procedure sj0, dj0
+# ifdef QUAD_PRECISION
+     module procedure qj0
+# endif
+  end interface j0
+
+  interface j1
+     module procedure sj1, dj1
+# ifdef QUAD_PRECISION
+     module procedure qj1
+# endif
+  end interface j1
+
+  interface erf_ext
+     module procedure serf_ext, derf_ext
+# ifdef QUAD_PRECISION
+     module procedure qerf_ext
+# endif
+  end interface erf_ext
+
+  interface lgamma_ext
+     module procedure slgamma_ext, dlgamma_ext
+# ifdef QUAD_PRECISION
+     module procedure qlgamma_ext
+# endif
+  end interface lgamma_ext
+  
+# else /* if not _SPLOCAL_ and not _SPNAG_ and not _F200X_ */
+
+# if FCOMPILER == _PATHSCALE_
 
   interface j0
      module procedure sj0, dj0
@@ -60,6 +98,35 @@ module spfunc
      module procedure serf_ext, derf_ext
   end interface
 
+# elif ( FCOMPILER == _INTEL_ || FCOMPILER == _GFORTRAN_ ) /* not _PATHSCALE_ */
+
+  interface j0
+     module procedure sj0, dj0
+# ifdef QUAD_PRECISION
+# if FCOMPILER == _GFORTRAN_
+     module procedure qj0
+# endif
+# endif
+  end interface j0
+
+  interface j1
+     module procedure sj1, dj1
+# ifdef QUAD_PRECISION
+# if FCOMPILER == _GFORTRAN_
+     module procedure qj1
+# endif
+# endif
+  end interface j1
+
+  interface erf_ext
+     module procedure serf_ext, derf_ext
+# ifdef QUAD_PRECISION
+# if FCOMPILER == _GFORTRAN_
+     module procedure qerf_ext
+# endif
+# endif
+  end interface erf_ext
+
 # elif FCOMPILER == _G95_ /* not _GFORTRAN_, _INTEL_, _PATHSCALE_ */
 
   interface j0
@@ -68,8 +135,14 @@ module spfunc
   interface j1
      module procedure sj1, dj1
   end interface
+  interface erf_ext
+     module procedure serf_ext, derf_ext
+  end interface
+  interface lgamma_ext
+     module procedure slgamma_ext, dlgamma_ext
+  end interface
 
-# elif FCOMPILER == _PGI_ /* not _GFORTRAN_, _INTEL_, _PATHSCALE_, _G95_ */
+# elif FCOMPILER == _PGI_ /* not _G95_, _GFORTRAN_, _INTEL_, _PATHSCALE_*/
 
   interface j0
      elemental function besj0(x)
@@ -80,9 +153,12 @@ module spfunc
        real (kind=8), intent (in) :: x
        real (kind=8) :: dbesj0
      end function dbesj0
-  end interface
-  ! j1 is below
+  end interface j0
 
+  interface j1
+     module procedure sj1, dj1
+  end interface j1
+  
   interface erf_ext
      elemental function erf(x)
        real (kind=4), intent (in) :: x
@@ -92,9 +168,10 @@ module spfunc
        real (kind=8), intent (in) :: x
        real (kind=8) :: derf
      end function derf
-  end interface
-       
+  end interface erf_ext
+  
 # endif /* FCOMPILER */
+
 # endif /* SPFUNC */
 
 contains
@@ -711,41 +788,131 @@ contains
 # endif /* NAG_PREC */
   end function erf_ext
 
-# else /* if SPFUNC != _SPLOCAL_ && SPFUNC != _SPNAG_ */
+# elif SPFUNC == _SPF200X_
 
-# if (FCOMPILER == _G95_ || FCOMPILER == _GFORTRAN_ \
-  || FCOMPILER == _PATHSCALE_ || FCOMPILER == _INTEL_)
-
-# if FCOMPILER == _INTEL_
-  function sj0 (x)
-    use ifport, only: besj0
-# else
   elemental function sj0 (x)
+    implicit none
+    real (kind=kind_rs), intent (in) :: x
+    real (kind=kind_rs) :: sj0
+    sj0 = bessel_j0(x)
+  end function sj0
+
+  elemental function dj0 (x)
+    implicit none
+    real (kind=kind_rd), intent (in) :: x
+    real (kind=kind_rd) :: dj0
+    dj0 = bessel_j0(x)
+  end function dj0
+
+# ifdef QUAD_PRECISION
+  elemental function qj0 (x)
+    implicit none
+    real (kind=kind_rq), intent (in) :: x
+    real (kind=kind_rq) :: qj0
+    qj0 = bessel_j0(x)
+  end function qj0
 # endif
+
+  elemental function sj1 (x)
+    implicit none
+    real (kind=kind_rs), intent (in) :: x
+    real (kind=kind_rs) :: sj1
+    if (x == 0.0_kind_rs) then
+       sj1 = 0.5_kind_rs
+    else
+       sj1 = bessel_j1(x) / x
+    end if
+  end function sj1
+
+  elemental function dj1 (x)
+    implicit none
+    real (kind=kind_rd), intent (in) :: x
+    real (kind=kind_rd) :: dj1
+    if (x == 0.0_kind_rd) then
+       dj1 = 0.5_kind_rd
+    else
+       dj1 = bessel_j1(x) / x
+    end if
+  end function dj1
+
+# ifdef QUAD_PRECISION
+  elemental function qj1 (x)
+    implicit none
+    real (kind=kind_rq), intent (in) :: x
+    real (kind=kind_rq) :: qj1
+    if (x == 0.0_kind_rq) then
+       qj1 = 0.5_kind_rq
+    else
+       qj1 = bessel_j1(x) / x
+    end if
+  end function qj1
+# endif
+
+  elemental function serf_ext (x)
+    implicit none
+    real (kind=kind_rs), intent (in) :: x
+    real (kind=kind_rs) :: serf_ext
+    serf_ext = erf(x)
+  end function serf_ext
+
+  elemental function derf_ext (x)
+    implicit none
+    real (kind=kind_rd), intent (in) :: x
+    real (kind=kind_rd) :: derf_ext
+    derf_ext = erf(x)
+  end function derf_ext
+  
+# ifdef QUAD_PRECISION
+  elemental function qerf_ext (x)
+    implicit none
+    real (kind=kind_rq), intent (in) :: x
+    real (kind=kind_rq) :: qerf_ext
+    qerf_ext = erf(x)
+  end function qerf_ext
+# endif
+  
+  elemental function slgamma_ext (x)
+    implicit none
+    real (kind=kind_rs), intent (in) :: x
+    real (kind=kind_rs):: slgamma_ext
+    slgamma_ext = log_gamma(x)
+  end function slgamma_ext
+
+  elemental function dlgamma_ext (x)
+    implicit none
+    real (kind=kind_rd), intent (in) :: x
+    real (kind=kind_rd):: dlgamma_ext
+    dlgamma_ext = log_gamma(x)
+  end function dlgamma_ext
+
+# ifdef QUAD_PRECISION
+  elemental function qlgamma_ext (x)
+    implicit none
+    real (kind=kind_rq), intent (in) :: x
+    real (kind=kind_rq):: qlgamma_ext
+    qlgamma_ext = log_gamma(x)
+  end function qlgamma_ext
+# endif
+
+# else /* if SPFUNC != _SPLOCAL_ && SPFUNC != _SPNAG_ && ! SPFUNC != _SPF200X_ */
+
+# if FCOMPILER == _PATHSCALE_
+
+  elemental function sj0 (x)
     implicit none
     real (kind=kind_rs), intent (in) :: x
     real (kind=kind_rs) :: sj0
     sj0 = besj0(x)
   end function sj0
 
-# if FCOMPILER == _INTEL_
-  function dj0 (x)
-    use ifport, only: dbesj0
-# else
   elemental function dj0 (x)
-# endif
     implicit none
     real (kind=kind_rd), intent (in) :: x
     real (kind=kind_rd) :: dj0
     dj0 = dbesj0(x)
   end function dj0
 
-# if FCOMPILER == _INTEL_
-  function sj1 (x)
-    use ifport, only: besj1
-# else
   elemental function sj1 (x)
-# endif
     implicit none
     real (kind=kind_rs), intent (in) :: x
     real (kind=kind_rs) :: sj1
@@ -756,12 +923,7 @@ contains
     end if
   end function sj1
 
-# if FCOMPILER == _INTEL_
-  function dj1 (x)
-    use ifport, only: dbesj1
-# else
   elemental function dj1 (x)
-# endif
     implicit none
     real (kind=kind_rd), intent (in) :: x
     real (kind=kind_rd) :: dj1
@@ -772,72 +934,263 @@ contains
     end if
   end function dj1
 
-# if FCOMPILER == _G95_
-
-  function erf_ext(x)
-    implicit none
-    real, intent(in) :: x
-    real :: erf_ext
-    erf_ext=erf(x)
-  end function erf_ext
-
-  function lgamma_ext (x)
-    implicit none
-    real, intent (in) :: x
-    real :: lgamma_ext
-    lgamma_ext = algama(x) ! algama takes any real kind
-  end function lgamma_ext
-
-# else /* if FCOMPILER != _G95_ */
-
-# if FCOMPILER == _INTEL_
-  function serf_ext (x)
-# else
   elemental function serf_ext (x)
-# endif /* if FCOMPILER == _INTEL_ */
     implicit none
     real (kind=kind_rs), intent (in) :: x
     real (kind=kind_rs) :: serf_ext
     serf_ext = erf(x)
   end function serf_ext
 
-# if FCOMPILER == _INTEL_
-  function derf_ext (x)
-# else
   elemental function derf_ext (x)
-# endif
     implicit none
     real (kind=kind_rd), intent (in) :: x
     real (kind=kind_rd) :: derf_ext
     derf_ext = derf(x)
   end function derf_ext
 
-# endif /* if FCOMPILER == _G95_ */
+# elif FCOMPILER == _INTEL_ /* not _PATHSCALE_ */
 
-# elif FCOMPILER == _PGI_ /* if (FCOMPILER != one of _G95_, _GFORTRAN_, _INTEL_, _PATHSCALE_) */
-
-  elemental function j1 (x)
+  function sj0 (x)
+    use ifport, only: besj0 ! single precision version (not generic)
     implicit none
-    real, intent (in) :: x
-    real :: j1
+    real (kind=kind_rs), intent (in) :: x
+    real (kind=kind_rs) :: sj0
+    sj0 = besj0(x)
+  end function sj0
+
+  function dj0 (x)
+    use ifport, only: dbesj0
+    implicit none
+    real (kind=kind_rd), intent (in) :: x
+    real (kind=kind_rd) :: dj0
+    dj0 = dbesj0(x)
+  end function dj0
+
+  function sj1 (x)
+    use ifport, only: besj1 ! single precision version (not generic)
+    implicit none
+    real (kind=kind_rs), intent (in) :: x
+    real (kind=kind_rs) :: sj1
+    if (x == 0.0) then
+       sj1 = 0.5
+    else
+       sj1 = besj1(x) / x
+    end if
+  end function sj1
+
+  function dj1 (x)
+    use ifport, only: dbesj1
+    implicit none
+    real (kind=kind_rd), intent (in) :: x
+    real (kind=kind_rd) :: dj1
+    if (x == 0.0) then
+       dj1 = 0.5
+    else
+       dj1 = dbesj1(x) / x
+    end if
+  end function dj1
+
+  function serf_ext (x)
+    implicit none
+    real (kind=kind_rs), intent (in) :: x
+    real (kind=kind_rs) :: serf_ext
+    serf_ext = erf(x) ! erf is generic
+  end function serf_ext
+
+  function derf_ext (x)
+    implicit none
+    real (kind=kind_rd), intent (in) :: x
+    real (kind=kind_rd) :: derf_ext
+    derf_ext = erf(x) ! erf is generic
+  end function derf_ext
+
+# elif FCOMPILER == _GFORTRAN_ /* not _INTEL_, _PATHSCALE_ */
+
+  elemental function sj0 (x)
+    implicit none
+    real (kind=kind_rs), intent (in) :: x
+    real (kind=kind_rs) :: sj0
+    sj0 = besj0(x)
+  end function sj0
+
+  elemental function dj0 (x)
+    implicit none
+    real (kind=kind_rd), intent (in) :: x
+    real (kind=kind_rd) :: dj0
+    dj0 = besj0(x)
+  end function dj0
+
+# ifdef QUAD_PRECISION
+  elemental function qj0 (x)
+    implicit none
+    real (kind=kind_rq), intent (in) :: x
+    real (kind=kind_rq) :: qj0
+    qj0 = besj0(x)
+  end function qj0
+# endif
+  
+  elemental function sj1 (x)
+    implicit none
+    real (kind=kind_rs), intent (in) :: x
+    real (kind=kind_rs) :: sj1
+    if (x == 0.0) then
+       sj1 = 0.5
+    else
+       sj1 = besj1(x) / x
+    end if
+  end function sj1
+
+  elemental function dj1 (x)
+    implicit none
+    real (kind=kind_rd), intent (in) :: x
+    real (kind=kind_rd) :: dj1
+    if (x == 0.0) then
+       dj1 = 0.5
+    else
+       dj1 = besj1(x) / x
+    end if
+  end function dj1
+
+# ifdef QUAD_PRECISION
+  elemental function qj1 (x)
+    implicit none
+    real (kind=kind_rq), intent (in) :: x
+    real (kind=kind_rq) :: qj1
+    if (x == 0.0_kind_rq) then
+       qj1 = 0.5_kind_rq
+    else
+       qj1 = besj1(x) / x
+    end if
+  end function qj1
+# endif
+
+  elemental function serf_ext (x)
+    implicit none
+    real (kind=kind_rs), intent (in) :: x
+    real (kind=kind_rs) :: serf_ext
+    serf_ext = erf(x)
+  end function serf_ext
+
+  elemental function derf_ext (x)
+    implicit none
+    real (kind=kind_rd), intent (in) :: x
+    real (kind=kind_rd) :: derf_ext
+    derf_ext = erf(x)
+  end function derf_ext
+
+# ifdef QUAD_PRECISION
+  elemental function qerf_ext (x)
+    implicit none
+    real (kind=kind_rq), intent (in) :: x
+    real (kind=kind_rq) :: qerf_ext
+    qerf_ext = erf(x)
+  end function qerf_ext
+# endif
+  
+# elif FCOMPILER == _G95_ /* not _GFORTRAN_, _INTEL_, _PATHSCALE_ */
+
+  elemental function sj0 (x)
+    implicit none
+    real (kind=kind_rs), intent (in) :: x
+    real (kind=kind_rs) :: sj0
+    sj0 = besj0(x)
+  end function sj0
+
+  elemental function dj0 (x)
+    implicit none
+    real (kind=kind_rd), intent (in) :: x
+    real (kind=kind_rd) :: dj0
+    dj0 = dbesj0(x)
+  end function dj0
+
+  elemental function sj1 (x)
+    implicit none
+    real (kind=kind_rs), intent (in) :: x
+    real (kind=kind_rs) :: sj1
+    if (x == 0.0) then
+       sj1 = 0.5
+    else
+       sj1 = besj1(x) / x
+    end if
+  end function sj1
+
+  elemental function dj1 (x)
+    implicit none
+    real (kind=kind_rd), intent (in) :: x
+    real (kind=kind_rd) :: dj1
+    if (x == 0.0) then
+       dj1 = 0.5
+    else
+       dj1 = dbesj1(x) / x
+    end if
+  end function dj1
+
+  function serf_ext(x)
+    implicit none
+    real (kind=kind_rs), intent(in) :: x
+    real (kind=kind_rs) :: serf_ext
+    serf_ext=erf(real(x))
+  end function serf_ext
+
+  function derf_ext(x)
+    implicit none
+    real (kind=kind_rd), intent(in) :: x
+    real (kind=kind_rd):: derf_ext
+    derf_ext=erf(real(x))
+  end function derf_ext
+
+  function slgamma_ext (x)
+    implicit none
+    real (kind=kind_rs), intent (in) :: x
+    real (kind=kind_rd):: slgamma_ext
+    slgamma_ext = algama(real(x))
+  end function slgamma_ext
+  
+  function dlgamma_ext (x)
+    implicit none
+    real (kind=kind_rd), intent (in) :: x
+    real (kind=kind_rd) :: dlgamma_ext
+    dlgamma_ext = algama(real(x))
+  end function dlgamma_ext
+
+  
+# elif FCOMPILER == _PGI_ /* not _G95_, _GFORTRAN_, _INTEL_, _PATHSCALE_ */
+
+  elemental function sj1 (x)
+    implicit none
+    real (kind=4), intent (in) :: x
+    real (kind=4) :: sj1
     interface besj1
        elemental function besj1(x)
          real (kind=4), intent (in) :: x
          real (kind=4) :: besj1
        end function besj1
+    end interface
+    if (x == 0.0) then
+       sj1 = 0.5
+    else
+       sj1 = besj1(x) / x
+    end if
+  end function sj1
+
+  elemental function dj1 (x)
+    implicit none
+    real (kind=8), intent (in) :: x
+    real (kind=8) :: dj1
+    interface besj1
        elemental function dbesj1(x)
          real (kind=8), intent (in) :: x
          real (kind=8) :: dbesj1
        end function dbesj1
     end interface
     if (x == 0.0) then
-       j1 = 0.5
+       dj1 = 0.5
     else
-       j1 = besj1(x) / x
+       dj1 = besj1(x) / x
     end if
-  end function j1
+  end function dj1
 
-# elif FCOMPILER == _FUJ_ /* if (COMPILER != one of _G95_, _GFORTRAN_, _INTEL_, _PATHSCALE, _PGI_) */
+# elif FCOMPILER == _FUJ_ /* not _PGI_, _G95_, _GFORTRAN_, _INTEL_, _PATHSCALE */
 
   ! SSL2
   function j0 (x)
@@ -909,7 +1262,10 @@ contains
 # endif /* if SPFUNC */
 
 
-# if (SPFUNC == _SPLOCAL_ || ( FCOMPILER != _G95_ && FCOMPILER != _FUJ_ ) )
+# if SPFUNC != _SPF200X_
+# if (SPFUNC == _SPLOCAL_ \
+  || ( FCOMPILER != _G95_ && FCOMPILER != _FUJ_ ) )
+  
 ! TT: We may be able to exclude other compilers
 ! TT: but ifort, PGI, pathscale don't seem to have it as I quickly checked
 ! TT: NAG may have it, which we have to check
@@ -1075,5 +1431,7 @@ contains
     lgamma_ext = y
   end function lgamma_ext
 
-# endif /* if (SPFUNC == _SPLOCAL_ || FCOMPILER != _G95_) */
+# endif /* if (SPFUNC == _SPLOCAL_ || ( FCOMPILER != _G95_ && FCOMPILER != _FUJ_ ) */
+# endif /* if (SPFUNC != _SPF200X_ */
+  
 end module spfunc

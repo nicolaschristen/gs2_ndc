@@ -5,6 +5,19 @@ CC = gcc
 F90FLAGS += -ffree-line-length-huge -fno-backslash
 CPPFLAGS += -DFCOMPILER=_G95_
 
+ifdef USE_F200X_INTRINSICS
+$(error g95 does not fully support F200X intrinsics)
+endif
+
+ifeq ($(FORTRAN_SPEC),95)
+	F90FLAGS += -std=f95 -fintrinsic-extensions
+	CPPFLAGS += -DNO_SIZEOF
+endif
+ifeq ($(FORTRAN_SPEC),2003)
+	F90FLAGS += -std=f2003 -fintrinsic-extensions
+	CPPFLAGS += -DNO_SIZEOF
+endif
+
 ifdef DBLE
 	DBLEFLAGS = -r8
 	F90FLAGS += $(DBLEFLAGS)

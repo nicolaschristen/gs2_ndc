@@ -1,15 +1,9 @@
 # Makefile for arch linux
-# Maintainer: gwilkie@umd.edu
+# Maintainer: wilkie@chalmers.se
 
-#Before building install these packages
-#gcc
-#gfortran
-#openmpi-bin
-#fftw2
-#fftw-dev
-#libnetcdf6
-#netcdf-bin
-#libnetcdf-dev
+define STANDARD_SYSTEM_CONFIGURATION
+export MAKEFLAGS='-j 6 -I Makefiles'
+endef
 
 
 COMPILER=gnu-gfortran
@@ -37,6 +31,6 @@ ifdef USE_NETCDF
 	NETCDF_LIB = -L/usr/lib -lnetcdf -lnetcdff
 endif
 
-ifdef USE_LAPACK
-	LAPACK_LIB = -L/usr/lib -llapack
+ifdef GENQUAD
+	GENQUAD_LIB = -L/usr/lib -llapack 
 endif

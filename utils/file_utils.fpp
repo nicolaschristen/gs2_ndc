@@ -338,16 +338,22 @@ contains
     character(run_name_size) :: fname
     inquire(unit,name=fname)
 # if FCOMPILER == _XL_
-!    call flush_(unit)
+# ifdef F2003
     !Fortran 2003 introduces the flush statement
     flush(unit)
+# else
+    call flush_(unit)
+# endif
 # elif FCOMPILER == _NAG_
     close(unit=unit)
     open (unit=unit, file=trim(fname), status="old", action="write", position="append")
 # else
-!    call flush (unit)
+# ifdef F2003
     !Fortran 2003 introduces the flush statement
     flush(unit)
+# else
+    call flush (unit)
+# endif
 # endif
   end subroutine flush_output_file
 

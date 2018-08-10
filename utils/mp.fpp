@@ -36,6 +36,7 @@ module mp
   public :: broadcast_sub, sum_reduce_sub, nb_sum_reduce_sub
   public :: max_reduce, max_allreduce, nb_max_allreduce
   public :: min_reduce, min_allreduce
+  public :: maxloc_allreduce
   public :: nproc, iproc, proc0, job
   public :: send, ssend, receive
   public :: send_init, recv_init, start_comm, free_request !For persistent comms
@@ -108,8 +109,8 @@ module mp
 
   integer :: job = 0
 
-  real*8 :: dummy8
-  integer (kind(MPI_REAL)) :: mpireal, mpicmplx
+  real (kind=8) :: dummy8
+  integer (kind(MPI_REAL)) :: mpireal, mpicmplx, mpi2real
 #ifndef SINGLE_PRECISION
   integer (kind(MPI_REAL)) :: mpicmplx8
 #endif
@@ -444,6 +445,11 @@ end interface
      module procedure min_allreduce_real_array
   end interface
 ! MRH
+  interface maxloc_allreduce
+     module procedure maxloc_allreduce_real
+     module procedure maxloc_allreduce_real_array
+  end interface
+
   interface land_allreduce
      module procedure land_allreduce_single_element
   end interface 
@@ -459,6 +465,7 @@ end interface
 
      module procedure send_complex
      module procedure send_complex_array
+     module procedure send_complex_2d_array
      module procedure send_complex_3d_array
 
      module procedure nonblocking_send_complex_array
@@ -621,9 +628,11 @@ contains
 #endif 
     if ( (kind(pi)==kind_rs) .and. (kind_rs/=kind_rd) ) then
        mpireal = MPI_REAL
+       mpi2real = MPI_2REAL
        mpicmplx = MPI_COMPLEX
     else if (kind(pi)==kind_rd) then
        mpireal = MPI_DOUBLE_PRECISION
+       mpi2real = MPI_2DOUBLE_PRECISION
        mpicmplx = MPI_DOUBLE_COMPLEX
     else
        write (error_unit(),*) 'ERROR: precision mismatch in mpi'
@@ -1206,8 +1215,9 @@ contains
 
 #ifndef SINGLE_PRECISION
   subroutine broadcast_complex8_array (z)
+    use constants, only: kind_rs
     implicit none
-    complex*8, dimension (:), intent (in out) :: z
+    complex (kind=kind_rs), dimension (:), intent (in out) :: z
 # ifdef MPI
     integer :: ierror
     call mpi_bcast (z, size(z), mpicmplx8, 0, mp_comm, ierror)
@@ -2510,7 +2520,45 @@ contains
 # endif
   end subroutine max_allreduce_real_array
 
-
+  subroutine maxloc_allreduce_real(a,i)
+    implicit none
+    real, intent (in out) :: a
+    integer, intent (in out) :: i
+    real, dimension(:,:), allocatable :: ai
+# ifdef MPI
+    integer :: ierror
+    
+    allocate (ai(1,2))
+    ai(1,1)=a
+    ai(1,2)=real(i,kind=kind(a))
+    call mpi_allreduce &
+         (MPI_IN_PLACE, ai, 1, mpi2real, MPI_MAXLOC, mp_comm, ierror)
+    a=ai(1,1)
+    i=int(ai(1,2))
+    deallocate(ai)
+# endif
+  end subroutine maxloc_allreduce_real
+  
+  subroutine maxloc_allreduce_real_array (a,i)
+    implicit none
+    real, dimension (:), intent (in out) :: a
+    integer, dimension (:), intent (in out) :: i
+    real, dimension(:,:), allocatable :: ai
+# ifdef MPI
+    integer :: ierror
+    
+    allocate (ai(size(a),2))
+    ai(:,1)=a(:)
+    ai(:,2)=real(i(:),kind=kind(a(1)))
+    call mpi_allreduce &
+         (MPI_IN_PLACE, ai, size(a), mpi2real, MPI_MAXLOC, mp_comm, ierror)
+    a(:)=ai(:,1)
+    i(:)=int(ai(:,2))
+    deallocate(ai)
+# endif
+  end subroutine maxloc_allreduce_real_array
+  
+  
   subroutine nb_max_allreduce_integer (i,request)
     implicit none
     integer, intent (in out) :: i
@@ -2840,6 +2888,22 @@ contains
 # endif
   end subroutine send_complex_array
 
+  subroutine send_complex_2d_array (z, dest, tag)
+    implicit none
+    complex, dimension (:,:), intent (in) :: z
+    integer, intent (in) :: dest
+    integer, intent (in), optional :: tag
+# ifdef MPI
+    integer :: ierror
+    integer :: tagp
+    tagp = 0
+    if (present(tag)) tagp = tag
+    call mpi_send (z, size(z), mpicmplx, dest, tagp, mp_comm, ierror)
+# else
+    call error ("send")
+# endif
+  end subroutine send_complex_2d_array
+  
   subroutine send_complex_3d_array (z, dest, tag)
     implicit none
     complex, dimension (:,:,:), intent (in) :: z

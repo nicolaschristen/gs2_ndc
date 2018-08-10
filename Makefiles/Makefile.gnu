@@ -5,6 +5,17 @@ CC = gcc
 F90FLAGS += -ffree-line-length-none -fno-backslash
 CPPFLAGS += -DFCOMPILER=_GFORTRAN_
 
+### Note default is -std=gnu (f95+GNU extension)
+ifeq ($(FORTRAN_SPEC),95)
+	F90FLAGS += -std=f95 -fall-intrinsics
+endif
+ifeq ($(FORTRAN_SPEC),2003)
+	F90FLAGS += -std=f2003 -fall-intrinsics
+endif
+ifeq ($(FORTRAN_SPEC),2008)
+	F90FLAGS += -std=f2008 -fall-intrinsics
+endif
+
 cmd=$(shell basename $(shell which $(FC)))
 ver:=$(shell $(FC) --version | sed -n 's/GNU Fortran.*\([1-9][0-9]*\.[0-9]*\.[0-9]*\).*/\1/p')
 GFORTRANMAJORVERSION=$(shell echo $(ver) | awk -F. '{print $$1}')
@@ -17,8 +28,21 @@ ifeq ($(NOSIZEOF),on) # this cannot be replaced by ifdef
 	CPPFLAGS += -DNO_SIZEOF
 endif
 
+# For gfortran > 4.8.0, we don't want it including include/stdc-predef.h
+# so we use -ffreestanding to avoid this.
+# Added by Ian Abel 18/7/2013
+FREESTANDING_NEEDED = $(shell [ $(GFORTRANMAJORVERSION) -gt 4 -o \( $(GFORTRANMAJORVERSION) -ge 4 -a $(GFORTRANMINORVERSION) -ge 8 \) ] && echo needed)
+ifeq ($(FREESTANDING_NEEDED),needed)
+	CPPFLAGS += -ffreestanding
+endif
+
 ifdef DBLE
-	F90FLAGS += -fdefault-real-8
+ifdef QUAD
+	DBLEFLAGS = -fdefault-real-8
+else
+	DBLEFLAGS = -fdefault-real-8 -fdefault-double-8
+endif
+	F90FLAGS += $(DBLEFLAGS)
 endif
 
 ifdef STATIC
@@ -26,14 +50,14 @@ ifdef STATIC
 endif
 
 ifdef DEBUG
-	F90FLAGS += -g -Wall -fimplicit-none -fbounds-check
+	F90FLAGS += -g -Wall -fimplicit-none -fbounds-check #-ffpe-trap=invalid,zero,overflow
 	F90OPTFLAGS =
 	CFLAGS += -g -Wall -fbounds-check
 	COPTFLAGS =
 else
 	ifdef OPT
-		F90OPTFLAGS += -O3
-		COPTFLAGS += -O3
+		F90OPTFLAGS += -O3 -fno-tree-loop-vectorize
+		COPTFLAGS += -O3 -fno-tree-loop-vectorize
 	endif
 
 	ifeq ($(findstring gprof,$(PROF)),gprof)
@@ -46,4 +70,3 @@ ifdef USE_OPENMP
 	F90FLAGS += -fopenmp
 	CFLAGS += -fopenmp
 endif
-

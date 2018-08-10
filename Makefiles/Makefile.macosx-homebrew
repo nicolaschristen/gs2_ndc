@@ -1,20 +1,32 @@
-# Makefile for Max OS X
-# Maintainer: bdorland@umd.edu (haha)
+# Makefile for Max OS X with dependencies installed using the
+# Homebrew package manager.
+# Maintainer: edmundhighcock@user.sourceforge.net
 
 define STANDARD_SYSTEM_CONFIGURATION
-export MAKEFLAGS='-j 4 -I Makefiles'
+echo Before building install these packages using Homebrew\n\
+echo brew install gcc\n\
+echo brew install homebrew/science/netcdf --with-fortran\n\
+export MAKEFLAGS='-j 4 -I Makefiles';\
+export TESTEXEC='mpirun -n 6 -oversubscribe';
 endef
 
 COMPILER=gnu-gfortran
 include Makefile.$(COMPILER)
 
+#CPPFLAGS += -DANSI_CPP
 USE_LOCAL_SPFUNC=on
+#ONE_STEP_PP=on
+F90FLAGS += -cpp -ffree-form
 
 ifeq ($(USE_FFT),fftw3)
-	FFT_LIB = -L/usr/local/Cellar/fftw/3.3.4_1/lib -lfftw3 -lfftw3f
+	FFT_LIB = -L/usr/local/Cellar/fftw/3.3.7_1/lib -lfftw3 -lfftw3f
 endif
 
 ifdef USE_NETCDF
-	NETCDF_INC = -I/usr/local/Cellar/netcdf/4.3.2_1/include/
-	NETCDF_LIB = -L/usr/local/Cellar/netcdf/4.3.2_1/lib -lnetcdf
+	NETCDF_INC = -I$(shell nc-config --includedir)
+	#NETCDF_INC = -I/usr/local/Cellar/netcdf/4.6.0/include/
+	
+	# As of 2018/02/01 nc-config was broken for brew installation.
+	#NETCDF_LIB = $(shell nc-config --flibs)
+	NETCDF_LIB = -L/usr/local/Cellar/netcdf/4.6.0/lib/ -lnetcdff -lnetcdf
 endif

@@ -127,6 +127,8 @@ module kt_grids_range
   !reuse these flags (rename to spacingopt_...).
   integer, parameter :: kyspacingopt_linear=1, kyspacingopt_exp=2 
 
+  real :: n0_tmp
+
   namelist /kt_grids_range_parameters/ naky, ntheta0, nn0, n0_min, n0_max, &
        aky_min, aky_max, theta0_min, theta0_max, akx_min, akx_max, rhostar_range,&
        kyspacing_option
@@ -143,7 +145,7 @@ contains
          (/ text_option('default', kyspacingopt_linear), &
             text_option('linear', kyspacingopt_linear), &
             text_option('exponential', kyspacingopt_exp) /)
-
+    
     if (parameters_read) return
     parameters_read = .true.
 
@@ -193,14 +195,61 @@ contains
 
     if (n0_min .gt. 0) then
 !CMR if n0_min>0 then override aky inputs and use nn0, n0_min, n0_max to determine aky range
+
+       !If toroidal mode number range would lead to non-integer mode numbers then
+       !we adjust the range to try to fix this.
+       if(mod(n0_max-n0_min,nn0-1).ne.0) then
+          !Give a warning message that we're changing things
+          write(ierr,'("Warning: toroidal mode number range setup would lead to non-integer")')
+          write(ierr,'("         mode numbers --> Attempting to adjust range slightly.")')
+          
+          !n0_max should be n0_min + I*(nn0-1) or n0_min + (I+1)*(nn0-1)
+          !where I is int(n0_max-n0_min/(nn0-1)) and we add 1 if the
+          !remainder (n0_max-n0_min)/(nn0-1) - I is > 0.5
+          !Note it's nn0-1 rather than nn0 as this is number of intervals
+
+          !First calculate the floating step size
+          n0_tmp = (n0_max-n0_min*1.0)/(nn0-1)
+
+          !Now construct the new upper limit, int(n0_tmp) = I
+          !nint(n0_tmp-int(n0_tmp)) should be either 0 or 1 depending
+          !on if the remainder is < or > 0.5
+          n0_max = n0_min + (int(n0_tmp)+nint(n0_tmp-int(n0_tmp)))*(nn0-1)
+          
+          !Double check it's all OK now, should always be fine but just
+          !putting this here in case of logic error or strange cases.
+          if(mod(n0_max-n0_min,nn0-1).ne.0) then
+             write(ierr,'("Error: Attempt to fix toroidal mode number range failed. Forcing nn0=1")')
+             nn0=1
+             n0_max = n0_min
+          endif
+       endif
+
+       !If n0_min>n0_max swap values
+       if(n0_min.gt.n0_max) then
+          write(ierr,'("Warning: Swapping max and min n0 values")')
+          n0_tmp = n0_min
+          n0_min = n0_max
+          n0_max = n0_tmp
+       endif
+
+       !If n0_min == n0_max ensure nn0=1
+       if(n0_min.eq.n0_max) then
+          if(nn0.ne.1) write(ierr,'("Warning: Forcing nn0=1 as n0_min==n0_max.")')
+          nn0 = 1
+       endif
+       
+       !If there's only one mode then force n0_max=n0_min
+       if(nn0 .eq. 1) then
+          n0_max = n0_min
+       endif
+
+       !Set the upper and lower aky limits
+       aky_max=n0_max*drhodpsi*rhostar_range
        aky_min=n0_min*drhodpsi*rhostar_range
-       if (mod(n0_max-n0_min,nn0).ne.0 .or. nn0 .eq. 1 .or. n0_min.ge.n0_max) then
-          naky=1
-          aky_max=aky_min
-       else
-          naky=nn0
-          aky_max=n0_max*drhodpsi*rhostar_range
-       endif 
+
+       !Set the number of aky values
+       naky=nn0
     endif
 
   end subroutine init_kt_grids_range
@@ -1007,7 +1056,6 @@ contains
     call broadcast (interp_before) ! NDCTEST
     
     call init_kperp2
-    
   end subroutine init_kt_grids
 
   subroutine read_parameters_internal
@@ -1121,9 +1169,7 @@ contains
   subroutine init_kperp2
     use theta_grid, only: ntgrid, gds2, gds21, gds22, shat
     implicit none
-    integer :: ik, it, itmin, itmax
-    real :: dkx
-    real, dimension(:), allocatable :: dtheta0
+    integer :: ik, it
 
     if (kp2init) return
     kp2init = .true.

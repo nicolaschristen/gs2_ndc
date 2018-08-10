@@ -1,0 +1,23 @@
+# Host: York Plasma Institute servers
+##To setup the modules correctly you will want something like the following
+##in your shell profile (e.g. ~/.bashrc or ~/.modulerc)
+#module load gcc/5.4.0
+#module load openmpi/2.1.1
+#module load zlib szip hdf5 netcdf
+#module load fftw
+#module load lapack
+
+define STANDARD_SYSTEM_CONFIGURATION
+module purge ;\
+module load gcc/5.4.0 ;\
+module load openmpi/2.1.1 ;\
+module load zlib szip hdf5 netcdf ;\
+module load fftw lapack ;
+endef
+
+COMPILER=gnu-gfortran
+include Makefile.$(COMPILER)
+NETCDF_DIR = ${YORK_NETCDF_DIR}
+NETCDF_INC = -I${YORK_NETCDF_DIR}/include
+NETCDF_LIB = -L${YORK_NETCDF_DIR}/lib -lnetcdff -lnetcdf
+FFT_LIB = -lfftw3	

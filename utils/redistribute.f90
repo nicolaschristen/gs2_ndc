@@ -5992,7 +5992,7 @@ contains
              recv_lookup(count) = ip
 !             call nbrecv(recv_buff(-ntgrid:ntgrid,:,1:r%to(ip)%nn,count),ip,ip,recv_hand(count))
              msgsize = (((ntgrid*2)+1)*2)*r%to(ip)%nn
-             call nbrecv(recv_buff(:,:,:,count),msgsize,ip,ip,recv_hand(count))
+             call nbrecv(recv_buff(-ntgrid:ntgrid,:,1:r%to(ip)%nn,count),msgsize,ip,ip,recv_hand(count))
           end if
        end do
 
@@ -6011,7 +6011,7 @@ contains
              end do
 !             call nbsend (send_buff(:,:,1:r%from(ip)%nn,count),ip,iproc,send_hand(count))
              msgsize = (((ntgrid*2)+1)*2)*r%from(ip)%nn
-             call nbsend (send_buff(:,:,:,count),ip,iproc,send_hand(count))
+             call nbsend (send_buff(-ntgrid:ntgrid,:,1:r%from(ip)%nn,count),ip,iproc,send_hand(count))
           end if
        end do
     end if
@@ -6233,7 +6233,7 @@ contains
                                                        r%to(ip)%o(i), &
                                                        r%to(ip)%p(i))
              end do
-             call nbsend (send_buff(:,:,1:r%to(ip)%nn,count),ip,iproc,send_hand(count))
+             call nbsend (send_buff(-ntgrid:ntgrid,:,1:r%to(ip)%nn,count),ip,iproc,send_hand(count))
           end if
        end do
     end if

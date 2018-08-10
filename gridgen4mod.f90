@@ -1,4 +1,41 @@
 module gridgen4mod
+! MRH 15/11/2017
+! Previous versions of gridgen4_2  produced different theta grids on different machines
+! In this version of gridgen4mod I have corrected this bug by making changes in the following subroutines (in gridgen4_2):
+! heapsort- modified the inequalities in the sorting algorithm for reasons discussed below.
+! get_thetares-corrected this routine so that thetares is 0 when thetares is computed using
+! (theta (i) - theta (j)) and theta(i) equals theta (j) to machine error, and the output should be identically 0.
+! get_lambdares-corrected this routine in the same manner as get_thetares, the output is 0 when it should be identically 0.
+! gg4remove- modification of the inequalities used to choose which points to delete from the superset of theta points.
+!
+! The function of this module seems to be to optimise the choice of theta grid points.
+! It does this by taking the magnetic field and theta grid generated in the geometry module,
+! and spline fitting the magnetic field on a fine-mesh theta grid.
+! By using the metrics defined in get_lambdares and get_thetares 
+! the subroutine gg4remove removes points from the fine-mesh theta grid iteratively until the required number of points remain.
+! The theta grid pair with the lowest value for the metric is deleted at each iteration.
+! The reason for the bug was that these metrics were calculated in a sloppy manner,
+! and the routine for finding the lowest value in the metric did not allow for the 
+! case that the metrics were identical up to machine precision:
+! -In the 1st iteration of gg4remove all of the metrics should be identically 0 but were not
+! -The 1st theta grid pair were deleted based on a decision made with machine precision sized values of the metric-this led to random behaviour
+! -When all duplicate values of the theta grid pairs 
+! ----- (theta grid superset contains duplicate values of the theta grid pairs for reasons unbeknownst to me)
+! had all been deleted, because the fine-mesh theta grid had almost equally spaced points
+! the values for the metrics for the theta grid pairs near theta =0 were almost exactly equal.
+! -Depending on the machine, the metric would be slightly lower for one pair of points than another
+! and therefore the choice of which pair of points to delete 1st from the non-duplicate set was random.
+! This behaviour led to different theta grids between different machines.
+
+! I fixed the above bug by biasing the gg4remove procedure to remove the 1st theta grid pair in array element order 
+! (of the sorted theta grid superset array) in the case that the metrics were equal up to machine error.
+! The variable precision_bound controls this behaviour, precision_bound equal 0.0 returns this module to its original behaviour.
+! Finite but small precision_bound is enough to remove machine dependence.
+! I biased heapsort in a similar manner to enable debugging - the sorting algorithm
+! was also machine dependent because of the duplicate theta grid points in the superset.
+
+! run_name.gridgen.200 contains the debug output from this module
+! To see verbose output ensure that debug_output =.true.and verbose_debug_output =.true.
 
 contains
 
@@ -141,8 +178,9 @@ contains
     real, dimension (nbset), intent (out) :: bset
     real :: npi
     integer, parameter :: maxiter = 100
-    logical, parameter :: debug_output = .true.
+    logical, parameter :: debug_output = .true.,verbose_debug_output = .false. ! MRH verbose_debug_output prints out the resolution_metric to debug_unit for every iteration of gg4remove to debug the point using procedure
 
+    real, parameter :: precision_bound = 1.0e3*epsilon (0.0)! MRH a number used to take into account machine error in floatingpoint arithmetic
     real, dimension (:), allocatable :: bmagspl
 
     integer :: nstart
@@ -153,6 +191,7 @@ contains
 
     integer :: nset, nsetset
     real, allocatable, dimension (:) :: thetasetset, bmagset
+    real, allocatable, dimension (:) :: thetasetset_sorted, bmagset_sorted ! MRH for debugging
     integer, allocatable, dimension (:) :: ibmagsetset, icollsetset
     logical, allocatable, dimension (:) :: essentialset
     
@@ -161,38 +200,102 @@ contains
     real, allocatable, dimension (:) :: thetares, alambdares
     
     integer :: nthetaout, nlambdaout
-    
+    integer :: itheta !MRH
     integer :: debug_unit
-    logical, parameter :: debug=.false.    
+    logical, parameter :: debug=.false.!.true.!    
     npi = n * twopi
 
 if (debug) write(6,*) "gridgen4_2: call gg4init"
     call gg4init
 if (debug) write(6,*) "gridgen4_2: call gg4debug"
-    call gg4debug (nbmag, thetain, bmagin, "input grid")
+    call gg4debug (nbmag, thetain, bmagin, "gg4init - input grid - thetain bmagin ")
 
 ! 1 Set up starting grid.
 if (debug) write(6,*) "gridgen4_2: call gg4start"
     call gg4start (n)
 if (debug) write(6,*) "gridgen4_2: call gg4debug"
-    call gg4debug (nstart, thetastart, thetastart, "starting grid")
+    call gg4debug (nstart, thetastart, thetastart, "gg4start - starting grid - thetastart thetastart")
+! MRH thetastart is the array containing the theta grid on a finer grid, after a spline fit of the 
+! MRH magnetic field has been done in gg4init and some obscure manipulations in gg4start
+! MRH quirkily the 1st element is - pi and the 2nd element is 0, the rest of the elements increase monotonically from - pi to pi
 
+! MRH bmagstart Contains a spline fit of the magnetic field, although a different one to gg4init
+! MRH and is on the same grid as thetastart with the -pi and 0 elements as the 1st 2 elements. 
+
+! MRH essentialstart is an array containing logicals indicating which elements of the thetastart grid are essential (it's the 1st 2 only)
+if (debug) write(6,*) "gridgen4_2: call gg4debug"
+    call gg4debug (nstart, bmagstart, bmagstart, "gg4start - starting field - bmagstart bmagstart")
+    call gg4debugl (nstart, essentialstart, "gg4start - essentialstart")
+!MRH
 ! 2 Collect all bounce points associated with starting grid.
 if (debug) write(6,*) "gridgen4_2: call gg4collect"
     call gg4collect
 if (debug) write(6,*) "gridgen4_2: call gg4debug"
-    call gg4debug (nset, bmagset, bmagset, "bmagset")
+    call gg4debug (nset, bmagset, bmagset, " gg4collect - bmagset bmagset")
 if (debug) write(6,*) "gridgen4_2: call gg4debugi"
-    call gg4debugi (nsetset,thetasetset,ibmagsetset,icollsetset,"thetasetset")
+    call gg4debugi (nsetset,thetasetset,ibmagsetset,icollsetset," gg4collect - thetasetset ibmagsetset icollsetset")
+
+! MRH bmagset seems not to differ from bmagstart
+
+! MRH thetasetset contains paired elements of the theta grid with the same magnetic field strength except 
+! MRH for the 1st 2 elements which are still -pi and 0
+! MRH note that this grid contains some redundancy, every theta point appears 
+! MRH in a (- theta, theta) pair and these pairs appear twice.
+
+! MRH ibmagsetset is an array that is paired with thetasetset and contains 
+! MRH the index of bmagset corresponding to the theta value stored in thetasetset
+! MRH so thetasetset (i), bmagset(ibmagset(i)) are the paired values of (theta, B(theta)) 
+
+! MRH icollsetset seems to be a debugging label which is not used outside of gg4collect
 
 ! 3 Sort collected grids.
 if (debug) write(6,*) "gridgen4_2: call gg4sort"
     call gg4sort
+! MRH ithetasort is an array which contains an index such that for a given index s 
+! MRH of the monotonically increasing theta grid, the grid value for 
+! MRH the monotonically increasing theta growth can be attained by 
+! MRH thetasetset_sorted(s) = thetasetset(ithetasort(s))
 
+! MRH ibmagsort is the corresponding array for the magnetic field sort
+! MRH thetasetset_sorted and bmagset_sorted are the monotonically increasing sorted arrays for debugging
+if (debug) write(6,*) "gridgen4_2: call gg4debug"
+    call gg4debugi (nsetset, thetasetset, ithetasort, ithetasort, "gg4sort - thetasetset ithetasort ithetasort")
+if (debug) write(6,*) "gridgen4_2: call gg4debug"
+    call gg4debugi (nset, bmagset, ibmagsort, ibmagsort, "gg4sort - bmagset ibmagsort ibmagsort")
+if (debug) then
+    allocate (thetasetset_sorted(nsetset))
+    allocate (bmagset_sorted(nset))
+    do itheta=1,nsetset
+        thetasetset_sorted(itheta) = thetasetset(ithetasort(itheta))
+    enddo
+    do itheta=1,nset
+        bmagset_sorted(itheta) = bmagset(ibmagsort(itheta))
+    enddo
+
+    call gg4debug (nset, bmagset_sorted, bmagset, "gg4sort - bmagset_sorted bmagset")
+
+    call gg4debug (nsetset,thetasetset_sorted,thetasetset,"gg4sort - thetasetset_sorted thetasetset")
+    deallocate(thetasetset_sorted)
+    deallocate(bmagset_sorted)
+! MRH essentialset is an array containing logicals indicating which elements of the thetastart grid are essential (it's the 1st 2 only)    
+    call gg4debugl (nstart, essentialset, "gg4sort - essentialset")
+endif
+!MRH
 ! 4 Calculate spacing and resolution metrics.
 if (debug) write(6,*) "gridgen4_2: call gg4metrics"
     call gg4metrics
-
+!MRH
+! MRH are the metrics used to determine which points of the larger fine grid (thetasetset-with redundant points)
+! MRH to keep as one reduces to the required grid size
+! MRH the larger the value of the metric the more valuable the point is
+! MRH A pair of points is deleted when it is the least valuable member of the set
+! MRH the process of reducing to less fine grid is iterative and pairs of points are deleted one at a time
+! MRH The metrics are recalculated after a pair of points is deleted within gg4remove
+! MRH Points are deleted by setting their corresponding magnetic field strength bmagset = 0.0 
+! MRH so that it is ignored when reconstructing the grid and field in gg4results
+if (debug) write(6,*) "gridgen4_2: call gg4debug"
+    call gg4debug (nset, thetares, alambdares, "gg4metrics - thetares alambdares")
+!MRH
 ! 5 Remove sets until the number of points is small enough.
 if (debug) write(6,*) "gridgen4_2: call gg4metrics"
     call gg4remove
@@ -201,9 +304,9 @@ if (debug) write(6,*) "gridgen4_2: call gg4metrics"
 if (debug) write(6,*) "gridgen4_2: call gg4results"
     call gg4results (n)
 if (debug) write(6,*) "gridgen4_2: call gg4debug"
-    call gg4debug (nthetaout, thetagrid, bmaggrid, "output grid")
+    call gg4debug (nthetaout, thetagrid, bmaggrid, "gg4results - output grid - thetagrid thetagrid")
 if (debug) write(6,*) "gridgen4_2: call gg4debugi"
-    call gg4debug (nlambdaout, bset, bset, "output 1/lambda")
+    call gg4debug (nlambdaout, bset, bset, "gg4results - output 1/lambda - bset bset")
 
     ntheta = 2*(nthetaout/2)
     nbset = nlambdaout
@@ -1117,7 +1220,13 @@ if (debug) write(6,*) "gridgen4_2: call gg4finish"
       call heapsort (nsetset, thetasetset(1:nsetset), ithetasort)
       call heapsort (nset, bmagset(1:nset), ibmagsort)
     end subroutine gg4sort
-
+!MRH
+!bset(n) = bmagset(ibmagsort(i))
+!The above line comes from GG4results
+! For that line to make sense index here must be:
+! A map which takes the new position of an element in the sorted list
+! Returns the index of the old position of the same element in the unsorted list
+! MRH
     subroutine heapsort (n, v, index)
       implicit none
       integer, intent (in) :: n
@@ -1126,7 +1235,7 @@ if (debug) write(6,*) "gridgen4_2: call gg4finish"
       integer :: i, j, l, ir, ira
       
       index = (/ (i, i=1,n) /)
-      
+      !if (debug) write(6,*) "heapsort index", index !MRH
       l = n/2+1
       ir = n
       
@@ -1147,9 +1256,15 @@ if (debug) write(6,*) "gridgen4_2: call gg4finish"
          j = l + l
          do while (j <= ir)
             if (j < ir) then
-               if (v(index(j)) < v(index(j+1))) j = j + 1
+               if (v(index(j)) < v(index(j+1))-precision_bound) j = j + 1 ! precision_bound =1.0e3*epsilon(0.0)
+            ! MRH the epsilon number in the inequality has been inserted so that the logical operator gives a 
+            ! MRH well-defined result across machines when v(index(j))==v(index(j+1))
+               !if (v(index(j+1)) - v(index(j)) >= 0.0) j = j + 1 !MRH
             end if
-            if (v(ira) < v(index(j))) then
+            if (v(ira) < v(index(j))-precision_bound) then ! precision_bound = 1.0e3*epsilon(0.0)
+            ! MRH the epsilon number in the inequality has been inserted so that the logical operator gives a 
+            ! MRH well-defined result across machines when v(ira)==v(index(j))
+            !if (v(index(j))-v(ira) >=0.0) then !MRH
                index(i) = index(j)
                i = j
                j = j + j
@@ -1176,6 +1291,7 @@ if (debug) write(6,*) "gridgen4_2: call gg4finish"
             alambdares(i) = 0.0
          end if
       end do
+      
     end subroutine gg4metrics
     
     subroutine get_thetares (iset, thetares)
@@ -1184,7 +1300,7 @@ if (debug) write(6,*) "gridgen4_2: call gg4finish"
       real, intent (out) :: thetares
 
       integer :: i, ileft, iright
-      real :: dthetal, dthetar
+      real :: dthetal, dthetar, dtheta_tmp !MRH
       real :: res
       integer :: npts
 
@@ -1213,7 +1329,15 @@ if (debug) write(6,*) "gridgen4_2: call gg4finish"
       npts = 0
       points_in_set: do i = 1, nsetset
          if (ibmagsetset(ithetasort(i)) /= iset) cycle
+!MRH The above line forces i to be such that we are looking at 
+!MRH an element in the unsorted lists with the iset label we are considering (labels pairs of bmag values)
+
 ! 2.1 Look for the point to the left.
+! MRH the purpose of the below loops seems to be
+! MRH to find the index "ileft" of the closest location to the left with a nonzero magnetic field "bmagset" (In the sorted thetasetset grid)
+! MRH to find the index "iright" of the closest location to the right with a nonzero magnetic field "bmagset" (In the sorted thetasetset grid)
+! MRH to see which theta values correspond to ibmagsetset values, (and hence which bmagset values)
+! MRH look at the "# gg4collect - thetasetset ibmagsetset icollsetset" debug output
          ileft = i
          do
             ileft = ileft - 1
@@ -1230,8 +1354,30 @@ if (debug) write(6,*) "gridgen4_2: call gg4finish"
             if (bmagset(ibmagsetset(ithetasort(iright))) /= 0.0) exit
          end do
 ! 2.3 Add contribution from this interval.
-         dthetal=abs(thetasetset(ithetasort(i))-thetasetset(ithetasort(ileft)))
-         dthetar=abs(thetasetset(ithetasort(i))-thetasetset(ithetasort(iright)))
+! MRH the following seems to compute some kind of weighted resolution in theta
+! MRH all points with the same Theta value (or possibly magnetic field strength value) contribute to this resolution
+
+      !MRH The point of the following modifications to avoid numbers
+      !MRH of the size of machine precision appearing in thetares
+      !MRH which is used to choose which theta points to delete
+      !MRH machine precision size numbers differ from machine to machine 
+      !MRH and so lead to different data grids on different machines 
+         dtheta_tmp = abs(thetasetset(ithetasort(i))-thetasetset(ithetasort(ileft)))
+         if (dtheta_tmp < precision_bound) then !1.0e3*epsilon(0.0)
+            dthetal =0.0
+         else 
+            dthetal=dtheta_tmp
+         endif
+         
+         dtheta_tmp = abs(thetasetset(ithetasort(i))-thetasetset(ithetasort(iright)))
+         if (dtheta_tmp < precision_bound) then !1.0e3*epsilon(0.0)
+            dthetar=0.0
+         else
+            dthetar=dtheta_tmp
+         endif
+        !MRH
+         !dthetal=abs(thetasetset(ithetasort(i))-thetasetset(ithetasort(ileft)))
+         !dthetar=abs(thetasetset(ithetasort(i))-thetasetset(ithetasort(iright)))
          res = res + tfunc(thetasetset(ithetasort(i)))*dthetal*dthetar &
               /(dthetal+dthetar+1e-20)
          npts = npts + 1
@@ -1249,7 +1395,7 @@ if (debug) write(6,*) "gridgen4_2: call gg4finish"
       real, intent (out) :: alambdares
 
       integer :: i, iplus, iminus
-      real :: al, alplus, alminus, dalplus, dalminus
+      real :: al, alplus, alminus, dalplus, dalminus, dal_tmp !MRH
       real :: res
       integer :: npts
       
@@ -1282,10 +1428,28 @@ if (debug) write(6,*) "gridgen4_2: call gg4finish"
       res = 0.0
       npts = 0
       do i = 1, nbmag
-         dalplus = abs(sqrt(max(1.0-alplus*bmagin(i),0.0)) &
-              -sqrt(max(1.0-al*bmagin(i),0.0)))
-         dalminus = abs(sqrt(max(1.0-alminus*bmagin(i),0.0)) &
-              -sqrt(max(1.0-al*bmagin(i),0.0)))
+      !MRH The point of the following modifications to avoid numbers
+      !MRH of the size of machine precision appearing in lambdares
+      !MRH which is used to choose which theta points to delete
+      !MRH machine precision size numbers differ from machine to machine 
+      !MRH and so lead to different data grids on different machines 
+         dal_tmp = abs(sqrt(max(1.0-alplus*bmagin(i),0.0))-sqrt(max(1.0-al*bmagin(i),0.0))) 
+         if (dal_tmp< precision_bound) then !1.0e5*epsilon(0.0)
+            dalplus = 0.0 
+         else
+            dalplus=dal_tmp
+         endif
+         dal_tmp = abs(sqrt(max(1.0-alminus*bmagin(i),0.0))-sqrt(max(1.0-al*bmagin(i),0.0)))
+         if (dal_tmp < precision_bound) then !1.0e5*epsilon(0.0)
+            dalminus = 0.0
+         else
+            dalminus = dal_tmp 
+         endif
+         !MRH
+         !dalplus = abs(sqrt(max(1.0-alplus*bmagin(i),0.0)) &
+         !     -sqrt(max(1.0-al*bmagin(i),0.0)))
+         !dalminus = abs(sqrt(max(1.0-alminus*bmagin(i),0.0)) &
+         !     -sqrt(max(1.0-al*bmagin(i),0.0)))
          if (dalplus+dalminus /= 0.0) then
             npts = npts + 1
             res = res + dalplus*dalminus/(dalplus+dalminus+1e-20)
@@ -1305,6 +1469,8 @@ if (debug) write(6,*) "gridgen4_2: call gg4finish"
       integer :: ntheta_left, nlambda_left
       integer, dimension (nset) :: work
       
+      real, dimension (nset) :: resolution_metric ! MRH to address machine dependence
+      
       nlambda_left = nset
       ntheta_left = nsetset
       do i = 1, nset
@@ -1312,13 +1478,83 @@ if (debug) write(6,*) "gridgen4_2: call gg4finish"
             nlambda_left = nlambda_left - 1
          end if
       end do
-! 1 Find the set with the minimum resolution metric.
+! 1 Find the set with the minimum resolution metric. !MRH Actually we are looking for a set of maximal resolution_metric values
       do while (ntheta_left > ntheta .or. nlambda_left > nbset)
-         work(1:1) = minloc(thetares(1:nset)+alknob*alambdares(1:nset), &
-              bmagset(1:nset) /= 0.0)
-         idel = work(1)
          
+         ! ! ! resolution_metric = thetares+alknob*alambdares 
+        ! ! ! ! MRH since we want to delete the iset value for which the resolution_metric is minimum
+        ! ! ! ! MRH we do not change the result by subtracting the minimum value of the resolution_metric array from
+        ! ! ! ! MRH from itself for all array values. We need to do this because resolution_metric is filled with either zeros
+        ! ! ! ! MRH or pairs of values that identical to machine precision
+        ! ! ! ! MRH the Fortran intrinsic minloc should pick the 1st minimum value in array element order when there are multiple minimum values
+        ! ! ! ! MRH however depending on the compiler it seems to have trouble doing this for nonzero values of the minimum.
+        ! ! ! ! MRH This is likely because for finite R,L L==R (when displayed) L-R ~ epsilon(0.0) the machine precision 
+        ! ! ! ! MRH machine precision size numbers differ from machine to machine 
+        ! ! ! ! MRH and so this leads to different theta grids on different machines 
+        ! ! ! ! MRH ==> therefore we insure here that the minimum value is always exactly 0.
+        
+         ! ! ! ! MRH the following line subtracts the minimum value 
+         ! ! ! ! MRH for which the mask bmagset(1:nset) /= 0.0 is true (i.e. we have not already deleted this value of iset)
+         ! ! ! resolution_metric = resolution_metric - minval(resolution_metric,bmagset(1:nset) /= 0.0)
+         ! ! ! ! MRH we then ensure that for every value which is minimum, the entry is exactly 0
+         ! ! ! ! MRH this is so that minloc selects the 1st minimum value in array element order
+         ! ! ! do i =1,nset
+            ! ! ! if(resolution_metric(i)< precision_bound ) then !1.0e5*epsilon(0.0)
+                ! ! ! resolution_metric(i)=0.0
+            ! ! ! endif
+         ! ! ! enddo
+         ! MRH this line then gives us the next element to delete
+         
+         ! ! !work(1:1) = minloc(resolution_metric(1:nset),bmagset(1:nset) /= 0.0)
+         
+         ! MRH I have improved the above fix by making it more transparent-
+        ! MRH I have written my own version of the intrinsic function minloc
+        ! MRH minimum_index has all the documented features of minloc for a 1D array
+        ! MRH with the added feature of the final machine_error variable
+        ! MRH this variable gives a definite truth value to (array(i) < array (j) - machine_error) 
+        ! MRH in the case that array(i) is identical to array(j).
+        ! MRH This ensures the minimum_index returns the 1st minimum index in array order
+        ! MRH this turns out to be necessary because in the 1st iteration in this loopafter all of the duplicate 
+        ! MRH theta grid pairs have been deleted the resolution metric is calculated for the 
+        ! MRH remaining theta grid which is made of almost equally spaced points, and as a
+        ! MRH consequence the resolution_metric contains values which are almost
+        ! MRH identical-differing only by machine precision- 
+        ! MRH this leads to a random choice in which theta grid points to keep
+        ! MRH in order to make this choice consistently across machines
+        ! MRH we always remove the theta pair corresponding to the 1st value (in array
+        ! MRH element order) of resolution_metric when the values of resolution_metric
+        ! MRH are identical up to machine precision
+         resolution_metric = thetares+alknob*alambdares
+         work(1:1) = minimum_index (nset, resolution_metric, bmagset(1:nset) /= 0.0, precision_bound)
+         !work(1:1) = minloc(thetares(1:nset)+alknob*alambdares(1:nset), &
+         !     bmagset(1:nset) /= 0.0)
+         idel = work(1)
+        if (debug) then 
+            write(6,*) "gridgen4_2: call gg4debug"
+            ! MRH if one follows this debug output one sees that:
+! MRH whilst there are duplicate theta values remaining to be considered in the thetasetset grid
+! MRH the values of the resolution_metric are initially all 0 (whilst every grid point has a duplicate)
+! MRH and as the duplicates are deleted (every element of the list that is deleted is a duplicate until we reach midway)
+! MRH more values of resolution_metric steadily become non 0.
+! MRH finally when all the duplicates are deleted the values of the resolution_metric almost identical and differ 
+! MRH only at machine precision
+! MRH this is because after all of the duplicate pairs have been deleted but before any more pairs have been deleted
+! MRH the resolution metric is calculated based on the difference between almost equally spaced theta grid points
+! MRH (see "# gg4collect - thetasetset ibmagsetset icollsetset" in .gridgen.200 to see the pairs of theta grid points 
+! MRH and their magnetic field strength label ibmagsetset - idel is always an element of ibmagsetset 
+! MRH - in this way one can keep track of which pairs are being deleted)
+! MRH the bug that I have fixed was that depending on the machine, the resolution_metric at this stage in the computation
+! MRH had entries which differed at the machine precision level, and as a consequence the next theta grid pair to be 
+! MRH deleted was effectively chosen at random, which biased the rest of the procedure so that the theta grid differed 
+! MRH from machine to machine.
+! MRH By making the comparison in minimum_index with a bias, we avoid a machine dependent theta grid
+            if (debug_output) write (unit=debug_unit, fmt=*) "gg4remove idel ",idel
+            call gg4debug4 (nset, thetares, alambdares,bmagset,resolution_metric, "gg4metrics thetares alambdares bmagset(mask F if 0.0) resolution_metric")       
+        endif    
 ! 2 Delete the set just found.
+! MRH the subroutine delete_set deletes the iset value that the above lines just found
+! MRH it does this by setting bmagset (idel) =0.0 so that when gg4results computes the final field and theta grid
+! MRH this value of iset is ignored. Finally the metrics are computed taking into account that the point has been deleted
          if (idel == 0) then
             print *, "gridgen4.f:gg4remove:2: This cannot happen."
             call mp_abort("gridgen4.f:gg4remove:2: This cannot happen.")
@@ -1327,6 +1563,50 @@ if (debug) write(6,*) "gridgen4_2: call gg4finish"
          nlambda_left = nlambda_left - 1
       end do
     end subroutine gg4remove
+    
+
+    function minimum_index (n, array, mask, machine_error)
+    ! MRH the function minimum_index has been written to have the same features as minloc
+    ! MRH n is the length of the array and mask
+    ! MRH array is the array from which we want the index of the minimum value in the array
+    ! MRH mask is an array of logicals of the same dimension as array.
+    ! MRH we consider values in array for which mask is true. If all values of mask are false minimum_index is 0
+    ! MRH machine_error is a control parameter in case we are comparing numbers which are identical in size
+    ! MRH this function returns the 1st minimum in array element order if there are multiple minimum of the same size
+    
+    ! MRH minimum_index has all the documented features of minloc for a 1D array
+    ! MRH with the added feature of the final machine_error variable
+    ! MRH this variable gives a definite truth value to (array(i) < array (j) - machine_error) 
+    ! MRH in the case that array(i) is identical to array(j).
+    ! MRH This ensures the minimum_index returns the 1st minimum index in array order
+        implicit none
+        real, dimension (:), intent (in) :: array
+        logical, dimension (:), intent (in) :: mask
+        integer, intent (in) :: n
+        real, intent (in) :: machine_error
+        integer :: i, minimum_index
+        real :: minimum_value
+        
+        minimum_index = 0
+        if (all (.not. mask)) return ! MRH if all of mask is false there are no values to consider in the array and so we return with 0 as the minimum index
+        ! MRH get a starting value for the minimum-above we confirmed above there is at least one value in the array
+        do i=1,n
+            if (mask(i)) then
+                minimum_value = array(i)
+                minimum_index =i
+                exit
+            endif
+        enddo
+        ! MRH now go through all the values in the array to find the minimum
+
+        do i=1,n
+            if (mask (i) .and. (array (i) < minimum_value- machine_error )) then !
+                minimum_value = array (i)
+                minimum_index =i
+            endif
+        enddo
+        
+    end function minimum_index
     
     subroutine delete_set (idel, work, ntheta_left)
       implicit none
@@ -1439,7 +1719,7 @@ if (debug) write(6,*) "gridgen4_2: call gg4finish"
       if (debug_output) then
          write (unit=debug_unit, fmt="('#',a)") label
          do i = 1, n
-            write (unit=debug_unit, fmt="(i5,1x,2(g19.12,1x))") i, x(i), y(i)
+            write (unit=debug_unit, fmt="(i5,1x,2(g25.18,1x))") i, x(i), y(i)
          end do
       end if
     end subroutine gg4debug
@@ -1456,11 +1736,44 @@ if (debug) write(6,*) "gridgen4_2: call gg4finish"
       if (debug_output) then
          write (unit=debug_unit, fmt="('#',a)") label
          do i = 1, n
-            write (unit=debug_unit, fmt="(i5,1x,g22.15,1x,i4,1x,i10)") &
+            write (unit=debug_unit, fmt="(i5,1x,g25.18,1x,i4,1x,i10)") &
                  i, x(i), i1(i), i2(i)
          end do
       end if
     end subroutine gg4debugi
+
+    subroutine gg4debugl (n, x, label)
+      implicit none
+      integer, intent (in) :: n
+      logical, dimension (:), intent (in) :: x
+      character(*), intent (in) :: label
+
+      integer :: i
+      
+      if (debug_output) then
+         write (unit=debug_unit, fmt="('#',a)") label
+         do i = 1, n
+            write (unit=debug_unit, fmt=*) &
+                 i, x(i)
+         end do
+      end if
+    end subroutine gg4debugl
+    
+    subroutine gg4debug4 (n, x, y, p,q, label)
+      implicit none
+      integer, intent (in) :: n
+      real, dimension (:), intent (in) :: x, y,p,q
+      character(*), intent (in) :: label
+
+      integer :: i
+      
+      if (verbose_debug_output) then
+         write (unit=debug_unit, fmt="('#',a)") label
+         do i = 1, n
+            write (unit=debug_unit, fmt="(i5,1x,4(g22.15,1x))") i, x(i), y(i), p(i), q(i)
+         end do
+      end if
+    end subroutine gg4debug4
     
     function bmagint (theta)
       use splines, only: fitp_curvp2

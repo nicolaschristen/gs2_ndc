@@ -10,10 +10,20 @@ endif
 
 include Makefile.$(COMPILER)
 
+ifndef USE_HDF5
 ifdef USE_MPI
 ifdef USE_MIC
 	MPIFC = mpiifort
 	MPICC = mpiicc
+else
+	MPIFC := $(FC)
+	MPICC := $(CC)
+	LIBS += -lmpi
+	ifneq ($(COMPILER),intel)
+		CPPFLAGS += -DMPIINC
+		MPI_INC += -I$(MPI_ROOT)/include
+	endif
+endif
 endif
 endif
 

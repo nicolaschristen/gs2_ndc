@@ -8,7 +8,7 @@ module species
   public :: wnml_species, check_species
   public :: nspec, specie, spec
   public :: ion_species, electron_species, slowing_down_species, tracer_species
-  public :: has_electron_species, has_slowing_down_species
+  public :: has_ion_species, has_electron_species, has_slowing_down_species
   public :: ions, electrons, impurity
   public :: set_overrides
   public :: determine_species_order
@@ -344,6 +344,13 @@ contains
     deallocate(tmp_bcast)
 
   end subroutine read_parameters
+
+  pure function has_ion_species (spec)
+    implicit none
+    type (specie), dimension (:), intent (in) :: spec
+    logical :: has_ion_species
+    has_ion_species = any(spec%type == ion_species)
+  end function has_ion_species
 
   pure function has_electron_species (spec)
     implicit none

@@ -24,9 +24,10 @@ program time_timestep
   use fields, only: init_fields, advance
   use fields_implicit, only: skip_initialisation
   use fft_work, only: save_wisdom, load_wisdom
+  use constants, only: run_name_size
   implicit none
   real :: eps
-    character (500), target :: cbuff
+  character (run_name_size), target :: cbuff
   real :: tstart
   logical :: dummy=.false.
   integer, dimension(:), allocatable :: sizes

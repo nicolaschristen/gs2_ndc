@@ -25,7 +25,11 @@ DBLESIZEOPT=$(shell if [ $(INTELMAJORVERSION) -lt 10 ]; then echo "-double_size 
 endif
 
 ifdef DBLE
+ifdef QUAD
 	DBLEFLAGS = -r8 $(DBLESIZEOPT)
+else
+	DBLEFLAGS = -r8
+endif
 	F90FLAGS += $(DBLEFLAGS)
 endif
 
@@ -95,15 +99,20 @@ endif
 ifdef USE_OPENMP
 	ifeq ($(shell if [ $(INTELMAJORVERSION) -lt 15 ]; then echo "old_version"; fi),old_version)
 	### deprecated option
-		F90FLAGS += -openmp
-		CFLAGS += -openmp
+		F90FLAGS += -openmp -openmp-report2
+		CFLAGS += -openmp -openmp-report2
 	else
-		F90FLAGS += -qopenmp
-		CFLAGS += -qopenmp
+		F90FLAGS += -qopenmp -parallel -qopt-report
+		CFLAGS += -qopenmp -parallel -qopt-report
 	endif
 endif
 
 ifdef USE_MIC
 	F90FLAGS += -mmic
 	CFLAGS += -mmic
+endif
+
+ifdef ONE_STEP_PP
+	F90FLAGS += -fpp -free
+	CPPFLAGS += -DANSI_CPP
 endif

@@ -39,7 +39,7 @@ endif
 # which dependencies to build any more. EGH 04/03/2015
 # UPDATE: we now build and test the gs2 exec as well. EGH 14/03/15
 TEST_DEPS?=libgs2.a functional_tests.o benchmarks.o gs2
-TESTS_ENVIRONMENT=FC="$(FC)" F90FLAGS="${F90FLAGS}" CPP="$(CPP)"  LD="$(LD)" LDFLAGS="$(LDFLAGS) -L$(PWD) $(SDATIO_LINK)" LIBS=" -lgs2 $(SDATIO_LIB) $(LIBS)" CPPFLAGS="$(CPPFLAGS)"
+TESTS_ENVIRONMENT=FC="$(FC)" F90FLAGS="${F90FLAGS}" CPP="$(CPP)"  LD="$(LD)" LDFLAGS="$(LDFLAGS) -L$(PWD) $(SDATIO_LINK)" LIBS=" -lgs2 $(SDATIO_LIB) $(LIBS)" CPPFLAGS="$(CPPFLAGS)" ONE_STEP_PP="${ONE_STEP_PP}"
 MAKETESTS = $(MAKE) $(TESTS_ENVIRONMENT)
 
 #export TESTCOMMAND

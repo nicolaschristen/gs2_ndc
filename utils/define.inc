@@ -21,6 +21,7 @@
 
 # define _SPLOCAL_ 51
 # define _SPNAG_ 52
+# define _SPF200X_ 53
 
 # define _NAGDBLE_ 61
 # define _NAGSNGL_ 62

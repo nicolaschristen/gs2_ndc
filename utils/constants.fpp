@@ -16,10 +16,13 @@ module constants
   public :: size_of
 
   public :: kind_is, kind_id, kind_rs, kind_rd
-
+# ifdef QUAD_PRECISION
+  public :: kind_rq
+# endif
+  
   public :: dp, sp, spc, dpc, ii
 
-  public :: zi, pi, twopi, dpi, dtwopi
+  public :: zi, dzi, pi, twopi, dpi, dtwopi
 
 # ifdef NAG_PREC
   public :: nag_kind
@@ -45,8 +48,10 @@ module constants
   integer, parameter :: kind_id = selected_int_kind (15)
   integer, parameter :: kind_rs = selected_real_kind (p=6)
   integer, parameter :: kind_rd = selected_real_kind (p=12)
+# ifdef QUAD_PRECISION
   ! There is a selected_real_kind bug in xlf and the following doesn't work
   integer, parameter :: kind_rq = selected_real_kind (p=24)
+# endif
 
   ! <EGH
 
@@ -87,6 +92,7 @@ module constants
 
   !> Square root of -1.
   complex, parameter :: zi = ( 0.0 , 1.0 )
+  complex (kind=kind(1.d0)), parameter :: dzi = ( 0.d0 , 1.d0 )
 
   !> Pi to quad precision, (double if DBLE is unset)
   double precision, parameter :: dpi = &
@@ -123,9 +129,9 @@ module constants
      module procedure size_of_i1, size_of_ih, size_of_is, size_of_id
      module procedure size_of_rs, size_of_rd
      module procedure size_of_cs, size_of_cd
-!!$# ifdef QUAD
-!!$     module procedure size_of_rq, size_of_cq
-!!$# endif
+# ifdef QUAD_PRECISION
+     module procedure size_of_rq, size_of_cq
+# endif
   end interface
 
 contains
@@ -159,12 +165,12 @@ contains
     size_of_rd = sizeof_rd
   end function size_of_rd
 
-!!$# ifdef QUAD
-!!$  integer function size_of_rq (arg)
-!!$    real (kind_rq) :: arg
-!!$    size_of_rq = sizeof_rq
-!!$  end function size_of_rq
-!!$# endif
+# ifdef QUAD_PRECISION
+  integer function size_of_rq (arg)
+    real (kind_rq) :: arg
+    size_of_rq = sizeof_rq
+  end function size_of_rq
+# endif
 
   integer function size_of_cs (arg)
     complex (kind_rs), intent(in) :: arg
@@ -176,12 +182,12 @@ contains
     size_of_cd = sizeof_cd
   end function size_of_cd
 
-!!$# ifdef QUAD
-!!$  integer function size_of_cq (arg)
-!!$    complex (kind_rq) :: arg
-!!$    size_of_cq = sizeof_cq
-!!$  end function size_of_cq
-!!$# endif
+# ifdef QUAD_PRECISION
+  integer function size_of_cq (arg)
+    complex (kind_rq) :: arg
+    size_of_cq = sizeof_cq
+  end function size_of_cq
+# endif
 
 end module constants
 

@@ -99,6 +99,7 @@ module dist_fn
 
   public :: gf_lo_integrate
   public :: check_getan
+  public :: calculate_flux_surface_average
   
   public :: update_kperp2_tdep
   public :: update_aj0_tdep
@@ -127,9 +128,8 @@ module dist_fn
   integer :: g_exb_start_timestep
   !logical :: dfexist, skexist, nonad_zero
   logical :: dfexist, skexist, nonad_zero, lf_default, lf_decompose, esv, opt_init_bc, opt_source
-!CMR, 12/9/13: New logical cllc to modify order of operator in timeadv
 !CMR, 21/5/14: New logical wfb_cmr to enforce trapping conditions on wfb
-  logical :: cllc, wfb_cmr
+  logical :: wfb_cmr
 
   real :: densfac_lin, uparfac_lin, tparfac_lin, tprpfac_lin
   real :: qparfac_lin, qprpfac_lin, phifac_lin
@@ -562,7 +562,6 @@ contains
        write (unit, fmt="(' nonad_zero = ',L1)") nonad_zero
        write (unit, fmt="(' gridfac = ',e17.10)") gridfac
        write (unit, fmt="(' esv = ',L1)") esv
-       write (unit, fmt="(' cllc = ',L1)") cllc
        write (unit, fmt="(' wfb_cmr = ',L1)") wfb_cmr
        write (unit, fmt="(' opt_init_bc = ',L1)") opt_init_bc
        write (unit, fmt="(' opt_source = ',L1)") opt_source
@@ -1025,7 +1024,7 @@ contains
     namelist /dist_fn_knobs/ boundary_option, nonad_zero, gridfac, apfac, &
          driftknob, tpdriftknob, poisfac, adiabatic_option, &
          kfilter, afilter, mult_imp, test, def_parity, even, wfb, &
-         g_exb, g_exbfac, omprimfac, btor_slab, mach, cllc, lf_default, &
+         g_exb, g_exbfac, omprimfac, btor_slab, mach, lf_default, &
          g_exb_start_time, g_exb_start_timestep, g_exb_error_limit, &
 
          lf_decompose, esv, wfb_cmr, opt_init_bc, opt_source, zero_forbid, &
@@ -1044,7 +1043,6 @@ contains
        boundary_option = 'default'
        nonad_zero = .true.  ! BD: Default value changed to TRUE  8.15.13
        wfb_cmr= .false.
-       cllc = .false.
        esv = .false.
        opt_init_bc = .false.
        opt_source = .false.
@@ -1121,7 +1119,6 @@ contains
     call broadcast (boundary_option_switch)
     call broadcast (nonad_zero)
     call broadcast (wfb_cmr)
-    call broadcast (cllc)
     call broadcast (esv)
     call broadcast (opt_init_bc)
     call broadcast (opt_source)
@@ -1462,7 +1459,9 @@ contains
   function wdrift_func (ig, il, ie, it, ik, my_kx_shift_opt)
     use theta_grid, only: shat
     use kt_grids, only: aky, theta0, akx
+    use le_grids, only: energy, al
     use run_parameters, only: wunits
+    use gs2_time, only: code_dt
     implicit none
     real :: wdrift_func
     integer, intent (in) :: ig, ik, it, il, ie
@@ -1470,7 +1469,7 @@ contains
 
     ! note that wunits=aky/2 (for wstar_units=F)
     if (aky(ik) == 0.0) then
-        wdrift_func = 0.5*akx(it)/shat * calc_vdrift_x(ig,il,ie)
+       wdrift_func = 0.5*akx(it)/shat * calc_vdrift_x(ig,il,ie)
     else
         if(present(my_kx_shift_opt)) then
             wdrift_func = wunits(ik) * &
@@ -1537,8 +1536,9 @@ contains
 
   function wcoriolis_func (ig, il, ie, it, ik, is, my_kx_shift_opt)
 
-    use theta_grid, only: shat
+    use theta_grid, only: bmag, cdrift, cdrift0, shat
     use kt_grids, only: aky, theta0, akx
+    use le_grids, only: energy, al
     use run_parameters, only: wunits
     use kt_grids, only: implicit_flowshear ! NDCTESTshift
     use dist_fn_arrays, only: kx_shift ! NDCTESTshift
@@ -4192,72 +4192,28 @@ contains
     ! GK solve is done with phi[it+1] containing phistar[it] instead of phistar[it+1].
     ! If indeed they do need the full phi, there might be a problem: computing phistar[it+1]
     ! requires the full g[it+1] ...
-    if (istep.eq.0 .or. .not.cllc) then
-    !CMR do the usual LC when computing response matrix
-       !Calculate the explicit terms
-       call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
+
+    !Calculate the explicit nonlinear terms
+    call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
          phi, apar, bpar, istep, bkdiff(1))
-       call debug_message(verb, &
+    call debug_message(verb, &
         'dist_fn::timeadv calculated nonlinear term')
-       if(reset .and. immediate_reset) return !Return if resetting
-       !Solve for gnew
-       call invert_rhs (phi, apar, bpar, phinew, aparnew, bparnew, istep)
-       call debug_message(verb, &
+    if(reset .and. immediate_reset) return !Return if resetting
+    !Solve for gnew
+    call invert_rhs (phi, apar, bpar, phinew, aparnew, bparnew, istep)
+    call debug_message(verb, &
         'dist_fn::timeadv calculated rhs')
 
-       !Add hyper terms (damping)
-       call hyper_diff (gnew, phinew)
-       call debug_message(verb, &
+    !Add hyper terms (damping)
+    call hyper_diff (gnew, phinew)
+    call debug_message(verb, &
         'dist_fn::timeadv calculated hypviscosity')
-       !Add collisions
-       if( .not. split_collisions) then
-         call vspace_derivatives (gnew, g, g0, phi, bpar, phinew, bparnew, modep)
-         call debug_message(verb, &
+    !Add collisions
+    if( .not. split_collisions) then
+      call vspace_derivatives (gnew, g, g0, phi, bpar, phinew, bparnew, modep)
+      call debug_message(verb, &
           'dist_fn::timeadv calculated collisions etc')
-       end if
-    else if (istep.eq.1 .and. istep.ne.istep_last) then
-    !CMR on first half step at istep=1 do CL with all redists
-       if( .not. split_collisions) then
-         call vspace_derivatives (gnew, g, g0, phi, bpar, phinew, bparnew, modep)
-       end if
-       !Calculate the explicit terms
-       call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
-         phi, apar, bpar, istep, bkdiff(1))
-       if(reset) return !Return if resetting
-       !Solve for gnew
-       call invert_rhs (phi, apar, bpar, phinew, aparnew, bparnew, istep)
-       !Add hyper terms (damping)
-       call hyper_diff (gnew, phinew)
-    else if (istep.ne.istep_last) then
-    !CMR on first half step do CL with all redists without gtoc redist
-       if( .not. split_collisions) then
-         call vspace_derivatives (gnew, g, g0, phi, bpar, phinew, bparnew, modep,gtoc=.false.)
-       end if
-       !Calculate the explicit terms
-       call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
-         phi, apar, bpar, istep, bkdiff(1))
-       if(reset) return !Return if resetting
-       !Solve for gnew
-       call invert_rhs (phi, apar, bpar, phinew, aparnew, bparnew, istep)
-       !Add hyper terms (damping)
-       call hyper_diff (gnew, phinew)
-    else if (istep.eq.istep_last) then
-    !CMR on second half of all timesteps do LC without ctog redist
-       !Calculate the explicit terms 
-       !NB following call should be unnecessary as NL terms not added on second
-       !    half of istep: keeping for now as may be needed by some code
-       call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
-         phi, apar, bpar, istep, bkdiff(1))
-       if(reset) return !Return if resetting
-
-       !Solve for gnew
-       call invert_rhs (phi, apar, bpar, phinew, aparnew, bparnew, istep)
-       !Add hyper terms (damping)
-       call hyper_diff (gnew, phinew)
-       if( .not. split_collisions) then
-         call vspace_derivatives (gnew, g, g0, phi, bpar, phinew, bparnew, modep, ctog=.false.)
-       end if
-    endif
+    end if
 
     !Enforce parity if desired (also performed in invert_rhs, but this is required
     !as collisions etc. may break parity?)
@@ -7599,7 +7555,7 @@ endif
 
   subroutine init_fieldeq
     use dist_fn_arrays, only: aj0, aj1, vperp2, gamtot_tdep
-    use species, only: nspec, spec, has_electron_species
+    use species, only: nspec, spec, has_electron_species, has_ion_species
     use theta_grid, only: ntgrid
     use kt_grids, only: naky, ntheta0, aky, kperp2, &
         explicit_flowshear, implicit_flowshear, mixed_flowshear
@@ -7693,8 +7649,7 @@ endif
     endif
 
 ! adiabatic electrons 
-    if (.not. has_electron_species(spec)) then
-       
+    if (.not. has_electron_species(spec) .or. .not. has_ion_species(spec) ) then
        if (adiabatic_option_switch == adiabatic_option_yavg) then
           do ik = 1, naky
              if (aky(ik) > epsilon(0.0)) gamtot(:,:,ik) = gamtot(:,:,ik) + tite
@@ -7790,27 +7745,7 @@ endif
     if (.not. has_electron_species(spec)) then
        if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
           
-!          if (first) then 
-          if (.not. allocated(awgt)) then
-             allocate (awgt(ntheta0, naky))
-             awgt = 0.
-             do ik = 1, naky
-                do it = 1, ntheta0
-                   if (aky(ik) > epsilon(0.0)) cycle
-                   awgt(it,ik) = 1.0/sum(delthet*jacob*gamtot3(:,it,ik))
-                end do
-             end do
-          endif
-           
-          do ik = 1, naky
-             do it = 1, ntheta0
-                fl_avg(it,ik) = tite*sum(delthet*jacob*antot(:,it,ik)/gamtot(:,it,ik))*awgt(it,ik)
-             end do
-          end do
-
-!          do it=2,ntheta0
-!             fl_avg(it, 1) = fl_avg(it, 1) - 1.0
-!          end do
+          call calculate_flux_surface_average(fl_avg,antot)
        end if
 
     end if
@@ -7931,24 +7866,7 @@ endif
 
     if (.not. has_electron_species(spec)) then
        if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
-          if (.not. allocated(awgt)) then
-             allocate (awgt(ntheta0, naky))
-             awgt = 0.
-             do ik = 1, naky
-                if (aky(ik) > epsilon(0.0)) cycle
-                do it = 1, ntheta0
-                   if(kwork_filter(it,ik)) cycle
-                   awgt(it,ik) = 1.0/sum(delthet*jacob*gamtot3(:,it,ik))
-                end do
-             end do
-          endif
-           
-          do ik = 1, naky
-             do it = 1, ntheta0
-                if(kwork_filter(it,ik)) cycle
-                fl_avg(it,ik) = tite*sum(delthet*jacob*antot(:,it,ik)/gamtot(:,it,ik))*awgt(it,ik)
-             end do
-          end do
+          call calculate_flux_surface_average(fl_avg,antot)
        end if
     end if
 
@@ -8375,6 +8293,7 @@ endif
     !   beta/2 * gamtot1 * phi + (beta * gamtot2 + 1) * bpar = - beta * antotp
     ! I haven't made any check for use_Bpar=T case.
     use run_parameters, only: beta, fphi, fapar, fbpar
+    use species, only: spec, has_electron_species
     use theta_grid, only: ntgrid, bmag
     use kt_grids, only: ntheta0, naky, kperp2, &
         explicit_flowshear, implicit_flowshear, mixed_flowshear
@@ -8386,6 +8305,8 @@ endif
     complex, dimension (-ntgrid:ntgrid,ntheta0,naky) :: antot, antota, antotp
     complex, dimension (-ntgrid:ntgrid,ntheta0,naky) :: numerator
     real, dimension (-ntgrid:ntgrid,ntheta0,naky) :: bmagsp
+    complex, dimension (ntheta0,naky) :: fl_avg
+    complex, dimension (-ntgrid:ntgrid,ntheta0,naky) :: fl_avg_sp
     logical :: local_gf_lo
 
     if(present(gf_lo)) then
@@ -8394,6 +8315,13 @@ endif
        local_gf_lo = .false.
     end if
 
+    ! When restarting flow shear cases, need to compute t-dep quantities from kx_shift that has been restored
+    ! by ginit in gs2_init::set_initial_field_and_dist_fn_values. -- NDC 08/18
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+        call update_kperp2_tdep
+        call update_aj0_tdep
+        call update_gamtot_tdep
+    end if
 
     phi=0. ; apar=0. ; bpar=0.
     antot=0.0 ; antota=0.0 ; antotp=0.0
@@ -8405,19 +8333,28 @@ endif
        call getan (antot, antota, antotp)
     end if
 
+    fl_avg = 0.0
+    if( .not. has_electron_species(spec) .and. adiabatic_option_switch == adiabatic_option_fieldlineavg ) then
+      call calculate_flux_surface_average(fl_avg,antot)
+    end if
+    fl_avg_sp(-ntgrid:ntgrid,:,:) = spread(fl_avg,1,2*ntgrid+1)
+
     ! get phi
     if (fphi > epsilon(0.0)) then
 
 !CMR, 1/8/2011:  bmag corrections here: 
-       ! NDCQUEST: should those beta corrections still be there for ES runs with beta/=0 ?
+       
+       ! NDCQUEST: new flow shear algorithm not supporting adiabatic_option_fieldlineavg and EM beta corrections.
+
        ! NDCQUEST: with the mixed flow shear algorithm, phi calculated here will differ slightly
        ! from the one saved in the restart file (because part of the time dependence in QN
        ! has been made explicit and moved to the GK eq).
+
        if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-           numerator = (beta * gamtot2 + bmagsp**2) * antot - (beta * gamtot1) * antotp
-           denominator = (beta * gamtot2 + bmagsp**2) * gamtot_tdep%new + (beta/2.0) * gamtot1 * gamtot1
+           numerator = antot
+           denominator = gamtot_tdep%new
        else
-           numerator = (beta * gamtot2 + bmagsp**2) * antot - (beta * gamtot1) * antotp
+           numerator = (beta * gamtot2 + bmagsp**2) * (antot+fl_avg_sp) - (beta * gamtot1) * antotp
            denominator = (beta * gamtot2 + bmagsp**2) * gamtot + (beta/2.0) * gamtot1 * gamtot1
        end if
 
@@ -11682,5 +11619,58 @@ endif
          call delete_list (to)
       endif
   end subroutine init_pass_wfb
+
+!---------------------------------------------------------------------------  
+!> @author 
+!> Joseph Parker, STFC
+!
+! DESCRIPTION: 
+!> Calculate the flux surface average term for the adiabatic response. 
+!> @brief
+!> If using adiabatic electrons and the option
+!> @dist_fn_knobs
+!>   adiabatic_option = "iphi00=2"
+!> /
+!> the field solve should subtract the flux surface average 
+!> from the perturbed electron distribution function,
+!> i.e. include the term <phi> in
+!>
+!>   f1e = q( phi - <phi>) f0e / Te
+!>
+!> This function calculates <phi> and returns it as fl_avg.
+!
+!--------------------------------------------------------------------------- 
+  subroutine calculate_flux_surface_average (fl_avg,antot)
+
+    use kt_grids, only: naky, ntheta0, aky, kwork_filter
+    use run_parameters, only: tite
+    use theta_grid, only: ntgrid, delthet, jacob
+    implicit none
+    complex, dimension (ntheta0, naky), intent (out) :: fl_avg
+    complex, dimension (-ntgrid:ntgrid,ntheta0,naky), intent (in) :: antot
+    integer :: ik, it
+
+    fl_avg = 0.
+
+    if (.not. allocated(awgt)) then
+       allocate (awgt(ntheta0, naky))
+       awgt = 0.
+       do ik = 1, naky
+          if (aky(ik) > epsilon(0.0)) cycle
+          do it = 1, ntheta0
+             if(kwork_filter(it,ik)) cycle
+             awgt(it,ik) = 1.0/sum(delthet*jacob*gamtot3(:,it,ik))
+          end do
+       end do
+    endif
+     
+    do ik = 1, naky
+       do it = 1, ntheta0
+          if(kwork_filter(it,ik)) cycle
+          fl_avg(it,ik) = tite*sum(delthet*jacob*antot(:,it,ik)/gamtot(:,it,ik))*awgt(it,ik)
+       end do
+    end do
+
+  end subroutine calculate_flux_surface_average
 
 end module dist_fn

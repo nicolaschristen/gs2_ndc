@@ -2854,6 +2854,8 @@ contains
     
     tempdata = 0.0
    
+!CMRQ: cost of Supercell Head Packing?
+!CMR: BEGIN  Supercell Head Packing
     !AJ Unpack tmp_sum on the supercell head, tmp_sum has the calculated field update on the supercell head
     do ik=1,self%naky
        if(.not.self%kyb(ik)%is_local) cycle
@@ -2933,7 +2935,10 @@ contains
     enddo
     
     !AJ At this point tempdata has the calculated field update for a supercell on the supercell head.
+!CMR: END   Supercell Head Packing
 
+!CMRQ: cost of Supercell Head => proc0?
+!CMR: BEGIN All Supercell Heads => proc0
     allocate(recv_handles(naky*ntheta0))
     allocate(send_handles(naky*ntheta0))
 
@@ -2974,6 +2979,7 @@ contains
        end if
        
     end if
+!CMR: END All Supercell Heads => proc0
        
     !AJ Now send the data back to all processes in the supercell
     !AJ This is less efficient than it needs to be.
@@ -2981,14 +2987,26 @@ contains
     !AJ ever owned by a single owner so we could just send specific 
     !AJ it,ik points to the processes that own them with point-to-point 
     !AJ communications (see the else part of this)
+
+!CMR: BEGIN Supercell Heads => cells
+!
+!CMR: Note AJ Comment above that USE_BROADCAST=T approach (default) is inefficient!
+!
+!CMR: Observation, probably need MPI rank to participate in SINGLE supercell
+!     MPI rank holding multiple cells might be OK (and avoid comms contention) sometimes:
+!        -- if all cells in SAME supercell
+!        -- if cells in different supercells that need no COMMS (e.g. supercells with 1 cell)
     if(use_broadcast) then
        do ik=1,self%naky
+!CMR: Loop over each supercell (labelled ik, self%kyb(ik)%nsupercell), 
           if(self%kyb(ik)%is_empty) cycle
           do is=1,self%kyb(ik)%nsupercell
              if(self%kyb(ik)%supercells(is)%is_empty) cycle
+!CMR: if get here, iproc participates 
              head = self%kyb(ik)%supercells(is)%head_iproc
              sub = self%kyb(ik)%supercells(is)%sc_sub_all%id
              allocate(tempdata2(-ntgrid:ntgrid,nfield,self%kyb(ik)%supercells(is)%ncell))
+!CMR: head does all packing ready for broadcast to all supercell
              if(self%kyb(ik)%supercells(is)%is_head) then
                 do ic=1,self%kyb(ik)%supercells(is)%ncell                
                    it=self%kyb(ik)%supercells(is)%cells(ic)%it_ind
@@ -3008,6 +3026,7 @@ contains
              end if
              call broadcast_sub(tempdata2,head,sub)
              if(.not.self%kyb(ik)%supercells(is)%is_head) then
+!CMR: everyone else unpacks result of broadcast
                 do ic=1,self%kyb(ik)%supercells(is)%ncell
                    it=self%kyb(ik)%supercells(is)%cells(ic)%it_ind
                    tempfield = 1
@@ -3031,6 +3050,8 @@ contains
        !AJ Don't use the broadcast to do the sending back of data in the supercell,
        !AJ use point to point communications instead.
     else
+!CMR: NB this (more efficient?) approach is OFF by default!
+!CMRQ:  Is alternative to USE_BROADCAST=F working?  Is it more efficient? Why not default?
        
        call initialise_requests(send_handles)
        call initialise_requests(recv_handles)
@@ -3110,6 +3131,10 @@ contains
        call waitall(sendreqnum-1,send_handles)
        
     end if
+
+!CMR: END Supercell Heads => cells (gf_fields)
+
+!CMR: BEGIN Supercell Heads => FIRST g_lo rank(ik,it)
        
     call initialise_requests(send_handles)
     call initialise_requests(recv_handles)
@@ -3122,6 +3147,7 @@ contains
        sender = self%heads(it,ik)
        if(sender .ne. iproc .and. iproc .ne. 0) then
           if(g_lo%ikit_procs_assignment(it,ik)%proc_list(1) .eq. iproc) then
+!CMR: if iproc is FIRST processor on list that must receive ik,it in g_lo, set up nbrecv
              tag = ik*self%ntheta0 + it          
              call nbrecv(tempdata3(:,:,it,ik),sender,tag,recv_handles(recvreqnum))             
              recvreqnum = recvreqnum + 1
@@ -3136,15 +3162,18 @@ contains
        do is=1,self%kyb(ik)%nsupercell
           if(self%kyb(ik)%supercells(is)%is_empty) cycle
           if(self%kyb(ik)%supercells(is)%is_head) then
+!CMR: if iproc is supercell head for it,ik, proceed to set up nbsends
              do ic=1,self%kyb(ik)%supercells(is)%ncell                
                 it=self%kyb(ik)%supercells(is)%cells(ic)%it_ind
                 if(kwork_filter(it,ik)) cycle
                 receiver = g_lo%ikit_procs_assignment(it,ik)%proc_list(1) 
                 if(receiver .ne. iproc .and. receiver .ne. 0) then            
                    tag = ik*self%ntheta0 + it    
+!CMR: nbsend from supercell head to where needed in g_lo
                    call nbsend(tempdata(:,:,it,ik),receiver,tag,send_handles(sendreqnum))
                    sendreqnum = sendreqnum + 1
                 else if(receiver .eq. iproc .and. receiver .ne. 0) then
+!CMR: unpack data supercell head sends to ITSELF in g_lo
                    tempfield = 1
                    if(fphi>epsilon(0.0)) then
                       ph(:,it,ik) = tempdata(:,tempfield,it,ik)
@@ -3166,6 +3195,7 @@ contains
     call waitall(recvreqnum-1,recv_handles)
     
     do ikit=1, g_lo%ikitrange
+!CMR: all other cores unpack received data in g_lo
        ik=g_lo%local_ikit_points(ikit)%ik
        it=g_lo%local_ikit_points(ikit)%it
        if(kwork_filter(it,ik)) cycle
@@ -3191,7 +3221,9 @@ contains
 
     deallocate(send_handles, recv_handles)
     deallocate(tempdata3)
+!CMR: END Supercell Heads => FIRST g_lo rank(ik,it)
     
+!CMR: BEGIN   FIRST g_lo rank(ik,it) => OTHER g_lo ranks(ik,it)
 
     !AJ Now get the data from the process in g_lo that has received a given ik,it point to the rest of the 
     !AJ processes that own it.
@@ -3248,7 +3280,7 @@ contains
     end do
     
     deallocate(tempdata)
-
+!CMR: END   FIRST g_lo rank(ik,it) => OTHER g_lo ranks(ik,it)
   end subroutine fm_gather_fields
 
   !>Update the fields using calculated update
@@ -3525,7 +3557,7 @@ contains
     use run_parameters, only: beta, tite
     use species, only: spec, has_electron_species
     use dist_fn, only: gamtot,gamtot1, gamtot2, gamtot3, fl_avg, gridfac1, apfac, awgt
-    use dist_fn, only: adiabatic_option_switch, adiabatic_option_fieldlineavg
+    use dist_fn, only: adiabatic_option_switch, adiabatic_option_fieldlineavg, calculate_flux_surface_average
     implicit none
     class(fieldmat_type), intent(in) :: self
     complex, dimension (-ntgrid:,:,:), intent (in) :: phi, apar, bpar
@@ -3539,24 +3571,7 @@ contains
 
     if (.not. has_electron_species(spec)) then
        if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
-          if (.not. allocated(awgt)) then
-             allocate (awgt(ntheta0, naky))
-             awgt = 0.
-             do ik = 1, naky
-                if (aky(ik) > epsilon(0.0)) cycle
-                do it = 1, ntheta0
-                   if(kwork_filter(it,ik)) cycle
-                   awgt(it,ik) = 1.0/sum(delthet*jacob*gamtot3(:,it,ik))
-                end do
-             end do
-          endif
-           
-          do igf = gf_lo%llim_proc, gf_lo%ulim_proc
-             ik = ik_idx(gf_lo,igf)
-             it = it_idx(gf_lo,igf)
-             if(kwork_filter(it,ik)) cycle
-             fl_avg(it,ik) = tite*sum(delthet*jacob*antot(:,it,ik)/gamtot(:,it,ik))*awgt(it,ik)
-          end do
+          call calculate_flux_surface_average(fl_avg,antot)
        end if
     end if
 

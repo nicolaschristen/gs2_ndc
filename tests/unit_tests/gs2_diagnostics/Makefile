@@ -12,6 +12,7 @@ all:
 else
 all: test_gs2_diagnostics 
 	$(call RUNCOMMAND,test_gs2_diagnostics,test_gs2_diagnostics.in)
+	$(call RUNCOMMAND,test_gs2_diagnostics,test_gs2_diagnostics_nspec_2.in)
 
 endif
 

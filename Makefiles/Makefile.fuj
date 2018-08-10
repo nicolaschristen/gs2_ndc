@@ -2,17 +2,20 @@
 
 FC = frtpx
 MPIFC = mpifrtpx
-CC = FCCpx
-MPICC =  mpiFCCpx
+CC = fccpx
+MPICC =  mpifccpx
 
 #F90FLAGS = -A m -C cdRR8 -X9 -static-flib -Kfast
 #F90FLAGS = -C cdRR8 -X9 -Kfast
 #F90FLAGS = -Kfast
 CPPFLAGS += -DFCOMPILER=_FUJ_
 
+# F95 specification
+F90FLAGS += -X9
+
 ifdef DBLE
-	DBLEFLAGS = -C cdRR8
-	F90FLAGS += $(DBLEFLAGS)
+      DBLEFLAGS = -C cdRR8
+      F90FLAGS += $(DBLEFLAGS)
 endif
 
 #ifndef USE_NR_RAN
@@ -24,15 +27,22 @@ endif
 LIBS += -SSL2
 
 ifdef STATIC
-	F90FLAGS +=
+      F90FLAGS +=
 endif
 
 ifdef DEBUG
-	F90FLAGS += -g -H easu
-	F90OPTFLAGS =
+      F90FLAGS += -g -H easu
+      F90OPTFLAGS =
 else
-	ifdef OPT
-		F90OPTFLAGS += -O3 -Kfast
-	endif
-	F90OPTFLAGS += -X9 -f 2004,2006,2008 -Wa,--no-warn
+      ifdef OPT
+            F90OPTFLAGS += -O3 -Kfast
+      endif
 endif
+
+ifdef USE_OPENMP
+      F90FLAGS += -Kopenmp,parallel
+endif
+
+# some messaging options
+#	F90OPTFLAGS += -f 2004,2006,2008 -Wa,--no-warn
+#       F90OPTFLAGS += -Qa,d,i,p,t,x -Koptmsg=2

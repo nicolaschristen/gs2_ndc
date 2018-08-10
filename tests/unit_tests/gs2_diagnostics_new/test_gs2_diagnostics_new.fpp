@@ -66,7 +66,7 @@ program test_gs2_diagnostics_new
     n_lines(4) = '10'
     variables(5) = 't'
     n_lines(5) = '5'
-    variables(6) = 'phi2_by_ky -p 6,10'
+    variables(6) = 'phi2_by_ky -p 6,9'
     n_lines(6) = '12'
     variables(7) = 'phi2_by_kx'
     n_lines(7) = '12'

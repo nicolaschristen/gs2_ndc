@@ -64,6 +64,8 @@ GK_PROJECT ?= gs2
 # What values they have do not matter.
 # Be careful that DEBUG=off means DEBUG=on.
 #
+# Fortran Standard Specification (95, 2003, 2008, undefined)
+FORTRAN_SPEC ?=
 # turns on debug mode (bin)
 DEBUG ?=
 # turns on scalasca instrumentation mode (bin)
@@ -78,12 +80,14 @@ OPT ?= on
 STATIC ?=
 # promotes precisions of real and complex (bin)
 DBLE ?= on
+# promotes precisions of double and double complex (bin)
+QUAD ?=
 # turns on distributed memory parallelization using MPI (mpi2, mpi3)
 USE_MPI ?= mpi2
 # turns on SHMEM parallel communications on SGI (bin)
 USE_SHMEM ?=
 # which FFT library to use (fftw,fftw3,mkl_fftw,undefined) 
-USE_FFT ?= 
+USE_FFT ?= fftw3
 # uses netcdf library (bin)
 USE_NETCDF ?= on
 # uses parallel netcdf library
@@ -98,6 +102,9 @@ USE_C_INDEX ?=
 USE_LOCAL_RAN ?=
 # Use posix for command_line (bin)
 USE_POSIX ?=
+# Use Fortran 2003, 2008 Intrinsics (bin)
+# (Note this overwhelms other special function options)
+USE_F200X_INTRINSICS ?=
 # Use local special functions (bin)
 USE_LOCAL_SPFUNC ?= 
 # Use nag libraray (spfunc,undefined)
@@ -132,6 +139,10 @@ USE_FPIC ?=
 #       $ ./build_gs2 -c 'RUN_NAME_SIZE=<newsize>'
 RUN_NAME_SIZE?=2000
 
+# If defined, fpp files will be preprocessed and compiled in one step, as
+# is normal for modern FORTRAN compilers
+ONE_STEP_PP?=
+
 #
 # * Targets:
 #
@@ -148,7 +159,7 @@ RUN_NAME_SIZE?=2000
 
 MAKE		= make
 CPP		= cpp
-CPPFLAGS	= -P -traditional
+CPPFLAGS = 
 FC		= f90
 MPIFC		?= mpif90
 H5FC		?= h5fc
@@ -242,6 +253,10 @@ export GK_HEAD_DIR
 UTILS=utils
 GEO=geo
 
+ifndef ONE_STEP_PP
+CPPFLAGS	+= -P -traditional
+endif
+
 ifeq ($(GK_PROJECT),rmhdper)
 	override USE_MPI =
 	override USE_FFT = fftw
@@ -251,7 +266,7 @@ endif
 ifeq ($(MAKECMDGOALS),depend)
 # must invoke full functionality when make depend
 	MAKE += USE_HDF5=on USE_FFT=fftw USE_NETCDF=on USE_MPI=mpi3 \
-		USE_LOCAL_BESSEL=on USE_LOCAL_RAN=mt
+		USE_LOCAL_SPFUNC=on USE_LOCAL_RAN=mt
 endif
 
 #Here we define SVN_REV based on the output of svnversion
@@ -278,6 +293,13 @@ ifdef USE_HDF5
 	ifndef USE_MPI
 $(error Currently, USE_HDF5 works with USE_MPI)
 	endif
+endif
+
+
+ifndef USE_NETCDF
+ifdef USE_NEW_DIAG
+$(error 'USE_NETCDF is off/undefined. The new diagnostics module requires netcdf. Please build without the new diagnostics module (i.e. set USE_NEW_DIAG=) ')
+endif
 endif
 
 ifndef USE_FFT
@@ -360,11 +382,15 @@ endif
 ifdef USE_POSIX
 	CPPFLAGS += -DPOSIX
 endif
-ifdef USE_LOCAL_SPFUNC
-	CPPFLAGS += -DSPFUNC=_SPLOCAL_
+ifdef USE_F200X_INTRINSICS
+	CPPFLAGS += -DF200X_INTRINSICS -DSPFUNC=_SPF200X_
 else
-	ifeq ($(findstring spfunc,$(USE_NAGLIB)),spfunc)
-		CPPFLAGS += -DSPFUNC=_SPNAG_
+	ifdef USE_LOCAL_SPFUNC
+		CPPFLAGS += -DSPFUNC=_SPLOCAL_
+	else
+		ifeq ($(findstring spfunc,$(USE_NAGLIB)),spfunc)
+			CPPFLAGS += -DSPFUNC=_SPNAG_
+		endif
 	endif
 endif
 ifdef USE_NAGLIB
@@ -383,6 +409,10 @@ $(warning Precision mismatch with NAG libarray)
 endif
 ifndef DBLE
 	CPPFLAGS+=-DSINGLE_PRECISION
+endif
+ifdef QUAD
+	DBLE = on
+	CPPFLAGS+=-DQUAD_PRECISION
 endif
 ifndef PGPLOT_LIB
 	ifeq ($(MAKECMDGOALS),agk_fields_plot)
@@ -506,6 +536,35 @@ endif
 
 .rb.f90:
 	$(call RUBY_GENERATE,$@,$<)
+
+# On many systems the two steps of preprocessing and compiling
+# can be done simultaneously. This has many advantages, the
+# most important of which is correctly reporting line numbers in 
+# the .fpp when debugging. 
+#
+# On some systems (e.g. Mac OS X) using cpp doesn't work at all
+# and you HAVE to preprocess and compile in one step.
+ifdef ONE_STEP_PP
+
+.f90.o: 
+	$(FC) $(F90FLAGS) $(F90FLAGS_SFXJUNK) -c $<
+.fpp.o:
+	$(FC) $(CPPFLAGS) $(F90FLAGS) $(F90FLAGS_SFXJUNK) -c $<
+.F90.o:
+	$(FC) $(CPPFLAGS) $(F90FLAGS) $(F90FLAGS_SFXJUNK) -c $<
+
+# The depend command needs the preprocessed source files. 
+# This is a little clunky, and maybe could be fixed in the future.
+.fpp.f90:
+#	$(CPP) $(CPPFLAGS) -nostdinc $< $@
+	$(CPP) $(CPPFLAGS) $< $@
+.F90.f90:
+#	$(CPP) $(CPPFLAGS) -nostdinc $< $@
+	$(CPP) $(CPPFLAGS) $< $@
+
+else
+
+
 .f90.o: 
 	$(FC) $(F90FLAGS) $(F90FLAGS_SFXJUNK) -c $<
 .fpp.f90:
@@ -514,6 +573,21 @@ endif
 .F90.f90:
 #	$(CPP) $(CPPFLAGS) -nostdinc $< $@
 	$(CPP) $(CPPFLAGS) $< $@
+
+# These are special rules for the suffix problem of absoft
+# (not tested)
+$(GK_PROJECT)_transforms.o: $(GK_PROJECT)_transforms.f90
+	$(FC) $(F90FLAGS) $(F90FLAGS_SFX0) -c $<
+$(GK_PROJECT)_io.o: $(GK_PROJECT)_io.f90
+	$(FC) $(F90FLAGS) $(F90FLAGS_SFX2) -c $<
+$(GK_PROJECT)_save.o: $(GK_PROJECT)_save.f90
+	$(FC) $(F90FLAGS) $(F90FLAGS_SFX2) -c $<
+mp.o: mp.f90
+	$(FC) $(F90FLAGS) $(F90FLAGS_SFX1) -c $<
+fft_work.o: fft_work.f90
+	$(FC) $(F90FLAGS) $(F90FLAGS_SFX0) -c $<
+endif
+
 .c.o:
 	$(CC) $(CFLAGS) $(subst -traditional,,$(subst -C,,$(subst -P,,$(CPPFLAGS)))) -c $<
 
@@ -567,18 +641,6 @@ sinclude Makefile.target_$(GK_PROJECT)
 .INTERMEDIATE: $(GK_PROJECT)_transforms.f90 $(GK_PROJECT)_io.f90 $(GK_PROJECT)_save.f90 \
 		mp.f90 fft_work.f90
 
-# These are special rules for the suffix problem of absoft
-# (not tested)
-$(GK_PROJECT)_transforms.o: $(GK_PROJECT)_transforms.f90
-	$(FC) $(F90FLAGS) $(F90FLAGS_SFX0) -c $<
-$(GK_PROJECT)_io.o: $(GK_PROJECT)_io.f90
-	$(FC) $(F90FLAGS) $(F90FLAGS_SFX2) -c $<
-$(GK_PROJECT)_save.o: $(GK_PROJECT)_save.f90
-	$(FC) $(F90FLAGS) $(F90FLAGS_SFX2) -c $<
-mp.o: mp.f90
-	$(FC) $(F90FLAGS) $(F90FLAGS_SFX1) -c $<
-fft_work.o: fft_work.f90
-	$(FC) $(F90FLAGS) $(F90FLAGS_SFX0) -c $<
 
 layouts_indices.o: layouts_type.h
 layouts_type.h: layouts_type.f90

@@ -39,6 +39,16 @@ libsimpledataio.a: simpledataio_write.o simpledataiof.o simpledataio.o simpledat
 	$(ARCH) $(ARCHFLAGS) $@ $^
 	$(RANLIB) $@
 
+ifdef ONE_STEP_PP
+simpledataio_write.o: simpledataio_write.F90 simpledataiof.o
+	$(FC) $(CPPFLAGS) $(subst $(DBLEFLAGS),,$(F90FLAGS)) $(F90FLAGS_SFXJUNK) -c $<
+
+simpledataio_read.o: simpledataio_read.F90 simpledataiof.o simpledataio_write.o
+	$(FC) $(CPPFLAGS) $(subst $(DBLEFLAGS),,$(F90FLAGS)) $(F90FLAGS_SFXJUNK) -c $<
+
+simpledataiof.o: simpledataiof.F90 simpledataio.o 
+	$(FC) $(CPPFLAGS) $(subst $(DBLEFLAGS),,$(F90FLAGS)) $(F90FLAGS_SFXJUNK) -c $<
+else
 simpledataio_write.o: simpledataio_write.f90 simpledataiof.o
 	$(FC) $(subst $(DBLEFLAGS),,$(F90FLAGS)) $(F90FLAGS_SFXJUNK) -c $<
 
@@ -47,6 +57,7 @@ simpledataio_read.o: simpledataio_read.f90 simpledataiof.o simpledataio_write.o
 
 simpledataiof.o: simpledataiof.f90 simpledataio.o 
 	$(FC) $(subst $(DBLEFLAGS),,$(F90FLAGS)) $(F90FLAGS_SFXJUNK) -c $<
+endif
 
 simpledataio.o: diagnostics/simpledataio/include/definitions.h diagnostics/simpledataio/include/simpledataio.h
 

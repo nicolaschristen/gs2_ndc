@@ -52,8 +52,8 @@ module diagnostics_dimensions
   end type diagnostics_dimension_list_type
 
   interface dim_string
-     module procedure :: make_dim_string
-     module procedure :: make_dim_string_arr
+     module procedure make_dim_string
+     module procedure make_dim_string_arr
   end interface dim_string
 
 contains

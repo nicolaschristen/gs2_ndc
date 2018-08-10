@@ -761,21 +761,46 @@ contains
   !end subroutine create_dimensions_movie
 
   subroutine write_dimensions
-    use kt_grids, only: aky, akx
+    use kt_grids, only: aky, akx, theta0
     use theta_grid, only: theta
     use le_grids, only: al, energy
     use diagnostics_create_and_write, only: create_and_write_variable
     use diagnostics_dimensions, only: dim_string
+    use species, only: nspec, spec
+    use run_parameters, only: beta
     implicit none
     call create_and_write_variable(gnostics, gnostics%rtype, "kx", dim_string(gnostics%dims%kx),  &
          "Values of kx, the wavenumber perpendicular to the flux surface ", "1/rho_r", akx)
     call create_and_write_variable(gnostics, gnostics%rtype, "ky", dim_string(gnostics%dims%ky),  &
          "Values of ky, the wavenumber in the direction of grad alpha ", "1/rho_r", aky)
+    call create_and_write_variable(gnostics, gnostics%rtype, "theta0", &
+         dim_string([gnostics%dims%kx,gnostics%dims%ky]),  &
+         "Values of theta0, poloidal angle where mode radial wavenumber=0 ", "rad", theta0)
     call create_and_write_variable(gnostics, gnostics%rtype, "theta", dim_string(gnostics%dims%theta),  &
          "Values of theta, the poloidal angle. ", "rad", theta)
     call create_and_write_variable(gnostics, gnostics%rtype, "energy", dim_string(gnostics%dims%energy),  &
          "Values of the energy grid. ", "T_s", energy)
     call create_and_write_variable(gnostics, gnostics%rtype, "lambda", dim_string(gnostics%dims%lambda),  &
          "Values of lambda = energy/magnetic moment", "1/ (2 B_a)", al)
+    call create_and_write_variable(gnostics, gnostics%rtype, "charge", dim_string(gnostics%dims%species),  &
+         "Values of charge for each species", "e", spec(1:nspec)%z)
+    call create_and_write_variable(gnostics, gnostics%rtype, "mass", dim_string(gnostics%dims%species),  &
+         "Mass for each species", "AMU", spec(1:nspec)%mass)
+    call create_and_write_variable(gnostics, gnostics%rtype, "dens", dim_string(gnostics%dims%species),  &
+         "Normalised density for each species", "nref", spec(1:nspec)%dens)
+    call create_and_write_variable(gnostics, gnostics%rtype, "temp", dim_string(gnostics%dims%species),  &
+         "Normalised temperature Ts for each species", "Tref", spec(1:nspec)%dens)
+    call create_and_write_variable(gnostics, gnostics%rtype, "fprim", dim_string(gnostics%dims%species),  &
+         "Normalised density gradient scalelength a/n.dn/drho for each species", "???", spec(1:nspec)%fprim)
+    call create_and_write_variable(gnostics, gnostics%rtype, "tprim", dim_string(gnostics%dims%species),  &
+         "Normalised density gradient scalelength a/T.dT/drho for each species", "???", spec(1:nspec)%tprim)
+    call create_and_write_variable(gnostics, gnostics%rtype, "uprim", dim_string(gnostics%dims%species),  &
+         "Normalised upar gradient dUpar/drho for each species", "v_tref/aref", spec(1:nspec)%uprim)
+    call create_and_write_variable(gnostics, gnostics%rtype, "vnewk", dim_string(gnostics%dims%species),  &
+         "Normalised collision frequency for each species", "vtref/aref", spec(1:nspec)%vnewk)
+    call create_and_write_variable(gnostics, gnostics%itype, "type", dim_string(gnostics%dims%species),  &
+         "Type of each species: 1=ion, 2=electron, 3=slowing down, 4=trace", "", spec(1:nspec)%type)
+    call create_and_write_variable(gnostics, gnostics%rtype, "beta", "",  &
+         "Reference beta", "2.mu0.nref.Tref/B_a**2", beta)
   end subroutine write_dimensions
 end module gs2_diagnostics_new

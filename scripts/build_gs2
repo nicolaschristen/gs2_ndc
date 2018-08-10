@@ -199,11 +199,11 @@ case $COMMAND in
     ;;
   clean)
     setup_build
-    make clean
+    make $COMMAND $MAKEFLAGSALL
     ;;
   distclean)
     setup_build
-    make distclean
+    make $COMMAND $MAKEFLAGSALL
     ;;
   *)
     echo "ERROR: Unknown command $COMMAND. Run" 

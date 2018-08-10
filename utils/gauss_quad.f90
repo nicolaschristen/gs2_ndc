@@ -10,6 +10,7 @@ module gauss_quad
   private
 
   public :: get_legendre_grids_from_cheb
+  public :: get_radau_gauss_grids
   public :: get_laguerre_grids
   public :: laguerre_norm
 
@@ -323,6 +324,181 @@ contains
 
   end subroutine check_legendre_weights
 
+  subroutine get_radau_gauss_grids (x1, x2, zero, wgt, report_in)
+    ! <doc>
+    !  returns radau zeros and weights in the given interval [x1,x2].
+    !  The order is determined from the size of the array 'zero'.
+    !  Note that the last element of 'zero' and 'wgt' are the fixed lower endpoint 
+    !  -1 in (1,-1]
+    !  Note also that 'zero'(i) contains the zeros in descending order 1 -> -1 with increasing i
+    ! </doc>
+    use mp, only: mp_abort
+    use file_utils, only: error_unit
+    use constants, only: pi => dpi
+    real, intent (in) :: x1, x2
+    logical, intent (in), optional :: report_in
+    real, dimension (:), intent (out) :: zero, wgt
+    integer :: i, nn, nzero
+    double precision :: xold, xnew, pold, pnew, delta
+    double precision, dimension (:), allocatable :: zz, ww
+    logical :: report
+    
+    if(present(report_in)) report= report_in
+    
+    nn = size(zero) 
+    allocate (zz(nn))
+    allocate (ww(nn))
+
+    delta = 0.001 ! The smallest interval which we divide the domain [-1,1] into to search for roots
+    nzero = 0 ! The number of zeros found
+    xold = dble(1.0) ! The starting point of iteration
+    pold = radau_p(nn,xold)
+    
+    do i=1,2000 ! to cover a range x=[-1,1]
+        xnew= xold-dble(delta*i)
+        pnew = radau_p(nn,xnew)
+        if(pold*pnew<0.0) then ! i.e.if there is a root between xold,xnew
+        ! Now apply bisection and Newton-Raphson to find the route in the interval xold,xnew
+           nzero=nzero+1
+           call find_zero_bisect_newton_radau (nn, xold, xnew, pold, pnew, zz(nzero))           
+           xold = xnew
+           pold = pnew 
+        end if
+        if(nzero == nn-1) exit ! as all roots have been found
+    end do
+    
+    if (nzero /= nn-1 ) then
+        write (error_unit(),*) "ERROR: get_radau_gauss_grids failed to find all roots-exiting"
+        do i=1, nzero
+          write (error_unit(),*) i, zz(i)
+        end do
+        call mp_abort("ERROR: get_radau_gauss_grids failed to find all roots-exiting")
+    end if
+    
+    ! Assign the known weight to the lower end point
+    zz(nn) = -dble(1.0)
+    ww(nn) = dble(2.0/nn**2)
+    
+    ww(1:nn-1) = (dble(1.0) - zz(1:nn-1)) / (nn*legendre_p(nn-1,zz(1:nn-1)))**2
+
+    ! rescale (x2 may be smaller than x1)
+    zero = real(zz * (x2-x1) + (x1+x2)) / 2.0
+    wgt = real(ww * abs(x2-x1) / 2.0)
+    
+    if (report) then
+        write(*,*) "i, zz, ww"
+        do i=1,nn
+            write(*,fmt="(1i5,2f20.16)") i, zz(i), ww(i)
+        end do
+        write(*,*) "i, zero, wgt"
+        do i=1,nn
+            write(*,fmt="(1i5,2f20.16)") i, zero(i), wgt(i)
+        end do
+    end if
+
+    
+    deallocate (zz)
+    deallocate (ww)
+
+    !call check_radau_gauss_zero (x1, x2, zero)
+    !call check_radau_gauss_weights (abs(x2-x1), wgt)
+
+    if (debug) then
+       print *, 'get_radau_gauss_grids: sum of weights = ', sum(wgt)
+       print *, 'get_radau_gauss_grids: section length = ', abs(x2-x1)
+    end if
+
+  end subroutine get_radau_gauss_grids
+! polynomial for Radau-Gauss quadrature
+  elemental function radau_p (n, x)
+    implicit none
+    integer, intent (in) :: n
+    double precision, intent (in) :: x
+    double precision :: radau_p
+
+    radau_p = (legendre_p(n-1,x) + legendre_p(n,x) ) &
+         / (x + dble(1.0))
+
+  end function radau_p
+! Radau-Gauss polynomial derivative
+  elemental function radau_pp (n, x)
+    implicit none
+    integer, intent (in) :: n
+    double precision, intent (in) :: x
+    double precision :: radau_pp
+
+    radau_pp = (legendre_pp(n-1,x) + legendre_pp(n,x) - radau_p(n,x) ) &
+         / (x + dble(1.0))
+
+  end function radau_pp
+  
+  subroutine find_zero_bisect_newton_radau (n, xold, xnew, pold, pnew, zz)
+    use mp, only: mp_abort
+    use file_utils, only: error_unit
+    implicit none
+    integer, intent (in) :: n
+    double precision, intent (in) :: xold, xnew, pold, pnew
+!    real, intent (in) :: eps
+    double precision, intent (out) :: zz
+    integer :: i, maxit=100
+    real :: eps
+    double precision :: x1, x2, p1, p2, pz
+
+    ! <doc>
+    !  eps is declared as real on purpose.
+    !  We don't require higher order precision for convergence test
+    !  because of a performance reason. The following definition means
+    !  eps is a geometric mean of the machine-epsilons in real and double
+    !  precisions. 
+    !  (note that real/double are promoted to double/double or double/quad 
+    !  depending on the compiler.)
+    !  
+    !  [same applies to eps in find_zero below.]
+    ! </doc>
+
+    eps = sqrt(epsilon(eps)*epsilon(x1)) * 2.0
+    i=0
+    x1 = xold
+    x2 = xnew
+    p1 = pold
+    p2 = pnew
+
+    if (debug) write(*,'(4f10.5)') x1, p1, x2, p2
+
+    ! bisection
+    do i=1, 8
+       zz = (x1+x2) * dble(.5)
+       pz = radau_p(n,zz)
+       if (abs(pz) <= epsilon(pz)) return
+       if (pz*p1 < 0.0) then
+          p2=pz ; x2=zz
+       else
+          p1=pz ; x1=zz
+       end if
+       if (debug) write(*,'(4f10.5)') x1, p1, x2, p2
+    end do
+
+    if (debug) print*, 'find_zero_bisect_newton_radau: finished bisection'
+
+    ! newton-raphson
+    if (zz==x1) x1 = x2
+!    do while (abs(zz/x1-1.0) > eps)
+    do i=1, maxit
+       x1 = zz
+       p1 = radau_p(n,x1)
+       zz = x1 - p1 / radau_pp(n,x1)
+       pz = radau_p(n,zz)
+       if (debug) write (*,'(4f10.5)') zz, pz, x1, p1
+       if (min(abs(zz/x1-1.0), abs(pz)) < eps) exit
+    end do
+
+    if (i==maxit+1) write (error_unit(),*) &
+         & 'WARNING: too many iterations in find_zero_bisect_newton_radau'
+
+    if (debug) call mp_abort("Abort in gauss_quad:find_zero_bisect_newton_radau as debug=.true.")
+
+  end subroutine find_zero_bisect_newton_radau
+  
   subroutine get_laguerre_grids (zero, wgt)
     ! <doc>
     !  returns Laguerre zeros and weights.

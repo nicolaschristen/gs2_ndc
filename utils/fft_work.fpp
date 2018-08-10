@@ -675,18 +675,16 @@ contains
   end subroutine finish_fft_work
 
   subroutine save_wisdom(filename)
-#ifdef FFT
-!# ifdef FFTW_GT_33
-! if FFTW version is greater than 3.3
-# ifdef ISO_C_BINDING
+# ifdef FFT
+# if ( defined(F2003) || defined(ISO_C_BINDING) )
     use iso_c_binding, only: c_int, c_null_char
     integer(c_int) :: ret
 # endif
-#endif
+# endif
     character(*), intent(in) :: filename
-#ifdef FFT
-!# if FFT == _FFTW3_
-# ifdef ISO_C_BINDING
+
+# ifdef FFT
+# if ( defined(F2003) || defined(ISO_C_BINDING) )
     interface
       function fftw_export_wisdom_to_filename(c_name) &
           bind(c, name='save_wisdom_to_filename')
@@ -697,20 +695,20 @@ contains
     end interface
     ret = fftw_export_wisdom_to_filename(filename//c_null_char)
 # endif
-#endif
+# endif
   end subroutine save_wisdom
 
   subroutine load_wisdom(filename)
-#ifdef FFT
-# ifdef ISO_C_BINDING
+# ifdef FFT
+# if ( defined(F2003) || defined(ISO_C_BINDING) )
     use iso_c_binding, only: c_int, c_null_char
     integer(c_int) :: ret
 # endif
-#endif
+# endif
     character(*), intent(in) :: filename
-    !# if FFT == _FFTW3_
-#ifdef FFT
-# ifdef ISO_C_BINDING
+
+# ifdef FFT
+# if ( defined(F2003) || defined(ISO_C_BINDING) )
     interface
       function fftw_import_wisdom_from_filename(c_name) &
           bind(c, name='read_wisdom_from_filename')
@@ -721,6 +719,6 @@ contains
     end interface
     ret = fftw_import_wisdom_from_filename(filename//c_null_char)
 # endif
-#endif
+# endif
   end subroutine load_wisdom
 end module fft_work

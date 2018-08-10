@@ -1409,10 +1409,11 @@ contains
        else
 !    if (proc0 .and. .not. nofin) then
 
-          print '(/,'' Initialization'',T25,0pf8.2,'' min'',T40,2pf5.1,'' %'',/, &
 #ifdef WITH_EIG
-               &'' Eigensolver'',T25,0pf8.2,'' min'',T40,2pf5.1,'' %'',/, &
+          print '(/,'' Eigensolver'',T25,0pf8.2,'' min'',T40,2pf5.1,'' %'',/)', &
+               timers%eigval(1)/60.,timers%eigval(1)/timers%total(1))
 #endif
+          print '(/,'' Initialization'',T25,0pf8.2,'' min'',T40,2pf5.1,'' %'',/, &
                &'' Advance steps'',T25,0pf8.2,'' min'',T40,2pf5.1,'' %'',/, &
                &''(redistribute'',T25,0pf9.3,'' min'',T40,2pf5.1,'' %)'',/, &
                &''(field solve'',T25,0pf9.3,'' min'',T40,2pf5.1,'' %)'',/, &
@@ -1421,9 +1422,6 @@ contains
                &'' Finishing'',T25,0pf8.2,'' min'',T40,2pf5.1,'' %'',/,  &
                &'' total from timer is:'', 0pf9.2,'' min'',/)', &
                timers%init(1)/60.,timers%init(1)/timers%total(1), &
-#ifdef WITH_EIG
-               timers%eigval(1)/60.,timers%eigval(1)/timers%total(1), &
-#endif
                timers%advance(1)/60.,timers%advance(1)/timers%total(1), &
                time_redist(1)/60.,time_redist(1)/timers%total(1), &
                time_field(1)/60.,time_field(1)/timers%total(1), &
