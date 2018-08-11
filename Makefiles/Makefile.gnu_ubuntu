@@ -26,7 +26,7 @@ endef
 
 COMPILER=gnu-gfortran
 USE_HDF5=
-USE_FFT = fftw3 # for nonlinear runs -- NDC 08/18
+USE_FFT=fftw3
 include Makefile.$(COMPILER)
 
 USE_LOCAL_SPFUNC=on
