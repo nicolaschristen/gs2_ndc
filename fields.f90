@@ -313,6 +313,7 @@ contains
     use kt_grids, only: naky, ntheta0
     implicit none
     logical, parameter :: debug=.false.
+    ! New flow shear algorithm only supports implicit fieldopt_implicit. -- NDC 08/18
     if(proc0.and.debug) write(6,*) "Syncing fields with g."
     select case (fieldopt_switch)
     case (fieldopt_implicit)
@@ -365,7 +366,7 @@ contains
        field_option = 'default'
        remove_zonal_flows_switch = .false.
        field_subgath=.false.
-       force_maxwell_reinit=.true.
+       force_maxwell_reinit=.true. ! NDCQUEST: why do we not rely on saved phi ?
        dump_response=.false.
        read_response=.false.
        do_smart_update=.false.

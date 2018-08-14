@@ -4371,25 +4371,28 @@ contains
           endif
        end if
     end if
+    
+    ! In the new flow shear algorithm, we want to be able to call
+    ! exb_shear multiple times if a reset happens: the first call is standard,
+    ! the second undoes the first, and the third uses the new dt. -- NDC 06/18
+    
+    ! Check if this is the second call (triggered by a reset) -- NDC 08/18
+    undo_remap = .false.
+    if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) &
+        .and. present(undo_remap_opt)) then
+        
+        undo_remap = undo_remap_opt
+    
+    end if
+
 
     !Check if we want to exit without applying flow shear
-    
-    ! In the old implementation for flow shear, exb_shear was called only once per timestep,
-    ! even when a reset was triggered.
-    ! In the new implementation, we want to be able to call it multiple times if a reset happens:
-    ! the first call is standard, the second undoes the first, and the third uses the new dt.
-    ! NDC 06/18
-    undo_remap = .false.
-    if (istep.eq.istep_last) then
-        if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
-            ! Check whether we are undoing an ExB remap done with the old dt,
-            ! or whether we are remapping with the new dt.
-            if(present(undo_remap_opt)) then
-                undo_remap = undo_remap_opt
-            end if
-        else
-            return
-        end if
+    ! Only allow multiple calls per time step when new flow shear algo is used. -- NDC 08/18
+    if(istep.eq.istep_last .and. &
+        .not.(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin)) then
+
+        return
+
     end if
     if (g_exb_start_timestep > istep) return !Flow shear not active yet, set in timesteps
     if (g_exb_start_time >= 0 .and. code_time < g_exb_start_time) return !Flow shear not active yet, set in time

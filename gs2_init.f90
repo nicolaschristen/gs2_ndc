@@ -27,6 +27,7 @@
 !! This is free software released under the MIT licence.
 !! Written by:
 !!            Edmund Highcock (edmundhighcock@users.sourceforge.net)
+! NDCDEL
 module gs2_init
   use overrides, only: miller_geometry_overrides_type
   use overrides, only: profiles_overrides_type

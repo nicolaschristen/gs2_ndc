@@ -893,7 +893,7 @@ contains
   subroutine gs2_restore_many (g, scale, istatus, fphi, fapar, fbpar, fileopt)
 !MR, 2007: restore kx_shift array if already allocated
 # ifdef NETCDF
-    use mp, only: iproc
+    use mp, only: iproc, broadcast
     use fields_arrays, only: phinew, aparnew, bparnew
     use fields_arrays, only: phi, apar, bpar
     use dist_fn_arrays, only: kx_shift, &   ! MR
@@ -1098,6 +1098,8 @@ contains
        t_last_jump = stmp
     endif
 
+    ! NDCQUEST: should we broadcast fields from proc0 if
+    ! USE_PARALLEL_NETCDF=on, save_many=.false. and force_maxwell_reinit=.false. ?
     if (fphi > epsilon(0.)) then
        istatus = nf90_get_var (ncid, phir_id, ftmpr)
        if (istatus /= NF90_NOERR) &
@@ -1109,6 +1111,12 @@ contains
        
        phi = 0.
        phinew = cmplx(ftmpr, ftmpi)
+# ifdef NETCDF_PARALLEL
+       ! When not using old restarting procedure, need to send from proc0 -- NDC 08/2018
+       if(.not. read_many) then
+           broadcast(phinew)
+       end if
+# endif
     end if
 
     if (fapar > epsilon(0.)) then
@@ -1120,6 +1128,12 @@ contains
        
        apar = 0.
        aparnew = cmplx(ftmpr, ftmpi)
+# ifdef NETCDF_PARALLEL
+       ! When not using old restarting procedure, need to send from proc0 -- NDC 08/2018
+       if(.not. read_many) then
+           broadcast(aparnew)
+       end if
+# endif
     end if
 
     if (fbpar > epsilon(0.)) then
@@ -1131,6 +1145,12 @@ contains
        
        bpar = 0.
        bparnew = cmplx(ftmpr, ftmpi)
+# ifdef NETCDF_PARALLEL
+       ! When not using old restarting procedure, need to send from proc0 -- NDC 08/2018
+       if(.not. read_many) then
+           broadcast(bparnew)
+       end if
+# endif
     end if
 
     if (scale > 0.) then

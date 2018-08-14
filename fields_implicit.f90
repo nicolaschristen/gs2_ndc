@@ -562,6 +562,7 @@ contains
 
             undo_remap = .true.
             call exb_shear(gnew, phinew, aparnew, bparnew, istep, field_local, undo_remap)
+            undo_remap = .false.
 
         end if
 
