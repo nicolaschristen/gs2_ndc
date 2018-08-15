@@ -27,7 +27,6 @@
 !! This is free software released under the MIT licence.
 !! Written by:
 !!            Edmund Highcock (edmundhighcock@users.sourceforge.net)
-! NDCDEL
 module gs2_init
   use overrides, only: miller_geometry_overrides_type
   use overrides, only: profiles_overrides_type
@@ -942,31 +941,51 @@ contains
     use init_g, only: ginit
     use init_g, only: ginitopt_restart_memory
     use init_g, only: ginitopt_restart_many
+    use init_g, only: ginitopt_switch
     use run_parameters, only: fphi, fapar, fbpar
     use mp, only: proc0
     use unit_tests, only: job_id
     implicit none
-    type (init_type), intent(in) :: current
+    type (init_type), intent(in out) :: current
     logical :: restarted
 
     !write (*,*) 'set_init_field in_memory', in_memory, fields_and_dist_fn_saved
 
+    ! To initialise a restart, we need to set force_maxwell_reinit to its
+    ! value in the fields_knobs namelist, so that phi can (if wished by the user)
+    ! be initialised from the restart files without being overwritten by a QN solve.
+    ! This is required with the new flow shear algorithm to avoid
+    ! small discontinuities during restarts. -- NDC 08/18
+    if((.not. current%initval_ov%init) .and. ginitopt_switch==ginitopt_restart_many) then
+        current%initval_ov%force_maxwell_reinit = force_maxwell_reinit
+    end if
+
     if (.not. current%initval_ov%override) then 
       ! This is the usual initial setup 
       call ginit (restarted)
+      write(*,*) "In gs2_init: calling ginit." ! NDCDEL
     else
       if (current%initval_ov%in_memory) then 
         g = current%initval_ov%g 
         gnew = g
+        write(*,*) "In gs2_init: reading g from mem." ! NDCDEL
       else
         call ginit(restarted, ginitopt_restart_many)
+        write(*,*) "In gs2_init: calling ginit forcing restart_many." ! NDCDEL
       end if
     end if
 
+    ! At initialisation, we need to enforce QN so we force
+    ! current%initval_ov%force_maxwell_reinit = true,
+    ! except if ginit_option = "many", in which case it is set
+    ! to its value from the fields_knobs namelist.
+    ! NB: in case of a dt-reset, force_maxwell_reinit is
+    ! always the value from fields_knobs. -- NDC 08/18
     if (current%initval_ov%force_maxwell_reinit)then
       call set_init_fields
       !if (.not. proc0) write (*,*) 'field value jjjj kkkk', phinew(-5, 3, 2), job_id
       !if (.not. proc0) write (*,*) 'field value sum jjjj kkkk', sum(real(conjg(phinew)*phinew)), job_id
+      write(*,*) "In gs2_init: calling set_init_fields." ! NDCDEL
     else
       write(error_unit(), *) "INFO: You have disabled &
         & force_maxwell_reinit which causes the fields to be &
@@ -979,8 +998,10 @@ contains
           aparnew=current%initval_ov%apar
         if(fbpar.gt.0) &
           bparnew=current%initval_ov%bpar
+        write(*,*) "In gs2_init: reading phi from mem." ! NDCDEL
       else
         ! No need to do anything: fields read from file.
+        write(*,*) "In gs2_init: doing nothing for phi, it has been read from file." ! NDCDEL
       end if
     end if
   end subroutine set_initial_field_and_dist_fn_values

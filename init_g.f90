@@ -17,6 +17,7 @@ module init_g
   public :: ginitopt_restart_memory
   private :: single_initial_kx
   public :: restart_file
+  public :: ginitopt_switch ! Required for force_maxwell_reinit in gs2_init::set_initial_fields_and_dist_fn_values -- NDC 08/18
 
   ! knobs
   integer :: ginitopt_switch
