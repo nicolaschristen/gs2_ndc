@@ -809,6 +809,7 @@ dist_fn.o: \
 	 unit_tests.o 
 dist_fn_arrays.o: \
 	 gs2_layouts.o \
+	 kt_grids.o \
 	 le_grids.o \
 	 mp.o \
 	 species.o \
@@ -907,6 +908,7 @@ fields_implicit.o: \
 	 file_utils.o \
 	 gs2_layouts.o \
 	 gs2_save.o \
+	 gs2_time.o \
 	 init_g.o \
 	 job_manage.o \
 	 kt_grids.o \
@@ -1199,8 +1201,11 @@ gs2_save.o: \
 	 unit_tests.o 
 gs2_time.o: 
 gs2_transforms.o: \
+	 constants.o \
+	 dist_fn_arrays.o \
 	 fft_work.o \
 	 gs2_layouts.o \
+	 gs2_time.o \
 	 kt_grids.o \
 	 mp.o \
 	 prof.o \
