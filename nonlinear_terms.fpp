@@ -588,15 +588,27 @@ contains
 
       ! Flowshear cases: J0 has to be time dependent -- NDC 8/18
       if(present(g_exb_opt)) then
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-             it = it_idx(g_lo,iglo)
-             ik = ik_idx(g_lo,iglo)
-             do ig = -ntgrid, ntgrid
-                fac = zi*aky(ik)*aj0_tdep%old(ig,iglo)*phi(ig,it,ik)*fphi
-                g1(ig,1,iglo) = fac
-                g1(ig,2,iglo) = fac
-             end do
-          end do
+          if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+              do iglo = g_lo%llim_proc, g_lo%ulim_proc
+                 it = it_idx(g_lo,iglo)
+                 ik = ik_idx(g_lo,iglo)
+                 do ig = -ntgrid, ntgrid
+                    fac = zi*aky(ik)*aj0_tdep%old(ig,iglo)*phi(ig,it,ik)*fphi
+                    g1(ig,1,iglo) = fac
+                    g1(ig,2,iglo) = fac
+                 end do
+              end do
+          else ! NDCTEST_nl_vs_lin: this else section is meant for old algo with new NL changes: delete it
+              do iglo = g_lo%llim_proc, g_lo%ulim_proc
+                 it = it_idx(g_lo,iglo)
+                 ik = ik_idx(g_lo,iglo)
+                 do ig = -ntgrid, ntgrid
+                    fac = zi*aky(ik)*aj0(ig,iglo)*phi(ig,it,ik)*fphi
+                    g1(ig,1,iglo) = fac
+                    g1(ig,2,iglo) = fac
+                 end do
+              end do
+          end if
       else
           do iglo = g_lo%llim_proc, g_lo%ulim_proc
              it = it_idx(g_lo,iglo)
