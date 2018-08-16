@@ -329,7 +329,8 @@ contains
     use species, only: spec
     use gs2_transforms, only: transform2, inverse2
     use run_parameters, only: fapar, fbpar, fphi, reset, immediate_reset
-    use kt_grids, only: aky, akx
+    use kt_grids, only: aky, akx, &
+        explicit_flowshear, implicit_flowshear, mixed_flowshear ! NDCTEST_nl_vs_lin
     use gs2_time, only: save_dt_cfl, check_time_step_too_large, code_time
     use constants, only: zi
     use unit_tests, only: debug_message
@@ -371,7 +372,11 @@ contains
     !Form g1=i*ky*g_wesson
     g1=g
     if(present(g_exb_opt)) then ! case with new flowshear algo -- NDC 08/18
-        call g_adjust(g1,phi,bpar,fphi,fbpar,aj0_tdep%old)
+        if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+            call g_adjust(g1,phi,bpar,fphi,fbpar,aj0_tdep%old)
+        else ! NDCTEST_nl_vs_lin: else section is meant for old algo with new NL changes: delete it
+            call g_adjust(g1,phi,bpar,fphi,fbpar)
+        end if
     else
         call g_adjust(g1,phi,bpar,fphi,fbpar)
     end if
@@ -440,7 +445,11 @@ contains
     !Form g1=i*kx*g_wesson
     g1=g
     if(present(g_exb_opt)) then ! case with new flowshear algo -- NDC 08/18
-        call g_adjust(g1,phi,bpar,fphi,fbpar,aj0_tdep%old)
+        if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+            call g_adjust(g1,phi,bpar,fphi,fbpar,aj0_tdep%old)
+        else ! NDCTEST_nl_vs_lin: else section is meant for old algo with new NL changes: delete it
+            call g_adjust(g1,phi,bpar,fphi,fbpar)
+        end if
     else
         call g_adjust(g1,phi,bpar,fphi,fbpar)
     end if
@@ -534,18 +543,30 @@ contains
 
       ! Flowshear cases: J0 has to be time dependent -- NDC 8/18
       if(present(g_exb_opt)) then
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-             it = it_idx(g_lo,iglo)
-             ik = ik_idx(g_lo,iglo)
-             do ig = -ntgrid, ntgrid
-                ! Need to take derivatives at fixed x,y so that terms taken into
-                ! account by the CFL condition are not secularly growing over time.
-                ! NDC 08/18
-                fac = zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))*aj0_tdep%old(ig,iglo)*phi(ig,it,ik)*fphi
-                g1(ig,1,iglo) = fac
-                g1(ig,2,iglo) = fac
-             end do
-          end do
+          if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+              do iglo = g_lo%llim_proc, g_lo%ulim_proc
+                 it = it_idx(g_lo,iglo)
+                 ik = ik_idx(g_lo,iglo)
+                 do ig = -ntgrid, ntgrid
+                    ! Need to take derivatives at fixed x,y so that terms taken into
+                    ! account by the CFL condition are not secularly growing over time.
+                    ! NDC 08/18
+                    fac = zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))*aj0_tdep%old(ig,iglo)*phi(ig,it,ik)*fphi
+                    g1(ig,1,iglo) = fac
+                    g1(ig,2,iglo) = fac
+                 end do
+              end do
+          else ! NDCTEST_nl_vs_lin: this else section is meant for old algo with new NL changes: delete it
+              do iglo = g_lo%llim_proc, g_lo%ulim_proc
+                 it = it_idx(g_lo,iglo)
+                 ik = ik_idx(g_lo,iglo)
+                 do ig = -ntgrid, ntgrid
+                    fac = zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))*aj0(ig,iglo)*phi(ig,it,ik)*fphi
+                    g1(ig,1,iglo) = fac
+                    g1(ig,2,iglo) = fac
+                 end do
+              end do
+          end if
       else
           do iglo = g_lo%llim_proc, g_lo%ulim_proc
              it = it_idx(g_lo,iglo)

@@ -1114,7 +1114,7 @@ contains
 # ifdef NETCDF_PARALLEL
        ! When not using old restarting procedure, need to send from proc0 -- NDC 08/2018
        if(.not. read_many) then
-           broadcast(phinew)
+           call broadcast(phinew)
        end if
 # endif
     end if
@@ -1131,7 +1131,7 @@ contains
 # ifdef NETCDF_PARALLEL
        ! When not using old restarting procedure, need to send from proc0 -- NDC 08/2018
        if(.not. read_many) then
-           broadcast(aparnew)
+           call broadcast(aparnew)
        end if
 # endif
     end if
@@ -1148,7 +1148,7 @@ contains
 # ifdef NETCDF_PARALLEL
        ! When not using old restarting procedure, need to send from proc0 -- NDC 08/2018
        if(.not. read_many) then
-           broadcast(bparnew)
+           call broadcast(bparnew)
        end if
 # endif
     end if
