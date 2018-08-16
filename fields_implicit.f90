@@ -552,7 +552,7 @@ contains
     if(reset) then
         
         ! In cases with flowshear, undo the last ExB remapping --NDC 07/18
-        if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin
+        if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then ! NDCTEST_nl_vs_lin
 
             ! In Michael's implementation, move back to full phi for reset
             if(explicit_flowshear .and. michael_exp) then

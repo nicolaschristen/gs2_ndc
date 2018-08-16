@@ -4378,7 +4378,7 @@ contains
     
     ! Check if this is the second call (triggered by a reset) -- NDC 08/18
     undo_remap = .false.
-    if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) &
+    if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) &
         .and. present(undo_remap_opt)) then
         
         undo_remap = undo_remap_opt
@@ -4389,7 +4389,7 @@ contains
     !Check if we want to exit without applying flow shear
     ! Only allow multiple calls per time step when new flow shear algo is used. -- NDC 08/18
     if(istep.eq.istep_last .and. &
-        .not.(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin)) then
+        .not.(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear)) then
 
         return
 
