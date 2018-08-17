@@ -341,15 +341,12 @@ contains
     if (.not. current%initval_ov%override) then 
       ! This is the usual initial setup 
       call ginit (restarted)
-      write(*,*) "In gs2_init: calling ginit." ! NDCDEL
     else
       if (current%initval_ov%in_memory) then 
         g = current%initval_ov%g 
         gnew = g
-        write(*,*) "In gs2_init: reading g from mem." ! NDCDEL
       else
         call ginit(restarted, ginitopt_restart_many)
-        write(*,*) "In gs2_init: calling ginit forcing restart_many." ! NDCDEL
       end if
     end if
 
@@ -363,12 +360,14 @@ contains
       call set_init_fields
       !if (.not. proc0) write (*,*) 'field value jjjj kkkk', phinew(-5, 3, 2), job_id
       !if (.not. proc0) write (*,*) 'field value sum jjjj kkkk', sum(real(conjg(phinew)*phinew)), job_id
-      write(*,*) "In gs2_init: calling set_init_fields." ! NDCDEL
     else
-      write(error_unit(), *) "INFO: You have disabled &
-        & force_maxwell_reinit which causes the fields to be &
-        & recalculated self-consistently from the the dist fn. &
-        & You are on your own and here be dragons."
+      ! Commented below. Not sure what this unhelpful message was about.
+      ! The only problem I can think of is when restarting jobs from
+      ! one machine on another machine ... -- NDC 08/18
+      !write(error_unit(), *) "INFO: You have disabled &
+      !  & force_maxwell_reinit which causes the fields to be &
+      !  & recalculated self-consistently from the the dist fn. &
+      !  & You are on your own and here be dragons."
       if(current%initval_ov%override .and. current%initval_ov%in_memory) then 
         if(fphi.gt.0) &
           phinew=current%initval_ov%phi
@@ -376,10 +375,8 @@ contains
           aparnew=current%initval_ov%apar
         if(fbpar.gt.0) &
           bparnew=current%initval_ov%bpar
-        write(*,*) "In gs2_init: reading phi from mem." ! NDCDEL
       else
         ! No need to do anything: fields read from file.
-        write(*,*) "In gs2_init: doing nothing for phi, it has been read from file." ! NDCDEL
       end if
     end if
   end subroutine set_initial_field_and_dist_fn_values
