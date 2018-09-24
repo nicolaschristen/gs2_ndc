@@ -201,8 +201,8 @@ contains
            write(*,*) 'Initializing phi to Gaussian'
            dkx = akx(2)-akx(1)
            dky = aky(2)-aky(1)
-           alpha_x = 1./64. * (2.*pi/dkx)**2 ! -> exp(-x**2/sig_x**2) with sig_x = 2*sqrt(alpha_x) = Lx
-           alpha_y = 1./256. * (2.*pi/dky)**2 ! -> exp(-y**2/sig_y**2) with sig_y = 2*sqrt(alpha_y) = Ly
+           alpha_x = 1./64. * (2.*pi/dkx)**2 ! -> exp(-x**2/sig_x**2) with sig_x = 2*sqrt(alpha_x) = Lx/4
+           alpha_y = 1./256. * (2.*pi/dky)**2 ! -> exp(-y**2/sig_y**2) with sig_y = 2*sqrt(alpha_y) = Ly/8
 
            ! Gaussian in phi
            do ik = 1, naky
@@ -564,6 +564,7 @@ contains
     ! NDCTESTremap_plot
     logical :: remap_plot_shear = .false.
     logical :: remap_plot_nl = .true.
+    logical :: remap_plot_nl_analytic = .true.
     integer :: iglo,iy,ix,ie,il,is,isgn,iyxf
     real, dimension(:,:), allocatable :: fft_out
     complex, dimension(:,:,:), allocatable :: phi_5d
@@ -578,9 +579,19 @@ contains
     if(remap_plot_shear .or. remap_plot_nl) then
         write(istep_str,"(I0)") istep
         if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-            open(83,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/dat/xy_"//trim(istep_str)//"_new.dat",status="replace") ! NDCTESTremap_plot_towrite
+            if(remap_plot_nl_analytic) then
+                open(83,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/analytic/dat/xystar_brack_"//trim(istep_str)//"_new.dat",status="replace") ! NDCTESTremap_plot_towrite
+                open(84,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/analytic/dat/xystar_phi1_"//trim(istep_str)//"_new.dat",status="replace") ! NDCTESTremap_plot_towrite
+            else
+                open(83,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/dat/xy_"//trim(istep_str)//"_new.dat",status="replace") ! NDCTESTremap_plot_towrite
+            end if
         else
-            open(83,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/dat/xy_"//trim(istep_str)//"_old.dat",status="replace") ! NDCTESTremap_plot_towrite
+            if(remap_plot_nl_analytic) then
+                open(83,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/analytic/dat/xystar_brack_"//trim(istep_str)//"_old.dat",status="replace") ! NDCTESTremap_plot_towrite
+                open(84,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/analytic/dat/xystar_phi1_"//trim(istep_str)//"_old.dat",status="replace") ! NDCTESTremap_plot_towrite
+            else
+                open(83,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/dat/xy_"//trim(istep_str)//"_old.dat",status="replace") ! NDCTESTremap_plot_towrite
+            end if
         end if
     end if
     ! end NDCTESTremap_plot
@@ -787,6 +798,9 @@ contains
     ! NDCTESTremap_plot
     if(remap_plot_shear .or. remap_plot_nl) then
         close(83)
+        if(remap_plot_nl_analytic) then
+            close(84)
+        end if
     end if
     ! endNDCTESTremap_plot
 

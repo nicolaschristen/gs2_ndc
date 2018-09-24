@@ -345,10 +345,36 @@ contains
     ! NDCTESTremap_plot
     logical :: is_open
     logical :: remap_plot_nl = .true.
+    logical :: remap_plot_nl_analytic = .true.
     integer :: iy,iyxf,ie,il,isgn
     ! endNDCTESTremap_plot
     
     call debug_message(verb, 'nonlinear_terms::add_nl starting')
+
+    ! NDCTESTremap_plot: for Poisson bracket case, transform g to real space and print to file
+    if(remap_plot_nl_analytic) then
+        g1 = g
+        call transform2(g1, gb)
+        inquire(unit=84,opened=is_open)
+        if(is_open) then
+            do iy = 1, ny
+                do iyxf = yxf_lo%llim_proc, yxf_lo%ulim_proc
+                    it=it_idx(yxf_lo,iyxf)
+                    ie=ie_idx(yxf_lo,iyxf)
+                    il=il_idx(yxf_lo,iyxf)
+                    is=is_idx(yxf_lo,iyxf)
+                    ig=ig_idx(yxf_lo,iyxf)
+                    isgn=isign_idx(yxf_lo,iyxf)
+                    if(ie==1 .and. il==1 .and. is==1 .and. isgn==1 .and. ig==1) then
+                        write(84,"(I0,A,I0,A,E14.7)") it," ",iy," ",gb(iy,iyxf)
+                    end if
+                end do
+            end do
+        end if
+        g1 = 0.
+        gb = 0.
+    end if
+    ! endNDCTESTremap_plot
 
     !Initialise zero so we can be sure tests are sensible
     zero = epsilon(0.0)
@@ -455,18 +481,34 @@ contains
            g1(:,:,iglo) = g1(:,:,iglo)*zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))
         enddo
     else if(remap_plot_nl) then
-        if(present(g_exb_opt)) then
-            do iglo = g_lo%llim_proc, g_lo%ulim_proc
-               it = it_idx(g_lo,iglo)
-               ik = ik_idx(g_lo,iglo)
-               g1(:,:,iglo) = g1(:,:,iglo)*zi*(akx(it)+g_exb_opt*t_last_jump(ik)*aky(ik))
-            enddo
+        if(remap_plot_nl_analytic) then
+            if(present(g_exb_opt)) then
+                do iglo = g_lo%llim_proc, g_lo%ulim_proc
+                   it = it_idx(g_lo,iglo)
+                   ik = ik_idx(g_lo,iglo)
+                   g1(:,:,iglo) = g1(:,:,iglo)*zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))
+                enddo
+            else
+                do iglo = g_lo%llim_proc, g_lo%ulim_proc
+                   it = it_idx(g_lo,iglo)
+                   ik = ik_idx(g_lo,iglo)
+                   g1(:,:,iglo) = g1(:,:,iglo)*zi*akx(it)
+                enddo
+            end if
         else
-            do iglo = g_lo%llim_proc, g_lo%ulim_proc
-               it = it_idx(g_lo,iglo)
-               ik = ik_idx(g_lo,iglo)
-               g1(:,:,iglo) = g1(:,:,iglo)*zi*akx(it)
-            enddo
+            if(present(g_exb_opt)) then
+                do iglo = g_lo%llim_proc, g_lo%ulim_proc
+                   it = it_idx(g_lo,iglo)
+                   ik = ik_idx(g_lo,iglo)
+                   g1(:,:,iglo) = g1(:,:,iglo)*zi*(akx(it)+g_exb_opt*t_last_jump(ik)*aky(ik))
+                enddo
+            else
+                do iglo = g_lo%llim_proc, g_lo%ulim_proc
+                   it = it_idx(g_lo,iglo)
+                   ik = ik_idx(g_lo,iglo)
+                   g1(:,:,iglo) = g1(:,:,iglo)*zi*akx(it)
+                enddo
+            end if
         end if
     else
         do iglo = g_lo%llim_proc, g_lo%ulim_proc
