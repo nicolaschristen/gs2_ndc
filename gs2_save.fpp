@@ -1098,8 +1098,6 @@ contains
        t_last_jump = stmp
     endif
 
-    ! NDCQUEST: should we broadcast fields from proc0 if
-    ! USE_PARALLEL_NETCDF=on, save_many=.false. and force_maxwell_reinit=.false. ?
     if (fphi > epsilon(0.)) then
        istatus = nf90_get_var (ncid, phir_id, ftmpr)
        if (istatus /= NF90_NOERR) &

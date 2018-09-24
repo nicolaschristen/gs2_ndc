@@ -275,7 +275,7 @@ subroutine init_initial_values_overrides(overrides_obj, ntgrid, ntheta0, naky, g
   overrides_obj%force_maxwell_reinit = force_maxwell_reinit
   overrides_obj%in_memory = in_memory
 
-  ! Commented below. Not sure what this unhelpful message was about.
+  ! Commented out warning below. Not sure what this unhelpful message was about.
   ! The only problem I can think of is when restarting jobs from
   ! one machine on another machine ... -- NDC 08/18
   !write (error_unit(), *) "INFO: changing force_maxwell_reinit or in_memory &

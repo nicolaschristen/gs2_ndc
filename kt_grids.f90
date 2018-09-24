@@ -575,7 +575,12 @@ contains
     explicit_flowshear = .false.
     implicit_flowshear = .false.
     mixed_flowshear = .false.
-    apply_flowshear_nonlin = .false. ! NDCTEST_nl_vs_lin
+    ! NDCTEST_nl_vs_lin
+    ! If the user has explicitly specified it in his input file, apply_flowshear_nonlin
+    ! will be set to this user provided value. If is not specified, it will be set to
+    ! true if a new flow shear algo is selected, false if the old algo is used.
+    apply_flowshear_nonlin = .false.
+    ! endNDCTEST_nl_vs_lin
     interp_before = .false. ! NDCTEST
 
     gryfx = .false.

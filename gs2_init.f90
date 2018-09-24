@@ -983,7 +983,7 @@ contains
       !if (.not. proc0) write (*,*) 'field value jjjj kkkk', phinew(-5, 3, 2), job_id
       !if (.not. proc0) write (*,*) 'field value sum jjjj kkkk', sum(real(conjg(phinew)*phinew)), job_id
     else
-      ! Commented below. Not sure what this unhelpful message was about.
+      ! Commented out the warning below. Not sure what this unhelpful message was about.
       ! The only problem I can think of is when restarting jobs from
       ! one machine on another machine ... -- NDC 08/18
       !write(error_unit(), *) "INFO: You have disabled &

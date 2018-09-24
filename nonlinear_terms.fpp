@@ -457,7 +457,7 @@ contains
         if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. apply_flowshear_nonlin) then
             do iglo = g_lo%llim_proc, g_lo%ulim_proc
                ! Need to take derivatives at fixed x,y so that terms taken into
-               ! account by the CFL condition are not secularly growing over time.
+               ! account by the CFL condition are not continuously growing over time.
                ! NDC 08/18
                it = it_idx(g_lo,iglo)
                ik = ik_idx(g_lo,iglo)
