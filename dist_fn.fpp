@@ -1716,7 +1716,8 @@ contains
  !AJ
     use dist_fn_arrays, only: aj0_gf, aj1_gf
     use kt_grids, only: kperp2, naky, ntheta0, &
-        explicit_flowshear, implicit_flowshear, mixed_flowshear
+        explicit_flowshear, implicit_flowshear, mixed_flowshear, &
+        apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
     use species, only: spec
 !AJ
     use species, only: nspec
@@ -1780,7 +1781,8 @@ contains
     end if
 
     ! Initialise time-dependent aj0 for flow-shear cases --NDC 11/2017
-    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+    ! NDCTEST_nl_vs_lin: remove last arg
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
         allocate(aj0_tdep%old(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
         aj0_tdep%old = aj0
         allocate(aj0_tdep%new(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
@@ -5811,7 +5813,7 @@ contains
       use gs2_layouts, only: g_lo
       use nonlinear_terms, only: nonlinear_mode_switch, nonlinear_mode_none, nonlinear_mode_on
       use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear, &
-          apply_flowshear_nonlin
+          apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
       use gs2_time, only: save_dt_cfl
 
       implicit none
@@ -5885,6 +5887,7 @@ contains
                   if(gryfx_zonal%on) then
                       call add_nl_gryfx (g1) 
                   else
+                      ! NDCTEST_nl_vs_lin: remove last argument in if
                       if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
                           call add_nl(g1, phi, apar, bpar, g_exb)
                       else
@@ -7561,7 +7564,8 @@ endif
     use species, only: nspec, spec, has_electron_species, has_ion_species
     use theta_grid, only: ntgrid
     use kt_grids, only: naky, ntheta0, aky, kperp2, &
-        explicit_flowshear, implicit_flowshear, mixed_flowshear
+        explicit_flowshear, implicit_flowshear, mixed_flowshear, &
+        apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
     use le_grids, only: anon, integrate_species
     use gs2_layouts, only: g_lo, ie_idx, is_idx
     use run_parameters, only: tite
@@ -7614,7 +7618,8 @@ endif
     call integrate_species (g0, wgt, tot)
     gamtot = real(tot) + kperp2*poisfac
 
-    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+    ! NDCTEST_nl_vs_lin: remove last arg
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
         allocate(gamtot_tdep%old(-ntgrid:ntgrid,ntheta0,naky))
         gamtot_tdep%old = gamtot
         allocate(gamtot_tdep%new(-ntgrid:ntgrid,ntheta0,naky))

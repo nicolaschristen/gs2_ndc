@@ -1195,7 +1195,8 @@ contains
     end do
 
     ! At t=0, kperp2_tdep = kperp2 -- NDC 11/2017
-    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+    ! NDCTEST_nl_vs_lin: remove last arg
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
         allocate(kperp2_tdep%old(-ntgrid:ntgrid,ntheta0,naky))
         kperp2_tdep%old = kperp2
         allocate(kperp2_tdep%new(-ntgrid:ntgrid,ntheta0,naky))

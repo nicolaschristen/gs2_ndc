@@ -1,0 +1,3 @@
+-- NDCTEST_nl_vs_lin: the flag apply_flowshear_nonlin in kt_grids_box_parameters allows the user to choose
+whether to use the exact kx* instead of the nearest neighbour when computing the NL term
+(can be used both with the old and new algos).

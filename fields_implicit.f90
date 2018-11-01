@@ -484,7 +484,8 @@ contains
     ! In cases with flow-shear, after kx_shift got updated in exb_shear,
     ! update time-dependent kperp2, aj0, gamtot, wdrift, wdriftttp, a, b, r, ainv.
     ! NDC 02/2018
-    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+    ! NDCTEST_nl_vs_lin: delete last arg
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
         
         call update_kperp2_tdep
         call update_aj0_tdep
@@ -552,7 +553,7 @@ contains
     if(reset) then
         
         ! In cases with flowshear, undo the last ExB remapping --NDC 07/18
-        if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then ! NDCTEST_nl_vs_lin
+        if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
 
             ! In Michael's implementation, move back to full phi for reset
             if(explicit_flowshear .and. michael_exp) then
