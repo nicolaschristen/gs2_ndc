@@ -125,11 +125,13 @@ contains
   end function fields_implicit_unit_test_init_fields_implicit
 
   subroutine init_allfields_implicit(gf_lo)
-    use fields_arrays, only: phi, apar, bpar, phinew, aparnew, bparnew
+    use fields_arrays, only: phi, apar, bpar, phinew, aparnew, bparnew, &
+        aparold
     use dist_fn_arrays, only: g, gnew
     use dist_fn, only: get_init_field
     use init_g, only: new_field_init
     use mp, only: iproc
+    use kt_grids, only: mixed_flowshear, explicit_flowshear
 
     implicit none
 
@@ -152,15 +154,25 @@ contains
     else if (new_field_init) then
        call get_init_field (phinew, aparnew, bparnew)
        phi = phinew; apar = aparnew; bpar = bparnew; g = gnew
+       if(mixed_flowshear .or. explicit_flowshear) then
+           ! If aparold was not written to the file, we are not able to
+           ! compute it -> set it to be equal to aparnew computed by get_init_field.
+           aparold = apar
+       end if
     else
        call getfield (phinew, aparnew, bparnew)
        phi = phinew; apar = aparnew; bpar = bparnew 
+       if(mixed_flowshear .or. explicit_flowshear) then
+           ! If aparold was not written to the file, we are not able to
+           ! compute it -> set it to be equal to aparnew computed by getfield.
+           aparold = apar
+       end if
     end if
     ! <MAB
 
   end subroutine init_allfields_implicit
 
-  subroutine get_field_vector (fl, phi, apar, bpar, expflow_opt)
+  subroutine get_field_vector (fl, phi, apar, bpar)
     use theta_grid, only: ntgrid
     use kt_grids, only: naky, ntheta0
     use dist_fn, only: getfieldeq
@@ -170,7 +182,6 @@ contains
     complex, dimension (-ntgrid:,:,:), intent (in) :: phi, apar, bpar
     complex, dimension (:,:,:), intent (out) :: fl
     complex, dimension (:,:,:), allocatable :: fieldeq, fieldeqa, fieldeqp
-    integer, intent(in), optional :: expflow_opt
     integer :: istart, ifin
 
     call prof_entering ("get_field_vector", "fields_implicit")
@@ -179,11 +190,7 @@ contains
     allocate (fieldeqa(-ntgrid:ntgrid,ntheta0,naky))
     allocate (fieldeqp(-ntgrid:ntgrid,ntheta0,naky))
 
-    if(present(expflow_opt)) then
-        call getfieldeq (phi, apar, bpar, fieldeq, fieldeqa, fieldeqp, expflow_opt)
-    else
-        call getfieldeq (phi, apar, bpar, fieldeq, fieldeqa, fieldeqp)
-    end if
+    call getfieldeq (phi, apar, bpar, fieldeq, fieldeqa, fieldeqp)
 
     ifin = 0
 
@@ -268,7 +275,8 @@ contains
     use prof, only: prof_entering, prof_leaving
     use fields_arrays, only: time_field
     use theta_grid, only: ntgrid
-    use dist_fn, only: N_class, i_class
+    use dist_fn, only: N_class, i_class, &
+        expflowopt, expflowopt_felix ! NDCTESTmichael & NDCTESTfelix
     use mp, only: sum_allreduce, allgatherv, iproc,nproc, proc0
     use job_manage, only: time_message
     use dist_fn_arrays, only: kx_shift
@@ -279,7 +287,6 @@ contains
     complex, dimension (:), allocatable :: u_small
     integer :: jflo, ik, it, nl, nr, i, m, n, dc, ic, iflo
     real :: dkx
-    integer :: expflow_opt
     logical :: michael_exp = .true. ! NDCTESTswitchexp
 
     if (proc0) call time_message(.false.,time_field,' Field Solver')
@@ -336,18 +343,11 @@ contains
 
     ! Modified field equation for explicit flowshear implementation
     ! necessary to make aminv time independent. -- NDC 02/2018
-    if(explicit_flowshear) then
-        if(michael_exp) then
-            ! NDCTESTmichael
-            call get_field_vector (fl, phi, apar, bpar)
-        else
-            ! NDCTESTfelix
-            expflow_opt = 1
-            call get_field_vector (fl, phi, apar, bpar, expflow_opt)
-        end if
-    else
-        call get_field_vector (fl, phi, apar, bpar)
+    ! NDCTESTfelix & NDCTESTmichael
+    if(explicit_flowshear .and. .not. michael_exp) then
+        expflowopt = expflowopt_felix
     end if
+    call get_field_vector (fl, phi, apar, bpar)
 
     !Initialise array, if not gathering then have to zero entire array
     if(field_subgath) then
@@ -397,7 +397,7 @@ contains
               !    + (dkx-abs(kx_shift(ik)))/dkx * aminv(i)%dcell(dc)%supercell(nl:nr) &
               !    + (1.+sign(1.,kx_shift(ik)))/2. * abs(kx_shift(ik))/dkx * aminv_right(i)%dcell(dc)%supercell(nl:nr) ) )
               
-              u_small(jflo) = u_small(jflo) - sum( fl(:,it,ik) * & ! NDCTEST shifted by +/-0.5*dkx
+              u_small(jflo) = u_small(jflo) - sum( fl(:,it,ik) * & ! NDCTEST linear shifted by +/-0.5*dkx
                   ( (1.-sign(1.,kx_shift(ik)))/2.* abs(kx_shift(ik))/(dkx/2.) * aminv_left(i)%dcell(dc)%supercell(nl:nr) &
                   + (dkx/2.-abs(kx_shift(ik)))/(dkx/2.) * aminv(i)%dcell(dc)%supercell(nl:nr) &
                   + (1.+sign(1.,kx_shift(ik)))/2. * abs(kx_shift(ik))/(dkx/2.) * aminv_right(i)%dcell(dc)%supercell(nl:nr) ) )
@@ -441,12 +441,15 @@ contains
   subroutine advance_implicit (istep, remove_zonal_flows_switch)
     use run_parameters, only: reset
     use fields_arrays, only: phi, apar, bpar, phinew, aparnew, bparnew, &
+        aparold, &
         phistar_old, phistar_new ! NDCTESTmichaelnew
     use fields_arrays, only: apar_ext
     use antenna, only: antenna_amplitudes, no_driver
     use dist_fn, only: timeadv, exb_shear, collisions_advance, &
-        update_kperp2_tdep, update_aj0_tdep, update_gamtot_tdep, &
-        gamtot, getan ! NDCTESTmichael
+        update_kperp2_tdep, update_bessel_tdep, update_gamtots_tdep, &
+        gamtot, getan, & ! NDCTESTmichael
+        expflowopt, expflowopt_antot_old, expflowopt_antot_tdep_old, & ! NDCTESTmichael
+        expflowopt_antot_new, expflowopt_antot_tdep_new ! NDCTESTmichael
     use dist_fn, only: first_gk_solve, compute_a_b_r_ainv ! NDCTESTneighb
     use dist_fn_arrays, only: g, gnew, kx_shift, theta0_shift, &
         gamtot_tdep, & ! NDCTESTmichael
@@ -463,8 +466,8 @@ contains
     integer, intent (in) :: istep
     logical, intent (in) :: remove_zonal_flows_switch
     integer, parameter :: verb=4
-    integer :: expflow_opt, ig, it, ik ! NDCTESTmichaelnew
-    complex, dimension(:,:,:), allocatable :: expflow_antot, expflow_antot_tdep ! NDCTESTmichaelnew
+    integer :: ig, it, ik ! NDCTESTmichaelnew
+    complex, dimension(:,:,:), allocatable :: antot_expflow, antot_tdep_expflow ! NDCTESTmichaelnew
     complex, dimension(:,:,:), allocatable :: dummy1, dummy2 ! NDCTESTmichaelnew
     logical :: michael_exp = .true. ! NDCTESTswitchexp
     logical :: undo_remap
@@ -474,6 +477,12 @@ contains
     !GGH NOTE: apar_ext is initialized in this call
     if(.not.no_driver) call antenna_amplitudes (apar_ext)
   
+    ! Required to compute d<apar>/dt in the GK equation
+    ! It is then remapped by dist_fn::exb_shear
+    if(mixed_flowshear .or. explicit_flowshear) then
+        aparold = apar
+    end if
+
     if (allocated(kx_shift) .or. allocated(theta0_shift)) call exb_shear (gnew, phinew, aparnew, bparnew, istep) 
 
     g = gnew
@@ -488,8 +497,8 @@ contains
     if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
         
         call update_kperp2_tdep
-        call update_aj0_tdep
-        call update_gamtot_tdep
+        call update_bessel_tdep
+        call update_gamtots_tdep
         
     end if
 
@@ -503,27 +512,27 @@ contains
     if(explicit_flowshear .and. michael_exp) then
 
         !deallocate is further down in this subroutine
-        allocate(expflow_antot(-ntgrid:ntgrid,ntheta0,naky))
-        expflow_antot = 0.
-        allocate(expflow_antot_tdep(-ntgrid:ntgrid,ntheta0,naky))
-        expflow_antot_tdep = 0.
+        allocate(antot_expflow(-ntgrid:ntgrid,ntheta0,naky))
+        antot_expflow = 0.
+        allocate(antot_tdep_expflow(-ntgrid:ntgrid,ntheta0,naky))
+        antot_tdep_expflow = 0.
         allocate(dummy1(-ntgrid:ntgrid,ntheta0,naky))
         dummy1 = 0.
         allocate(dummy2(-ntgrid:ntgrid,ntheta0,naky))
         dummy2 = 0.
 
-        expflow_opt = 2
-        call getan(expflow_antot, dummy1, dummy2, expflow_opt)
-        expflow_opt = 3
-        call getan(expflow_antot_tdep, dummy1, dummy2, expflow_opt)
+        expflowopt = expflowopt_antot_old
+        call getan(antot_expflow, dummy1, dummy2)
+        expflowopt = expflowopt_antot_tdep_old
+        call getan(antot_tdep_expflow, dummy1, dummy2)
 
         phistar_old = 0.
         do ig = -ntgrid,ntgrid
             do it = 1,ntheta0
                 do ik = 1,naky
                     if(aky(ik)/=0.) then
-                        phistar_old(ig,it,ik) = 1./gamtot_tdep%old(ig,it,ik)*expflow_antot_tdep(ig,it,ik) &
-                            -1./gamtot(ig,it,ik)*expflow_antot(ig,it,ik)
+                        phistar_old(ig,it,ik) = 1./gamtot_tdep%old(ig,it,ik)*antot_tdep_expflow(ig,it,ik) &
+                            -1./gamtot(ig,it,ik)*antot_expflow(ig,it,ik)
                     end if
                 end do
             end do
@@ -595,17 +604,18 @@ contains
     ! NDCTESTmichaelnew: compute phistar[it+1] and get the full phi[it] and phi[it+1]
     if(explicit_flowshear .and. michael_exp) then
 
-        expflow_opt = 4
-        call getan(expflow_antot, dummy1, dummy2, expflow_opt)
-        expflow_opt = 5
-        call getan(expflow_antot_tdep, dummy1, dummy2, expflow_opt)
+        expflowopt = expflowopt_antot_new
+        call getan(antot_expflow, dummy1, dummy2)
+        expflowopt = expflowopt_antot_tdep_new
+        call getan(antot_tdep_expflow, dummy1, dummy2)
 
         phistar_new = 0.
         do ig = -ntgrid,ntgrid
             do it = 1,ntheta0
                 do ik = 1,naky
                     if(aky(ik)/=0.) then
-                        phistar_new(ig,it,ik) = 1./gamtot_tdep%new(ig,it,ik)*expflow_antot_tdep(ig,it,ik)-1./gamtot(ig,it,ik)*expflow_antot(ig,it,ik)
+                        phistar_new(ig,it,ik) = 1./gamtot_tdep%new(ig,it,ik)*antot_tdep_expflow(ig,it,ik) &
+                            -1./gamtot(ig,it,ik)*antot_expflow(ig,it,ik)
                     end if
                 end do
             end do
@@ -614,7 +624,7 @@ contains
         phinew = phinew + phistar_new
         phi = phi + phistar_old
         
-        deallocate(expflow_antot, expflow_antot_tdep, dummy1, dummy2)
+        deallocate(antot_expflow, antot_tdep_expflow, dummy1, dummy2)
 
     end if
         
@@ -754,22 +764,28 @@ contains
   subroutine init_response_matrix
     use mp, only: barrier
     use fields_arrays, only: phi, apar, bpar, phinew, aparnew, bparnew, &
+        aparold, &
         phistar_old
     use theta_grid, only: ntgrid
     use kt_grids, only: naky, ntheta0, implicit_flowshear, mixed_flowshear, interp_before, &
         explicit_flowshear, akx, kperp2_tdep
     use dist_fn_arrays, only: g, kx_shift, &
         a, b, r, ainv ! NDCTESTneighb
-    use dist_fn_arrays, only: aj0_tdep, gamtot_tdep, &
-        kperp2_left, aj0_left, gamtot_left, r_left, ainv_left, &
-        kperp2_right, aj0_right, gamtot_right, r_right, ainv_right
+    use dist_fn_arrays, only: aj0_tdep, aj1_tdep, &
+        gamtot_tdep, gamtot1_tdep, gamtot2_tdep, gamtot3_tdep, &
+        kperp2_left, aj0_left, aj1_left, &
+        gamtot_left, gamtot1_left, gamtot2_left, gamtot3_left, r_left, ainv_left, &
+        kperp2_right, aj0_right, aj1_right, &
+        gamtot_right, gamtot1_right, gamtot2_right, gamtot3_right, r_right, ainv_right
     use dist_fn, only: M_class, N_class, i_class, &
-        update_kperp2_tdep, update_aj0_tdep, update_gamtot_tdep, compute_a_b_r_ainv, &
-        for_interp_left, for_interp_right
+        update_kperp2_tdep, update_bessel_tdep, update_gamtots_tdep, compute_a_b_r_ainv, &
+        for_interp_left, for_interp_right, &
+        adiabatic_option_switch, adiabatic_option_fieldlineavg
     use run_parameters, only: fphi, fapar, fbpar
     use gs2_layouts, only: init_fields_layouts, f_lo, init_jfields_layouts, &
         g_lo
     use prof, only: prof_entering, prof_leaving
+    use species, only: spec, has_electron_species, has_ion_species
     implicit none
     integer :: ig, ifield, it, ik, i, m, n
     complex, dimension(:,:), allocatable :: am
@@ -841,9 +857,22 @@ contains
            dkx = (akx(2) - akx(1))
            kx_shift_stored = kx_shift
 
+           ! Flow shear, interpolation of am matrix:
+           ! we update kx*_new to kxbar-0.5*dkx (and do not care about kx*_old),
+           ! use it to compute corresponding kperp, Bessel funcs, gamtots,
+           ! and store those in '_left' vars.
+           ! NDC 11/2018
            allocate(kperp2_left(-ntgrid:ntgrid,ntheta0,naky))
            allocate(aj0_left(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
+           allocate(aj1_left(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
            allocate(gamtot_left(-ntgrid:ntgrid,ntheta0,naky))
+           allocate(gamtot1_left(-ntgrid:ntgrid,ntheta0,naky))
+           allocate(gamtot2_left(-ntgrid:ntgrid,ntheta0,naky))
+           if(.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) then
+               if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
+                   allocate(gamtot3_left(-ntgrid:ntgrid,ntheta0,naky))
+               end if
+           end if
            if(implicit_flowshear) then
                allocate(r_left(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
                allocate(ainv_left(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
@@ -853,17 +882,38 @@ contains
            
            call update_kperp2_tdep
            kperp2_left = kperp2_tdep%new
-           call update_aj0_tdep
+           call update_bessel_tdep
            aj0_left = aj0_tdep%new
-           call update_gamtot_tdep
+           aj1_left = aj1_tdep%new
+           call update_gamtots_tdep
            gamtot_left = gamtot_tdep%new
+           gamtot1_left = gamtot1_tdep%new
+           gamtot2_left = gamtot2_tdep%new
+           if(.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) then
+               if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
+                   gamtot3_left = gamtot3_tdep%new
+               end if
+           end if
            if(implicit_flowshear) then
                call compute_a_b_r_ainv(a,b,r_left,ainv_left)
            end if
 
+           ! Flow shear, interpolation of am matrix:
+           ! we update kx*_new to kxbar+0.5*dkx (and do not care about kx*_old),
+           ! use it to compute corresponding kperp, Bessel funcs, gamtots,
+           ! and store those in '_right' vars.
+           ! NDC 11/2018
            allocate(kperp2_right(-ntgrid:ntgrid,ntheta0,naky))
            allocate(aj0_right(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
+           allocate(aj1_right(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
            allocate(gamtot_right(-ntgrid:ntgrid,ntheta0,naky))
+           allocate(gamtot1_right(-ntgrid:ntgrid,ntheta0,naky))
+           allocate(gamtot2_right(-ntgrid:ntgrid,ntheta0,naky))
+           if(.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) then
+               if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
+                   allocate(gamtot3_right(-ntgrid:ntgrid,ntheta0,naky))
+               end if
+           end if
            if(implicit_flowshear) then
                allocate(r_right(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
                allocate(ainv_right(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
@@ -873,18 +923,30 @@ contains
 
            call update_kperp2_tdep
            kperp2_right = kperp2_tdep%new
-           call update_aj0_tdep
+           call update_bessel_tdep
            aj0_right = aj0_tdep%new
-           call update_gamtot_tdep
+           aj1_right = aj1_tdep%new
+           call update_gamtots_tdep
            gamtot_right = gamtot_tdep%new
+           gamtot1_right = gamtot1_tdep%new
+           gamtot2_right = gamtot2_tdep%new
+           if(.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) then
+               if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
+                   gamtot3_right = gamtot3_tdep%new
+               end if
+           end if
            if(implicit_flowshear) then
                call compute_a_b_r_ainv(a,b,r_right,ainv_right)
            end if
 
+           ! Flow shear, interpolation of am matrix:
+           ! we update kx*_new to kxbar (and do not care about kx*_old),
+           ! use it to compute corresponding kperp Bessel funcs, gamtots.
+           ! NDC 11/2018
            kx_shift = 0.
            call update_kperp2_tdep
-           call update_aj0_tdep
-           call update_gamtot_tdep
+           call update_bessel_tdep
+           call update_gamtots_tdep
            if(implicit_flowshear) then
                call compute_a_b_r_ainv(a,b,r,ainv)
            end if
@@ -920,7 +982,7 @@ contains
               am = 0.0
           end if
 
-          ! am's for shifted kx's,
+          ! allocating am's for shifted kx's,
           ! required for aminv interpolation in cases with flow-shear --NDC 11/2017
           if(implicit_flowshear .or. mixed_flowshear) then
         
@@ -961,6 +1023,10 @@ contains
           aparnew = 0.0
           bparnew = 0.0
 
+          if(mixed_flowshear .or. explicit_flowshear) then
+              aparold = 0.
+          end if
+
           if(explicit_flowshear .and. michael_exp) then
               phistar_old = 0.
           end if
@@ -996,6 +1062,7 @@ contains
                       phinew(ig,it,ik) = 1.0
                    end do
                    if (.not. skip_initialisation) then
+                       
                        if(allocated(kx_shift)) kx_shift = 0.
                        if(interp_before .and. .not. explicit_flowshear) then
                            call init_response_row (ig, ifield, amcollec(i)%am, i, n)
@@ -1003,12 +1070,11 @@ contains
                            call init_response_row (ig, ifield, am, i, n)
                        end if
 
-                       ! am for shifted kx's,
+                       ! computing am for shifted kx's,
                        ! required for aminv interpolation in cases with flow-shear --NDC 11/2017
                        if(implicit_flowshear .or. mixed_flowshear) then
                            
-                           ! signalling to init_response_row not to recompute dg/dphi,
-                           ! and to dist_fn::getfieldeq to use _left vars
+                           ! signalling to dist_fn::getfieldeq to use _left vars
                            for_interp_left = .true.
                            kx_shift = -0.5*dkx
                            
@@ -1020,8 +1086,7 @@ contains
                            
                            for_interp_left = .false.
                            
-                           ! signalling to init_response_row not to recompute dg/dphi,
-                           ! and to dist_fn::getfieldeq to use _right vars
+                           ! signalling to dist_fn::getfieldeq to use _right vars
                            for_interp_right = .true.
                            kx_shift = 0.5*dkx
 
@@ -1058,8 +1123,46 @@ contains
                       it = f_lo(i)%it(m,n)
                       aparnew(ig,it,ik) = 1.0
                    end do
-                   call init_response_row (ig, ifield, am, i, n)
+
+                   if(allocated(kx_shift)) kx_shift = 0.
+                   if(interp_before .and. .not. explicit_flowshear) then
+                       call init_response_row (ig, ifield, amcollec(i)%am, i, n)
+                   else
+                       call init_response_row (ig, ifield, am, i, n)
+                   end if
+
+                   ! computing am for shifted kx's,
+                   ! required for aminv interpolation in cases with flow-shear --NDC 11/2017
+                   if(implicit_flowshear .or. mixed_flowshear) then
+                       
+                       ! signalling to dist_fn::getfieldeq to use _left vars
+                       for_interp_left = .true.
+                       kx_shift = -0.5*dkx
+                       
+                       if(interp_before) then
+                           call init_response_row(ig,ifield,amcollec(i)%am_left,i,n,tadv_for_interp) ! NDCTESTinv
+                       else
+                           call init_response_row(ig,ifield,am_left,i,n,tadv_for_interp)
+                       end if
+                       
+                       for_interp_left = .false.
+                       
+                       ! signalling to dist_fn::getfieldeq to use _right vars
+                       for_interp_right = .true.
+                       kx_shift = 0.5*dkx
+
+                       if(interp_before) then
+                           call init_response_row(ig,ifield,amcollec(i)%am_right,i,n,tadv_for_interp) ! NDCTESTinv
+                       else
+                           call init_response_row(ig,ifield,am_right,i,n,tadv_for_interp)
+                       end if
+                       
+                       for_interp_right = .false.
+
+                   end if
+
                    aparnew = 0.0
+
                 end if
 
                 !Find response to bpar
@@ -1079,11 +1182,51 @@ contains
                       it = f_lo(i)%it(m,n)
                       bparnew(ig,it,ik) = 1.0
                    end do
-                   call init_response_row (ig, ifield, am, i, n)
+
+                   if(allocated(kx_shift)) kx_shift = 0.
+                   if(interp_before .and. .not. explicit_flowshear) then
+                       call init_response_row (ig, ifield, amcollec(i)%am, i, n)
+                   else
+                       call init_response_row (ig, ifield, am, i, n)
+                   end if
+
+                   ! computing am for shifted kx's,
+                   ! required for aminv interpolation in cases with flow-shear --NDC 11/2017
+                   if(implicit_flowshear .or. mixed_flowshear) then
+                       
+                       ! signalling to dist_fn::getfieldeq to use _left vars
+                       for_interp_left = .true.
+                       kx_shift = -0.5*dkx
+                       
+                       if(interp_before) then
+                           call init_response_row(ig,ifield,amcollec(i)%am_left,i,n,tadv_for_interp) ! NDCTESTinv
+                       else
+                           call init_response_row(ig,ifield,am_left,i,n,tadv_for_interp)
+                       end if
+                       
+                       for_interp_left = .false.
+                       
+                       ! signalling to dist_fn::getfieldeq to use _right vars
+                       for_interp_right = .true.
+                       kx_shift = 0.5*dkx
+
+                       if(interp_before) then
+                           call init_response_row(ig,ifield,amcollec(i)%am_right,i,n,tadv_for_interp) ! NDCTESTinv
+                       else
+                           call init_response_row(ig,ifield,am_right,i,n,tadv_for_interp)
+                       end if
+                       
+                       for_interp_right = .false.
+
+                   end if
+
                    bparnew = 0.0
+
                 end if
-             end do
-          end do
+
+             end do ! loog over theta
+
+          end do ! loop over 2pi domains
 
           if((.not. interp_before) .or. explicit_flowshear) then
 
@@ -1111,8 +1254,17 @@ contains
        if(implicit_flowshear .or. mixed_flowshear) then
               
            ! Deallocate memory used to compute interpolation matrices
-           deallocate(kperp2_left, aj0_left, gamtot_left)
-           deallocate(kperp2_right, aj0_right, gamtot_right)
+           deallocate(kperp2_left)
+           deallocate(aj0_left, aj1_left)
+           deallocate(gamtot_left, gamtot1_left, gamtot2_left)
+           deallocate(kperp2_right)
+           deallocate(aj0_right, aj1_right)
+           deallocate(gamtot_right, gamtot1_right, gamtot2_right)
+           if(.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) then
+               if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
+                   deallocate(gamtot3_left, gamtot3_right)
+               end if
+           end if
            if(implicit_flowshear) then
                deallocate(r_left, ainv_left)
                deallocate(r_right, ainv_right)
@@ -1121,8 +1273,8 @@ contains
            ! Restore time dependent quantities from before matrix computation
            kx_shift = kx_shift_stored
            call update_kperp2_tdep
-           call update_aj0_tdep
-           call update_gamtot_tdep
+           call update_bessel_tdep
+           call update_gamtots_tdep
            if(implicit_flowshear) then
                call compute_a_b_r_ainv(a,b,r,ainv)
            end if
@@ -1174,7 +1326,7 @@ contains
     !together, this may not be so easy if we do all the ik together but it should
     !be possible.
 
-    ! NDCTESTshift: also call timeadv for interpolation matrices in mixed flow-shear approach
+    ! NDCTESTshift: no need to call timeadv for interpolation matrices in mixed flow-shear approach
     if(tadv) then
         
         call timeadv (phi, apar, bpar, phinew, aparnew, bparnew, 0)

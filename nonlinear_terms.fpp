@@ -325,7 +325,7 @@ contains
     use gs2_layouts, only: g_lo, ik_idx, it_idx
     use gs2_layouts, only: accelx_lo, yxf_lo
     use dist_fn_arrays, only: g, g_adjust, &
-        t_last_jump, aj0_tdep
+        t_last_jump, aj0_tdep, aj1_tdep
     use species, only: spec
     use gs2_transforms, only: transform2, inverse2
     use run_parameters, only: fapar, fbpar, fphi, reset, immediate_reset
@@ -374,7 +374,7 @@ contains
     if(present(g_exb_opt)) then ! case with new flowshear algo -- NDC 08/18
         if(apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin: delete this line and replace with the following one
         !if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-            call g_adjust(g1,phi,bpar,fphi,fbpar,aj0_tdep%old)
+            call g_adjust(g1,phi,bpar,fphi,fbpar,aj0_tdep%old,aj1_tdep%old)
         else ! NDCTEST_nl_vs_lin: delete this section and merge above ifs
             call g_adjust(g1,phi,bpar,fphi,fbpar)
         end if
@@ -448,7 +448,7 @@ contains
     if(present(g_exb_opt)) then ! case with new flowshear algo -- NDC 08/18
         if(apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin: delete this line and replace with the following one
         !if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-            call g_adjust(g1,phi,bpar,fphi,fbpar,aj0_tdep%old)
+            call g_adjust(g1,phi,bpar,fphi,fbpar,aj0_tdep%old,aj1_tdep%old)
         else ! NDCTEST_nl_vs_lin: delete this section and merge above ifs
             call g_adjust(g1,phi,bpar,fphi,fbpar)
         end if
@@ -676,21 +676,67 @@ contains
       use gs2_layouts, only: is_idx
       complex :: fac
 
-      do iglo = g_lo%llim_proc, g_lo%ulim_proc
-         it = it_idx(g_lo,iglo)
-         ik = ik_idx(g_lo,iglo)
-         is = is_idx(g_lo,iglo)
+      ! NDCTEST_nl_vs_lin: delete last arg
+      if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. apply_flowshear_nonlin) then
+          
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+              it = it_idx(g_lo,iglo)
+              ik = ik_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
+              do ig = -ntgrid, ntgrid
+                  fac = zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))*aj0_tdep%old(ig,iglo)*spec(is)%stm*apar(ig,it,ik)*fapar
+                  g1(ig,1,iglo) = g1(ig,1,iglo) - fac*vpa(ig,1,iglo)
+                  g1(ig,2,iglo) = g1(ig,2,iglo) - fac*vpa(ig,2,iglo)
+              end do
+          end do
+
+      else if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. .not. apply_flowshear_nonlin) then
+          
+          ! NDCTEST_nl_vs_lin: this else section is meant for new algo with apply_flowshear_nonlin=false: delete it
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+              it = it_idx(g_lo,iglo)
+              ik = ik_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
+              do ig = -ntgrid, ntgrid
+                  fac = zi*akx(it)*aj0(ig,iglo)*spec(is)%stm*apar(ig,it,ik)*fapar
+                  g1(ig,1,iglo) = g1(ig,1,iglo) - fac*vpa(ig,1,iglo)
+                  g1(ig,2,iglo) = g1(ig,2,iglo) - fac*vpa(ig,2,iglo)
+              end do
+          end do
+
+      else if(apply_flowshear_nonlin) then
+          
+          ! NDCTEST_nl_vs_lin: this else section is meant for old algo with apply_flowshear_nonlin=true: delete it
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+              it = it_idx(g_lo,iglo)
+              ik = ik_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
+              do ig = -ntgrid, ntgrid
+                  fac = zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))*aj0_tdep%old(ig,iglo)*spec(is)%stm*apar(ig,it,ik)*fapar
+                  g1(ig,1,iglo) = g1(ig,1,iglo) - fac*vpa(ig,1,iglo)
+                  g1(ig,2,iglo) = g1(ig,2,iglo) - fac*vpa(ig,2,iglo)
+              end do
+          end do
+
+      else
+
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+              it = it_idx(g_lo,iglo)
+              ik = ik_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
 !AJ Optimisatin
-         do ig = -ntgrid, ntgrid
-	    fac = zi*akx(it)*aj0(ig,iglo)*spec(is)%stm*apar(ig,it,ik)*fapar
-            g1(ig,1,iglo) = g1(ig,1,iglo) - fac*vpa(ig,1,iglo)
+              do ig = -ntgrid, ntgrid
+                  fac = zi*akx(it)*aj0(ig,iglo)*spec(is)%stm*apar(ig,it,ik)*fapar
+                  g1(ig,1,iglo) = g1(ig,1,iglo) - fac*vpa(ig,1,iglo)
 !         end do
 !         do ig = -ntgrid, ntgrid
 !            g1(ig,2,iglo) = g1(ig,2,iglo) - zi*akx(it)*aj0(ig,iglo)*spec(is)%stm &
 !                 *vpa(ig,2,iglo)*apar(ig,it,ik)*fapar 
- 	    g1(ig,2,iglo) = g1(ig,2,iglo) - fac*vpa(ig,2,iglo)
-         end do
-      end do
+                  g1(ig,2,iglo) = g1(ig,2,iglo) - fac*vpa(ig,2,iglo)
+              end do
+          end do
+
+      end if
 
     end subroutine load_kx_apar
 
@@ -700,23 +746,69 @@ contains
       use gs2_layouts, only: is_idx
       complex :: fac
 
-      do iglo = g_lo%llim_proc, g_lo%ulim_proc
-         it = it_idx(g_lo,iglo)
-         ik = ik_idx(g_lo,iglo)
-         is = is_idx(g_lo,iglo)
+      ! NDCTEST_nl_vs_lin: delete last arg
+      if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. apply_flowshear_nonlin) then
+          
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+              it = it_idx(g_lo,iglo)
+              ik = ik_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
+              do ig = -ntgrid, ntgrid
+                  fac = zi*aky(ik)*aj0_tdep%old(ig,iglo)*spec(is)%stm*apar(ig,it,ik)*fapar
+                  g1(ig,1,iglo) = g1(ig,1,iglo) - fac*vpa(ig,1,iglo)
+                  g1(ig,2,iglo) = g1(ig,2,iglo) - fac*vpa(ig,2,iglo)
+              end do
+          end do
+
+      else if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. .not. apply_flowshear_nonlin) then
+          
+          ! NDCTEST_nl_vs_lin: this else section is meant for new algo with apply_flowshear_nonlin=false: delete it
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+              it = it_idx(g_lo,iglo)
+              ik = ik_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
+              do ig = -ntgrid, ntgrid
+                  fac = zi*aky(ik)*aj0(ig,iglo)*spec(is)%stm*apar(ig,it,ik)*fapar
+                  g1(ig,1,iglo) = g1(ig,1,iglo) - fac*vpa(ig,1,iglo)
+                  g1(ig,2,iglo) = g1(ig,2,iglo) - fac*vpa(ig,2,iglo)
+              end do
+          end do
+
+      else if(apply_flowshear_nonlin) then
+          
+          ! NDCTEST_nl_vs_lin: this else section is meant for old algo with apply_flowshear_nonlin=true: delete it
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+              it = it_idx(g_lo,iglo)
+              ik = ik_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
+              do ig = -ntgrid, ntgrid
+                  fac = zi*aky(ik)*aj0_tdep%old(ig,iglo)*spec(is)%stm*apar(ig,it,ik)*fapar
+                  g1(ig,1,iglo) = g1(ig,1,iglo) - fac*vpa(ig,1,iglo)
+                  g1(ig,2,iglo) = g1(ig,2,iglo) - fac*vpa(ig,2,iglo)
+              end do
+          end do
+
+      else
+
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+              it = it_idx(g_lo,iglo)
+              ik = ik_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
 !AJ Optimisation
-         do ig = -ntgrid, ntgrid
-	    fac = zi*aky(ik)*aj0(ig,iglo)*spec(is)%stm*apar(ig,it,ik)*fapar
-	    g1(ig,1,iglo) = g1(ig,1,iglo) - fac*vpa(ig,1,iglo)
+              do ig = -ntgrid, ntgrid
+                  fac = zi*aky(ik)*aj0(ig,iglo)*spec(is)%stm*apar(ig,it,ik)*fapar
+                  g1(ig,1,iglo) = g1(ig,1,iglo) - fac*vpa(ig,1,iglo)
 !            g1(ig,1,iglo) = g1(ig,1,iglo) - zi*aky(ik)*aj0(ig,iglo)*spec(is)%stm &
 !                 *vpa(ig,1,iglo)*apar(ig,it,ik)*fapar 
 !         end do
 !         do ig = -ntgrid, ntgrid
 !            g1(ig,2,iglo) = g1(ig,2,iglo) - zi*aky(ik)*aj0(ig,iglo)*spec(is)%stm &
 !                 *vpa(ig,2,iglo)*apar(ig,it,ik)*fapar 
-	     g1(ig,2,iglo) = g1(ig,2,iglo) - fac*vpa(ig,2,iglo)
-         end do
-      end do
+                  g1(ig,2,iglo) = g1(ig,2,iglo) - fac*vpa(ig,2,iglo)
+              end do
+          end do
+
+      end if
 
     end subroutine load_ky_apar
 
@@ -726,19 +818,68 @@ contains
       use gs2_layouts, only: is_idx
       complex :: fac
 
+      ! NDCTEST_nl_vs_lin: delete last arg
+      if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. apply_flowshear_nonlin) then
+          
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+              it = it_idx(g_lo,iglo)
+              ik = ik_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
+              do ig = -ntgrid, ntgrid
+                  fac = g1(ig,1,iglo) + zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))*aj1_tdep%old(ig,iglo) &
+                      *2.0*vperp2(ig,iglo)*spec(is)%tz*bpar(ig,it,ik)*fbpar
+                  g1(ig,1,iglo) = fac
+                  g1(ig,2,iglo) = fac
+              end do
+          end do
+
+      else if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. .not. apply_flowshear_nonlin) then
+          
+          ! NDCTEST_nl_vs_lin: this else section is meant for new algo with apply_flowshear_nonlin=false: delete it
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+              it = it_idx(g_lo,iglo)
+              ik = ik_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
+              do ig = -ntgrid, ntgrid
+                  fac = g1(ig,1,iglo) + zi*akx(it)*aj1(ig,iglo) &
+                      *2.0*vperp2(ig,iglo)*spec(is)%tz*bpar(ig,it,ik)*fbpar
+                  g1(ig,1,iglo) = fac
+                  g1(ig,2,iglo) = fac
+              end do
+          end do
+
+      else if(apply_flowshear_nonlin) then
+          
+          ! NDCTEST_nl_vs_lin: this else section is meant for old algo with apply_flowshear_nonlin=true: delete it
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+              it = it_idx(g_lo,iglo)
+              ik = ik_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
+              do ig = -ntgrid, ntgrid
+                  fac = g1(ig,1,iglo) + zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))*aj1_tdep%old(ig,iglo) &
+                      *2.0*vperp2(ig,iglo)*spec(is)%tz*bpar(ig,it,ik)*fbpar
+                  g1(ig,1,iglo) = fac
+                  g1(ig,2,iglo) = fac
+              end do
+          end do
+
+      else
+
 ! Is this factor of two from the old normalization?
 
-      do iglo = g_lo%llim_proc, g_lo%ulim_proc
-         it = it_idx(g_lo,iglo)
-         ik = ik_idx(g_lo,iglo)
-         is = is_idx(g_lo,iglo)
-         do ig = -ntgrid, ntgrid
-            fac = g1(ig,1,iglo) + zi*akx(it)*aj1(ig,iglo) &
-                 *2.0*vperp2(ig,iglo)*spec(is)%tz*bpar(ig,it,ik)*fbpar
-            g1(ig,1,iglo) = fac
-            g1(ig,2,iglo) = fac
-         end do
-      end do
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+              it = it_idx(g_lo,iglo)
+              ik = ik_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
+              do ig = -ntgrid, ntgrid
+                  fac = g1(ig,1,iglo) + zi*akx(it)*aj1(ig,iglo) &
+                       *2.0*vperp2(ig,iglo)*spec(is)%tz*bpar(ig,it,ik)*fbpar
+                  g1(ig,1,iglo) = fac
+                  g1(ig,2,iglo) = fac
+              end do
+          end do
+
+      end if
 
     end subroutine load_kx_bpar
 
@@ -748,19 +889,68 @@ contains
       use gs2_layouts, only: is_idx
       complex :: fac
 
+      ! NDCTEST_nl_vs_lin: delete last arg
+      if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. apply_flowshear_nonlin) then
+          
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+              it = it_idx(g_lo,iglo)
+              ik = ik_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
+              do ig = -ntgrid, ntgrid
+                  fac = g1(ig,1,iglo) + zi*aky(ik)*aj1_tdep%old(ig,iglo) &
+                       *2.0*vperp2(ig,iglo)*spec(is)%tz*bpar(ig,it,ik)*fbpar
+                  g1(ig,1,iglo) = fac 
+                  g1(ig,2,iglo) = fac
+              end do
+          end do
+
+      else if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. .not. apply_flowshear_nonlin) then
+          
+          ! NDCTEST_nl_vs_lin: this else section is meant for new algo with apply_flowshear_nonlin=false: delete it
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+              it = it_idx(g_lo,iglo)
+              ik = ik_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
+              do ig = -ntgrid, ntgrid
+                  fac = g1(ig,1,iglo) + zi*aky(ik)*aj1(ig,iglo) &
+                       *2.0*vperp2(ig,iglo)*spec(is)%tz*bpar(ig,it,ik)*fbpar
+                  g1(ig,1,iglo) = fac 
+                  g1(ig,2,iglo) = fac
+              end do
+          end do
+
+      else if(apply_flowshear_nonlin) then
+          
+          ! NDCTEST_nl_vs_lin: this else section is meant for old algo with apply_flowshear_nonlin=true: delete it
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+              it = it_idx(g_lo,iglo)
+              ik = ik_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
+              do ig = -ntgrid, ntgrid
+                  fac = g1(ig,1,iglo) + zi*aky(ik)*aj1_tdep%old(ig,iglo) &
+                       *2.0*vperp2(ig,iglo)*spec(is)%tz*bpar(ig,it,ik)*fbpar
+                  g1(ig,1,iglo) = fac 
+                  g1(ig,2,iglo) = fac
+              end do
+          end do
+
+      else
+
 ! Is this factor of two from the old normalization?
 
-      do iglo = g_lo%llim_proc, g_lo%ulim_proc
-         it = it_idx(g_lo,iglo)
-         ik = ik_idx(g_lo,iglo)
-         is = is_idx(g_lo,iglo)
-         do ig = -ntgrid, ntgrid
-            fac = g1(ig,1,iglo) + zi*aky(ik)*aj1(ig,iglo) &
-                 *2.0*vperp2(ig,iglo)*spec(is)%tz*bpar(ig,it,ik)*fbpar
-            g1(ig,1,iglo) = fac 
-            g1(ig,2,iglo) = fac
-         end do
-      end do
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+              it = it_idx(g_lo,iglo)
+              ik = ik_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
+              do ig = -ntgrid, ntgrid
+                  fac = g1(ig,1,iglo) + zi*aky(ik)*aj1(ig,iglo) &
+                       *2.0*vperp2(ig,iglo)*spec(is)%tz*bpar(ig,it,ik)*fbpar
+                  g1(ig,1,iglo) = fac 
+                  g1(ig,2,iglo) = fac
+              end do
+          end do
+
+      end if
 
     end subroutine load_ky_bpar
 

@@ -934,7 +934,8 @@ contains
   !end subroutine save_fields_and_dist_fn
   subroutine set_initial_field_and_dist_fn_values(current)
     use dist_fn_arrays, only: g, gnew
-    use fields_arrays, only: phinew, aparnew, bparnew
+    use fields_arrays, only: phinew, aparnew, bparnew, &
+        aparold
     use fields, only: force_maxwell_reinit
     use fields, only: set_init_fields
     use file_utils, only: error_unit
@@ -951,11 +952,13 @@ contains
 
     !write (*,*) 'set_init_field in_memory', in_memory, fields_and_dist_fn_saved
 
-    ! To initialise a restart, we need to set force_maxwell_reinit to its
-    ! value in the fields_knobs namelist, so that phi can (if wished by the user)
-    ! be initialised from the restart files without being overwritten by a QN solve.
-    ! This is required with the new flow shear algorithm to avoid
-    ! small discontinuities during restarts. -- NDC 08/18
+    ! When restarting with restart_many:
+    ! set ov%force_maxwell_reinit to user specified value
+    ! BEFORE overrides::init_initial_values_overrides is called.
+    ! This enables the user to force the fields to be read directly
+    ! from the netCDF file, instead of recomputing them with a field solve.
+    ! Required with the new flow shear algo to avoid small
+    ! discontinuities when restarting. -- NDC 11/18
     if((.not. current%initval_ov%init) .and. ginitopt_switch==ginitopt_restart_many) then
         current%initval_ov%force_maxwell_reinit = force_maxwell_reinit
     end if
@@ -972,20 +975,22 @@ contains
       end if
     end if
 
-    ! At initialisation, we need to enforce QN so we force
-    ! current%initval_ov%force_maxwell_reinit = true,
-    ! except if ginit_option = "many", in which case it is set
-    ! to its value from the fields_knobs namelist.
-    ! NB: in case of a dt-reset, force_maxwell_reinit is
-    ! always the value from fields_knobs. -- NDC 08/18
+    ! During initialisation:
+    ! If restart_many, ov%force_maxwell_reinit is user specified.
+    ! Else, ov%force_maxwell_reinit is true (to force a field solve).
+    ! During dt resets:
+    ! ov%force_maxwell_reinit is user specified.
+    ! NDC 11/18
     if (current%initval_ov%force_maxwell_reinit)then
       call set_init_fields
       !if (.not. proc0) write (*,*) 'field value jjjj kkkk', phinew(-5, 3, 2), job_id
       !if (.not. proc0) write (*,*) 'field value sum jjjj kkkk', sum(real(conjg(phinew)*phinew)), job_id
     else
-      ! Commented below. Not sure what this unhelpful message was about.
-      ! The only problem I can think of is when restarting jobs from
-      ! one machine on another machine ... -- NDC 08/18
+      ! Commented out the unhelpful message below.
+      ! Also corrected overrides::init_initial_values_overrides
+      ! where a seg fault would have occurred with force_maxwell_reinit=false
+      ! and in_memory=true -- NDC 08/18
+
       !write(error_unit(), *) "INFO: You have disabled &
       !  & force_maxwell_reinit which causes the fields to be &
       !  & recalculated self-consistently from the the dist fn. &
@@ -995,10 +1000,18 @@ contains
           phinew=current%initval_ov%phi
         if(fapar.gt.0) &
           aparnew=current%initval_ov%apar
+          ! NDCQUEST: this is a temporary fix, should really copy aparold to initval_ov%aparold
+          if(allocated(aparold)) then
+              aparold = aparnew
+          end if
         if(fbpar.gt.0) &
           bparnew=current%initval_ov%bpar
       else
         ! No need to do anything: fields read from file.
+        ! NDCQUEST: this is a temporary fix, should really write/read aparold to file
+        if(allocated(aparold)) then
+            aparold = aparnew
+        end if
       end if
     end if
   end subroutine set_initial_field_and_dist_fn_values

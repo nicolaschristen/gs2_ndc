@@ -1,0 +1,59 @@
+27/11/2018
+
+Corrected a segmentation fault occurring in gs2_main::set_initval_overrides_to_current_vals when force_maxwell_reinit=false and in_memory=true. This could be the issue Edmund Highcock was referring to in his warning message.
+Adapted dist_fn::get_init_field to EM with the new flow shear algo.
+The user should set force_maxwell_reinit to false when using the new algo.
+Adapted dist_fn::calculate_flux_surface_average to flow shear algo.
+
+28/11/2018
+
+In fields_implicit::advance_implicit, call all t-dep updates including EM.
+Changed dist_fn::update_aj0_tdep to update_bessel_tdep where aj1_tdep is updated.
+///// NDCQUEST : for now aj1 only updated when fbpar>0. Do we need aj1 when fbpar=0 ?
+Changed dist_fn::update_gamtot_tdep to update_gamtots_tdep where gamtot1,2,3 are also updated.
+///// NDCQUEST : for now gamtot1 & gamtot2 are only updated when fbpar>0. Do we need them when fbpar=0 ?
+Added aj1_opt argument to dist_fn_arrays::g_adjust.
+In nonlinear_terms, changed call to dist_fn_arrays::g_adjust to have t-dep aj1.
+Also adapted load_kx_apar/bpar and load_ky_apar/bpar to flow shear algo, so that:
+                                 old_flowshear      new_flowshear
+apply_flowshear_nonlin=true        kx*,J0*               kx*,J0*
+apply_flowshear_nonlin=false     kxbar,J0bar           kxbar,J0bar
+
+29/11/2018
+
+///// NDCQUEST : are the old versions of t-dep gamtots needed at all ? Could we simply make the standard gamtots t-dep ?
+\\\\\ ANSWER : gamtot_tdep%old is used to compute phistar_old in fields_implicit::advance_implicit.
+Added deallocation of tdep aj1,gamtot1,gamtot2,gamtot3 in dist_fn::finish_dist_fn_level_1
+Added left/right aj1,gamtot1,gamtot2,gamtot3 in dist_fn_arrays
+Duplicated code in fields_implicit::init_response_matrix to compute right/left am's for apar & bpar.
+In dist_fn::invert_rhs_linked, added aj1 as argument in calls to dist_fn::invert_rhs_1.
+In dist_fn::invert_rhs_1, use aj1 left/right when computing am's for interpolation.
+In dist_fn, modified invert_rhs, invert_rhs_linked and invert_rhs_1 so that they now have the same args as the original code, and the correct kperp2/aj0/aj1/r/ainv/phinew are selected within the subroutines themselves.
+Removed optional argument expflow_opt of get_field_vector, getfieldeq, getfieldeq1 & getan. Instead, use expflowopt that is set upstream in fields_implicit::getfield and advance_implicit, and then checked for in dist_fn::getan and dist_fn::getfieldeq1.
+Adapted dist_fn::getan to use aj1 tdep/left/right.
+///// NDCQUEST: how should I adapt getan EM parts for explicit flow shear ?
+///// NDCQUEST: ditto for calculate_flux_surface_average ?
+///// NDCQUEST: ditto for getfieldeq1 ?
+Adapted dist_fn::getan & getfieldeq1 to use tpdep/right/left quantities in EM parts.
+
+30/11/2018
+
+In dist_fn::get_source_term, split apargavg into new & old parts.
+///// NDCQUEST: in ttp part of get_source_term, should a & b be left/right/tdep for implicit ?
+\\\\\ ANSWER : no, a & b multiply g[it], which is set to zero when computing interpolation matrices.
+///// NDCQUEST: bakdif aj0 in apar_p term ?
+///// NDCQUEST: use pointers for right/left calculations ?
+///// NDCQUEST: allocate vrey small arrays instead of declaring without allocating ?
+
+4/12/2018
+
+Adapted dist_fn::get_source_term & set_source to EM terms, using new variables that make it easier to understand.
+Added apar_old to fields_arrays
+Allocate/deallocate aparold in fields::allocate_arrays & finish_fields
+In case field solve is forced at init/reset/restart: initialise aparold=apar in fields_implicit::init_allfields_implicit
+///// NDCQUEST: in override::init_initial_values_overrides, can we use kt_grids::mixed_flowshear to test if we want to allocate ov%aparold ? Could we test for if(allocated(aparold)) instead ? This would not work if we follow Michael's advice to allocate small arrays to save mem... We would also need to handle aparold in gs2_main::set_initval_overrides_to_current_vals, gs2_save::gs2_save_for_restart, gs2_save::gs2_restore.
+Temporary fix to above question: set aparold=apar in gs2_init::set_initial_field_and_dist_fn_values (modified template/gs2_init_template.f90)
+In fields_implicit::advance_implicit, set aparold=apar at the beginning.
+In dist_fn::exb_shear, remap aparold.
+In fields_implicit::init_response_matrix, set aparold=0 before computing the matrices.
+

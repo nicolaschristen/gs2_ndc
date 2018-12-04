@@ -19,16 +19,22 @@ module dist_fn_arrays
 #endif
 
   public :: kx_shift_old
-  public :: aj0_tdep
-  public :: gamtot_tdep
+  public :: aj0_tdep, aj1_tdep
+  public :: gamtot_tdep, gamtot1_tdep, gamtot2_tdep, gamtot3_tdep
   public :: t_last_jump
   public :: remap_period
   ! NDCTESTneighb
   public :: jump
   public :: a, b, r, ainv
   ! endNDCTESTneighb
-  public :: kperp2_left, aj0_left, gamtot_left, r_left, ainv_left
-  public :: kperp2_right, aj0_right, gamtot_right, r_right, ainv_right
+  public :: kperp2_left
+  public :: aj0_left, aj1_left
+  public :: gamtot_left, gamtot1_left, gamtot2_left, gamtot3_left
+  public :: r_left, ainv_left
+  public :: kperp2_right
+  public :: aj0_right, aj1_right
+  public :: gamtot_right, gamtot1_right, gamtot2_right, gamtot3_right
+  public :: r_right, ainv_right
   
   ! dist fn
   complex, dimension (:,:,:), allocatable :: g, gnew, g_restart_tmp
@@ -64,21 +70,25 @@ module dist_fn_arrays
   ! (-ntgrid:ntgrid,ntheta0,naky,negrid,nspecies,2)
 #endif
   
-  ! Time-dependent versions of aj0 and gamtot, containing values for present and next
-  ! time-steps. Used for flow-shear cases. --NDC 11/2017
-  type :: aj0_tdep_type
+  ! Time-dependent versions of bessel functions and gamtots, containing values for present and next
+  ! time-steps. Used for flow-shear cases. --NDC 11/2018
+  type :: bessel_tdep_type
       real, dimension(:,:), allocatable :: old
       real, dimension(:,:), allocatable :: new
-  end type aj0_tdep_type
+  end type bessel_tdep_type
 
-  type(aj0_tdep_type) :: aj0_tdep
+  type(bessel_tdep_type) :: aj0_tdep
+  type(bessel_tdep_type) :: aj1_tdep
   
-  type :: gamtot_tdep_type
+  type :: gamtots_tdep_type
       real, dimension(:,:,:), allocatable :: old
       real, dimension(:,:,:), allocatable :: new
-  end type gamtot_tdep_type
+  end type gamtots_tdep_type
 
-  type(gamtot_tdep_type) :: gamtot_tdep
+  type(gamtots_tdep_type) :: gamtot_tdep
+  type(gamtots_tdep_type) :: gamtot1_tdep
+  type(gamtots_tdep_type) :: gamtot2_tdep
+  type(gamtots_tdep_type) :: gamtot3_tdep
 
   real, dimension(:), allocatable :: kx_shift_old
 
@@ -92,13 +102,17 @@ module dist_fn_arrays
   
   real, dimension(:,:,:), allocatable :: kperp2_left, kperp2_right
   real, dimension(:,:), allocatable :: aj0_left, aj0_right
+  real, dimension(:,:), allocatable :: aj1_left, aj1_right
   real, dimension(:,:,:), allocatable :: gamtot_left, gamtot_right
+  real, dimension(:,:,:), allocatable :: gamtot1_left, gamtot1_right
+  real, dimension(:,:,:), allocatable :: gamtot2_left, gamtot2_right
+  real, dimension(:,:,:), allocatable :: gamtot3_left, gamtot3_right
   complex, dimension(:,:,:), allocatable :: r_left, r_right
   complex, dimension(:,:,:), allocatable :: ainv_left, ainv_right
   
 contains
 
-  subroutine g_adjust (g, phi, bpar, facphi, facbpar, aj0_opt)
+  subroutine g_adjust (g, phi, bpar, facphi, facbpar, aj0_opt, aj1_opt)
     !CMR, 17/4/2012: 
     ! g_adjust transforms between representations of perturbed dist'n func'n.
     !    <delta_f> = g_wesson J0(Z) - q phi/T F_m  where <> = gyroaverage
@@ -121,7 +135,7 @@ contains
     complex, dimension (-ntgrid:,:,g_lo%llim_proc:), intent (in out) :: g
     complex, dimension (-ntgrid:,:,:), intent (in) :: phi, bpar
     real, intent (in) :: facphi, facbpar
-    real, dimension(-ntgrid:,g_lo%llim_proc:), intent(in), optional :: aj0_opt
+    real, dimension(-ntgrid:,g_lo%llim_proc:), intent(in), optional :: aj0_opt, aj1_opt
 
     integer :: iglo, ig, ik, it, ie, is, il
     complex :: adj
@@ -129,8 +143,8 @@ contains
 
     if (minval(jend) .gt. ng2) trapped=.true.
 
-    ! Flowshear cases: we can pass time dependent J0 as argument -- NDC 08/18
-    if(present(aj0_opt)) then
+    ! Flow shear cases: we can pass time dependent bessel funcs as arguments -- NDC 11/18
+    if(present(aj0_opt) .and. present(aj1_opt)) then
         do iglo = g_lo%llim_proc, g_lo%ulim_proc
            ik = ik_idx(g_lo,iglo)
            it = it_idx(g_lo,iglo)
@@ -141,7 +155,7 @@ contains
            do ig = -ntgrid, ntgrid
               if ( trapped .and. il > jend(ig)) cycle 
 
-              adj = anon(ie)*2.0*vperp2(ig,iglo)*aj1(ig,iglo) &
+              adj = anon(ie)*2.0*vperp2(ig,iglo)*aj1_opt(ig,iglo) &
                    *bpar(ig,it,ik)*facbpar &
                    + spec(is)%z*anon(ie)*phi(ig,it,ik)*aj0_opt(ig,iglo) &
                    /spec(is)%temp*facphi
@@ -149,7 +163,7 @@ contains
               g(ig,2,iglo) = g(ig,2,iglo) + adj
            end do
         end do
-    else ! previous usage with aj0
+    else ! usage before new flow shear algo
         do iglo = g_lo%llim_proc, g_lo%ulim_proc
            ik = ik_idx(g_lo,iglo)
            it = it_idx(g_lo,iglo)

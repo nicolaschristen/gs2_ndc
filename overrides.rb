@@ -275,15 +275,18 @@ subroutine init_initial_values_overrides(overrides_obj, ntgrid, ntheta0, naky, g
   overrides_obj%force_maxwell_reinit = force_maxwell_reinit
   overrides_obj%in_memory = in_memory
 
-  ! Commented out warning below. Not sure what this unhelpful message was about.
-  ! The only problem I can think of is when restarting jobs from
-  ! one machine on another machine ... -- NDC 08/18
+  ! Commented out the unhelpful message below.
+  ! A segmentation fault indeed occurred in
+  ! the if-statement following that comment when
+  ! in_memory=true and force_maxwell_reinit=false.
+  ! This is now fixed. -- NDC 11/18
+
   !write (error_unit(), *) "INFO: changing force_maxwell_reinit or in_memory &
   !  & after calling initial_values_overrides_type will almost certainly cause &
   !  & segmentation faults."
   if (overrides_obj%in_memory) then 
     allocate(overrides_obj%g(-ntgrid:ntgrid,2,g_llim:g_ulim), stat=iostat)
-    if (overrides_obj%force_maxwell_reinit) then 
+    if (.not. overrides_obj%force_maxwell_reinit) then ! added .not. -- NDC 11/18
       if (iostat.eq.0) allocate(overrides_obj%phi(-ntgrid:ntgrid,ntheta0,naky), stat=iostat)
       if (iostat.eq.0) allocate(overrides_obj%apar(-ntgrid:ntgrid,ntheta0,naky), stat=iostat)
       if (iostat.eq.0) allocate(overrides_obj%bpar(-ntgrid:ntgrid,ntheta0,naky), stat=iostat)

@@ -448,9 +448,11 @@ contains
   subroutine allocate_arrays
     use theta_grid, only: ntgrid
     use kt_grids, only: naky, ntheta0, &
+        mixed_flowshear, &
         explicit_flowshear ! NDCTESTmichaelnew
     use antenna, only: no_driver
     use fields_arrays, only: phi, apar, bpar, phinew, aparnew, bparnew, apar_ext, &
+        aparold, &
         phistar_old, phistar_new ! NDCTESTmichaelnew
     use fields_arrays, only: gf_phi, gf_apar, gf_bpar, gf_phinew, gf_aparnew, gf_bparnew
     use unit_tests, only: debug_message
@@ -466,9 +468,12 @@ contains
        allocate (  phinew (-ntgrid:ntgrid,ntheta0,naky))
        allocate ( aparnew (-ntgrid:ntgrid,ntheta0,naky))
        allocate (bparnew (-ntgrid:ntgrid,ntheta0,naky))
-       if(explicit_flowshear .and. michael_exp) then
-           allocate ( phistar_old (-ntgrid:ntgrid,ntheta0,naky)) ! NDCTESTmichaelnew
-           allocate ( phistar_new (-ntgrid:ntgrid,ntheta0,naky)) ! NDCTESTmichaelnew
+       if(mixed_flowshear .or. explicit_flowshear) then
+           allocate(aparold(-ntgrid:ntgrid,ntheta0,naky))
+           if(explicit_flowshear .and. michael_exp) then
+               allocate ( phistar_old (-ntgrid:ntgrid,ntheta0,naky)) ! NDCTESTmichaelnew
+               allocate ( phistar_new (-ntgrid:ntgrid,ntheta0,naky)) ! NDCTESTmichaelnew
+           end if
        end if
        if(fieldopt_switch .eq. fieldopt_gf_local) then
           !AJ It should be possible to reduce the size of these by only allocating them
@@ -656,6 +661,7 @@ contains
     use fields_local, only: finish_fields_local
     use fields_gf_local, only: finish_fields_gf_local
     use fields_arrays, only: phi, apar, bpar, phinew, aparnew, bparnew, &
+        aparold, &
         phistar_old, phistar_new ! NDCTESTmichaelnew
     use fields_arrays, only: apar_ext, gf_phi, gf_apar, gf_bpar
     use fields_arrays, only: apar_ext, gf_phinew, gf_aparnew, gf_bparnew
@@ -697,6 +703,7 @@ contains
       'fields::finish_fields called subroutines')
 
     if (allocated(phi)) deallocate (phi, apar, bpar, phinew, aparnew, bparnew)
+    if (allocated(aparold)) deallocate (aparold)
     if (allocated(phistar_old)) deallocate (phistar_old, phistar_new) ! NDCTESTmichaelnew
     if (allocated(gf_phi)) deallocate(gf_phi, gf_apar, gf_bpar, gf_phinew, gf_aparnew, gf_bparnew)
     if (allocated(apar_ext)) deallocate (apar_ext)
