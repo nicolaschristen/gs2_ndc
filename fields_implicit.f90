@@ -275,8 +275,7 @@ contains
     use prof, only: prof_entering, prof_leaving
     use fields_arrays, only: time_field
     use theta_grid, only: ntgrid
-    use dist_fn, only: N_class, i_class, &
-        expflowopt, expflowopt_felix ! NDCTESTmichael & NDCTESTfelix
+    use dist_fn, only: N_class, i_class
     use mp, only: sum_allreduce, allgatherv, iproc,nproc, proc0
     use job_manage, only: time_message
     use dist_fn_arrays, only: kx_shift
@@ -287,7 +286,6 @@ contains
     complex, dimension (:), allocatable :: u_small
     integer :: jflo, ik, it, nl, nr, i, m, n, dc, ic, iflo
     real :: dkx
-    logical :: michael_exp = .true. ! NDCTESTswitchexp
 
     if (proc0) call time_message(.false.,time_field,' Field Solver')
 
@@ -341,12 +339,6 @@ contains
     ! am*u = fl, Poisson's and Ampere's law, u is phi, apar, bpar 
     ! u = aminv*fl
 
-    ! Modified field equation for explicit flowshear implementation
-    ! necessary to make aminv time independent. -- NDC 02/2018
-    ! NDCTESTfelix & NDCTESTmichael
-    if(explicit_flowshear .and. .not. michael_exp) then
-        expflowopt = expflowopt_felix
-    end if
     call get_field_vector (fl, phi, apar, bpar)
 
     !Initialise array, if not gathering then have to zero entire array
@@ -448,7 +440,7 @@ contains
     use dist_fn, only: timeadv, exb_shear, collisions_advance, &
         update_kperp2_tdep, update_bessel_tdep, update_gamtots_tdep, &
         gamtot, getan, & ! NDCTESTmichael
-        expflowopt, expflowopt_antot_old, expflowopt_antot_tdep_old, & ! NDCTESTmichael
+        expflowopt, expflowopt_none, expflowopt_felix, expflowopt_antot_old, expflowopt_antot_tdep_old, & ! NDCTESTmichael
         expflowopt_antot_new, expflowopt_antot_tdep_new ! NDCTESTmichael
     use dist_fn, only: first_gk_solve, compute_a_b_r_ainv ! NDCTESTneighb
     use dist_fn_arrays, only: g, gnew, kx_shift, theta0_shift, &
@@ -525,6 +517,7 @@ contains
         call getan(antot_expflow, dummy1, dummy2)
         expflowopt = expflowopt_antot_tdep_old
         call getan(antot_tdep_expflow, dummy1, dummy2)
+        expflowopt = expflowopt_none
 
         phistar_old = 0.
         do ig = -ntgrid,ntgrid
@@ -584,8 +577,17 @@ contains
     
     call debug_message(4, 'fields_implicit::advance_implicit calling getfield')
 
+    ! Modified field equation for explicit flowshear implementation
+    ! necessary to make aminv time independent. -- NDC 02/2018
+    ! NDCTESTfelix & NDCTESTmichael
+    if(explicit_flowshear .and. .not. michael_exp) then
+        expflowopt = expflowopt_felix
+    end if
     ! NDCTESTmichaelnew: in flowshear cases, QN returns phibar[it+1]-phibar[it]
     call getfield (phinew, aparnew, bparnew)
+    if(explicit_flowshear .and. .not. michael_exp) then
+        expflowopt = expflowopt_none
+    end if
     
     ! NDCTESTmichaelnew: in flowshear cases, this sets phinew=phibar[it+1]
     phinew = phinew + phi
@@ -608,6 +610,7 @@ contains
         call getan(antot_expflow, dummy1, dummy2)
         expflowopt = expflowopt_antot_tdep_new
         call getan(antot_tdep_expflow, dummy1, dummy2)
+        expflowopt = expflowopt_none
 
         phistar_new = 0.
         do ig = -ntgrid,ntgrid

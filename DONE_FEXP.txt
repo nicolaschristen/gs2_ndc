@@ -1,0 +1,6 @@
+6/12/18
+
+In dist_fn::get_source_term for mixed algo, replaced all t-dep quantities sitting in front of old g/phi/apar/bpar.
+///// NDCQUEST: for explicit scheme, what is the argument that allows us to treat phistar[it+1] explicitly ?
+In fields_implicit::advance_implicit for explicit algo, corrected bug where expflowopt was not reset to enable the normal antot to be computed.
+Moved setting of expflowopt to expflowopt_felix from getfield to advance_implicit.

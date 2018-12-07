@@ -118,7 +118,7 @@ module dist_fn
 
   ! NDCTESTmichael & NDCTESTfelix
   public :: expflowopt
-  public :: expflowopt_felix, expflowopt_antot_old, expflowopt_antot_new, &
+  public :: expflowopt_none, expflowopt_felix, expflowopt_antot_old, expflowopt_antot_new, &
       expflowopt_antot_tdep_old, expflowopt_antot_tdep_new
 
   ! knobs
@@ -321,7 +321,7 @@ module dist_fn
   logical :: for_interp_right = .false.
 
   integer :: expflowopt
-  integer, parameter :: expflowopt_felix=1, expflowopt_antot_old=2, expflowopt_antot_tdep_old=3, &
+  integer, parameter :: expflowopt_none=0, expflowopt_felix=1, expflowopt_antot_old=2, expflowopt_antot_tdep_old=3, &
       expflowopt_antot_new=4, expflowopt_antot_tdep_new=5
 
 contains
@@ -5156,7 +5156,7 @@ contains
     real, dimension(-ntgrid:ntgrid) :: aj0_old, aj0_new, aj1_old, aj1_new
     real, dimension(-ntgrid:ntgrid) :: wdold, wdnew, wdttpold, wdttpnew
     complex, dimension(-ntgrid:ntgrid) :: phigavgB, wdttp_term
-    complex, dimension(-ntgrid:ntgrid) :: phigavgB_tdep_old, phigavgB_near_old
+    complex, dimension(-ntgrid:ntgrid) :: phigavgB_tdep_new, phigavgB_tdep_old, phigavgB_near_old
 
 ! try fixing bkdiff dependence
     bd = bkdiff(1)
@@ -5244,11 +5244,14 @@ contains
         + (1.0-fexp(is)) * wdttpnew * &
         ( fphi*aj0_new*phinew(:,it,ik) + fbpar*2.0*spec(is)%tz*vperp2(:,iglo)*aj1_new*bparnew(:,it,ik) )
     if(mixed_flowshear .or. explicit_flowshear) then
+        phigavgB_tdep_new = fphi*aj0_tdep%new(:,iglo)*phi(:,it,ik) &
+            + fbpar*2.0*spec(is)%tz*vperp2(:,iglo)*aj1_tdep%new(:,iglo)*bpar(:,it,ik)
         phigavgB_tdep_old = fphi*aj0_tdep%old(:,iglo)*phi(:,it,ik) &
             + fbpar*2.0*spec(is)%tz*vperp2(:,iglo)*aj1_tdep%old(:,iglo)*bpar(:,it,ik)
         phigavgB_near_old = fphi*aj0(:,iglo)*phi(:,it,ik) &
             + fbpar*2.0*spec(is)%tz*vperp2(:,iglo)*aj1(:,iglo)*bpar(:,it,ik)
     else
+        phigavgB_tdep_new = 0.0
         phigavgB_tdep_old = 0.0
         phigavgB_near_old = 0.0
     end if
@@ -5336,13 +5339,15 @@ contains
              if(explicit_flowshear .or. mixed_flowshear) then 
          
                  ! NDCQUEST: how do we check for CFL condition with new explicit terms ?
-
-                 ! NDCQUEST: should I fexp t-dep factors in front of old g/phi/apar/bpar ?
                  source(ig) = source(ig) &
-                     - zi * spec(is)%tz * vdrift_x(ig,isgn,iglo)/(2.*shat) * kx_shift_old(ik) * g(ig,2,iglo) &
-                     - zi * (vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik)+wdttpold(ig)) * phigavgB_tdep_old(ig) &
-                     + zi * wdttpold(ig) * phigavgB_near_old(ig) &
-                     + zi * wstar(ik,ie,is) * (phigavgB_tdep_old(ig)-phigavgB_near_old(ig))
+                     - zi * spec(is)%tz * vdrift_x(ig,isgn,iglo)/(2.*shat) * &
+                         (fexp(is)*kx_shift_old(ik)+(1.0-fexp(is))*kx_shift(ik)) * g(ig,2,iglo) &
+                     - zi * fexp(is)*vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik) * phigavgB_tdep_old(ig) &
+                     - zi * (1.0-fexp(is))*vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift(ik) * phigavgB_tdep_new(ig) &
+                     - zi * wdttpold(ig) * &
+                         ( fexp(is)*phigavgB_tdep_old(ig)+(1.0-fexp(is))*phigavgB_tdep_new(ig) - phigavgB_near_old(ig) ) &
+                     + zi * wstar(ik,ie,is) * &
+                         ( fexp(is)*phigavgB_tdep_old(ig)+(1.0-fexp(is))*phigavgB_tdep_new(ig) - phigavgB_near_old(ig) )
 
              end if
 
@@ -5456,8 +5461,8 @@ contains
       complex :: wd_term
       ! Variables for mixed+explicit flow shear algos
       complex :: g_bd
-      complex :: phigavgB_tdep_old_bd, phigavgB_near_old_bd
-      complex :: chigavg_tdep_old_bd, chigavg_near_old_bd
+      complex :: phigavgB_tdep_new_bd, phigavgB_tdep_old_bd, phigavgB_near_old_bd
+      complex :: chigavg_tdep_new_bd, chigavg_tdep_old_bd, chigavg_near_old_bd
       complex :: J0bar_bd, J0star_new_bd, J0star_old_bd
       complex :: dJ0bar_dt_bd, dJ0star_dt_new_bd, dJ0star_dt_old_bd
       complex :: apar_bd, aparnew_bd, dapar_bd, dapargavg1
@@ -5575,8 +5580,12 @@ contains
          if(mixed_flowshear .or. explicit_flowshear) then
 
              g_bd = bdfac_r*g(ig+1,isgn,iglo) + bdfac_l*g(ig,isgn,iglo)
+             phigavgB_tdep_new_bd = bdfac_r*phigavgB_tdep_new(ig+1)+bdfac_l*phigavgB_tdep_new(ig)
              phigavgB_tdep_old_bd = bdfac_r*phigavgB_tdep_old(ig+1)+bdfac_l*phigavgB_tdep_old(ig)
              phigavgB_near_old_bd = bdfac_r*phigavgB_near_old(ig+1)+bdfac_l*phigavgB_near_old(ig)
+             chigavg_tdep_new_bd = phigavgB_tdep_new_bd - spec(is)%stm*vpac(ig,isgn,iglo) * ( &
+                 bdfac_r*fapar*aj0_tdep%new(ig+1,iglo)*apar(ig+1,it,ik) &
+                 + bdfac_l*fapar*aj0_tdep%new(ig,iglo)*apar(ig,it,ik) )
              chigavg_tdep_old_bd = phigavgB_tdep_old_bd - spec(is)%stm*vpac(ig,isgn,iglo) * ( &
                  bdfac_r*fapar*aj0_tdep%old(ig+1,iglo)*apar(ig+1,it,ik) &
                  + bdfac_l*fapar*aj0_tdep%old(ig,iglo)*apar(ig,it,ik) )
@@ -5620,17 +5629,19 @@ contains
                  + 2.0*code_dt * (0.5*(dJ0star_dt_new_bd+dJ0star_dt_old_bd)-dJ0bar_dt_bd)*fapar*apar(ig,it,ik)
 
              ! NDCQUEST: in g_exb term, is there a reason to use 2.*wunits instead of aky ?
-             ! NDCQUEST: should I fexp t-dep factors in front of old g/phi/apar/bpar ?
              source(ig) = source(ig) &
-                  - zi * spec(is)%tz * vdrift_x_cent(ig,isgn,iglo)/shat * kx_shift_old(ik) * g_bd & ! NDCTESTmichaelnew: replaced vdrift_x
-                  - zi * ( vdrift_x_cent(ig,isgn,iglo)/shat*kx_shift_old(ik) + & ! NDCTESTmichaelnew: replaced vdrift_x
-                      2.*wdold(ig) ) * phigavgB_tdep_old_bd &
-                  + 2.*zi * wdold(ig) * phigavgB_near_old_bd &
-                  - 2.*vpar(ig,isgn,iglo) * ( phigavgB_tdep_old(ig+1)-phigavgB_tdep_old(ig) &
+                  - zi * spec(is)%tz * vdrift_x_cent(ig,isgn,iglo)/shat * &
+                      ( fexp(is)*kx_shift_old(ik)+(1.0-fexp(is))*kx_shift(ik) ) * g_bd &
+                  - zi * fexp(is)*vdrift_x_cent(ig,isgn,iglo)/shat*kx_shift_old(ik) * phigavgB_tdep_old_bd &
+                  - zi * (1.0-fexp(is))*vdrift_x_cent(ig,isgn,iglo)/shat*kx_shift(ik) * phigavgB_tdep_new_bd &
+                  - 2.*zi * wdold(ig) * (fexp(is)*phigavgB_tdep_old_bd+(1.0-fexp(is))*phigavgB_tdep_new_bd-phigavgB_near_old_bd) &
+                  - 2.*vpar(ig,isgn,iglo) * ( &
+                      fexp(is)*(phigavgB_tdep_old(ig+1)-phigavgB_tdep_old(ig)) &
+                      + (1.0-fexp(is))*(phigavgB_tdep_new(ig+1)-phigavgB_tdep_new(ig)) &
                       - (phigavgB_near_old(ig+1)-phigavgB_near_old(ig)) ) &
                   - 4.*code_dt*zi * wunits(ik)/spec(is)%stm * omprimfac * itor_over_B(ig) * vpac(ig,isgn,iglo) * g_exb * &
-                     (chigavg_tdep_old_bd-chigavg_near_old_bd) &
-                  + 2.*zi * wstar(ik,ie,is) * (chigavg_tdep_old_bd-chigavg_near_old_bd) &
+                     (fexp(is)*chigavg_tdep_old_bd+(1.0-fexp(is))*chigavg_tdep_new_bd-chigavg_near_old_bd) &
+                  + 2.*zi * wstar(ik,ie,is) * (fexp(is)*chigavg_tdep_old_bd+(1.0-fexp(is))*chigavg_tdep_new_bd-chigavg_near_old_bd) &
                   - spec(is)%zstm*vpac(ig,isgn,iglo)*dapargavg1
 
          end if
@@ -7068,6 +7079,15 @@ endif
            end if
        elseif(explicit_flowshear) then
            select case(expflowopt)
+           case(expflowopt_none)
+               ! Behaviour without new flow shear algorithm.
+               do iglo = g_lo%llim_proc, g_lo%ulim_proc
+                  do isgn = 1, 2
+                     do ig=-ntgrid, ntgrid       
+                         g0(ig,isgn,iglo) = aj0(ig,iglo)*gnew(ig,isgn,iglo)
+                     end do
+                  end do
+               end do
            case(expflowopt_felix)
                ! NDCTESTfelix
                do iglo = g_lo%llim_proc, g_lo%ulim_proc
