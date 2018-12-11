@@ -6668,7 +6668,6 @@ endif
     ! NDCTESTneighb
     real, dimension(ntheta0,naky) :: kperp2_l, kperp2_r
     complex, dimension(ntheta0,naky) :: phi_l, phi_r
-    complex, dimension(-ntgrid:ntgrid,ntheta0,naky) :: phi_input
     ! endNDCTESTneighb
     logical :: michael_exp = .true. ! NDCTESTswitchexp
     
@@ -6948,7 +6947,6 @@ endif
     real :: time
     complex :: sourcefac
     logical :: michael_exp = .true.
-    complex, dimension(-ntgrid:ntgrid,ntheta0,naky) :: phi_input
 
     call prof_entering ("invert_rhs", "dist_fn")
 

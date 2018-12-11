@@ -1,0 +1,3 @@
+dist_fn::invert_rhs_linked, make kperp2_l/r pointers to avoid copy. Can the same be done for phi_l/r ? Not sure for explicit...
+dist_fn::invert_rhs_1, make aj0 and aj1 pointers to avoid if statements. Assign them when computing shifted matrices and in init/finish invert_rhs. Can we do the same for ainv, r and phi ?
+dist_fn::get_source_term, same comment as above. Also for wdrift
