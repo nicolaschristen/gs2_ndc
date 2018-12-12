@@ -4002,7 +4002,7 @@ contains
     integer :: nprocset, ngroup, nblock, ntgridtotal, nsign
     real :: unbalanced_amount
     ! NDCTESTremap_plot
-    logical :: remap_plot_shear = .false.
+    logical :: remap_plot_shear = .true.
     ! endNDCTESTremap_plot
 
     !write (*,*) 'INIT_X_TR', initialized_x_transform

@@ -4233,7 +4233,7 @@ contains
     integer,save :: istep_last=-1
     integer, parameter :: verb = 3
     ! NDCTESTremap_plot
-    logical :: remap_plot_nl = .true.
+    logical :: remap_plot_nl = .false.
     real :: c0,c1,c2,dt0,dt1,dt2
     ! endNDCTESTremap_plot
 
@@ -4470,7 +4470,7 @@ contains
     complex , dimension(-ntgrid:ntgrid) :: z
     character(130) :: str
     ! NDCTESTremap_plot
-    logical :: remap_plot_shear = .false.
+    logical :: remap_plot_shear = .true.
     real :: alpha_x, alpha_y
     real :: dky
     integer, dimension(:), allocatable :: mycount
@@ -4774,7 +4774,10 @@ contains
                 do it = ntheta0 + jump(ik) + 1, ntheta0
                    ! NDCTESTremap_plot
                    if(remap_plot_shear) then
-                       phi(:,ikx_indexed(it),ik) = exp(-1.*alpha_x*((akx(ikx_indexed(it))-(jump(ik)+mycount(ik))*dkx)**2))*exp(-1.*alpha_y*(aky(ik)**2))
+                       ! For Gaussian in kx ky
+                       !phi(:,ikx_indexed(it),ik) = exp(-1.*alpha_x*((akx(ikx_indexed(it))-(jump(ik)+mycount(ik))*dkx)**2))*exp(-1.*alpha_y*(aky(ik)**2))
+                       ! For single ky, kx=0
+                       phi(:,ikx_indexed(it),ik) = 0.
                    else
                        phi(:,ikx_indexed(it),ik) = 0.
                    end if
@@ -4863,7 +4866,10 @@ contains
                 do it = jump(ik), 1, -1
                    ! NDCTESTremap_plot
                    if(remap_plot_shear) then
-                       phi(:,ikx_indexed(it),ik) = exp(-1.*alpha_x*((akx(ikx_indexed(it))-(jump(ik)+mycount(ik))*dkx)**2))*exp(-1.*alpha_y*(aky(ik)**2))
+                       ! For Gaussian in kx ky
+                       !phi(:,ikx_indexed(it),ik) = exp(-1.*alpha_x*((akx(ikx_indexed(it))-(jump(ik)+mycount(ik))*dkx)**2))*exp(-1.*alpha_y*(aky(ik)**2))
+                       ! For single ky, kx=0
+                       phi(:,ikx_indexed(it),ik) = 0.
                    else
                        phi(:,ikx_indexed(it),ik) = 0.
                    end if

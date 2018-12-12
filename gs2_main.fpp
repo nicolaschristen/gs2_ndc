@@ -722,7 +722,7 @@ contains
     integer, intent(in) :: nstep_run
     logical :: temp_initval_override_store
     integer :: istep_loop_max
-    logical :: remap_plot_shear = .false. ! NDCTESTremap_plot
+    logical :: remap_plot_shear = .true. ! NDCTESTremap_plot
 
     if (.not. state%included) return
 

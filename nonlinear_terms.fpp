@@ -344,8 +344,8 @@ contains
     integer :: iglo, ik, it, is, ig, ia
     ! NDCTESTremap_plot
     logical :: is_open
-    logical :: remap_plot_nl = .true.
-    logical :: remap_plot_nl_analytic = .true.
+    logical :: remap_plot_nl = .false.
+    logical :: remap_plot_nl_analytic = .false.
     integer :: iy,iyxf,ie,il,isgn
     ! endNDCTESTremap_plot
     
