@@ -4994,7 +4994,7 @@ contains
     integer :: nnx, nny, ngroup, nprocset, nblock, ntgridtotal, nsign
     real :: unbalanced_amount
     ! NDCTESTremap_plot
-    logical :: remap_plot_shear = .false.
+    logical :: remap_plot_shear = .true.
     ! endNDCTESTremap_plot
 
     if (initialized_y_transform) return

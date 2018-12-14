@@ -1,0 +1,2 @@
+In fields_implicit::init_allfields_implicit select which case (Gaussian/single ky kx/ ...)
+In dist_fn::exb_shear select which case (Gaussian/single ky kx/ ...)

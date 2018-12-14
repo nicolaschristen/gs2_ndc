@@ -1425,6 +1425,7 @@ contains
     use kt_grids, only: nx, aky, explicit_flowshear, implicit_flowshear, mixed_flowshear, & ! NDCTESTnl
         apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
     use kt_grids, only: ny ! NDCTESTremap_plot
+    use theta_grid, only: ntgrid ! NDCTESTremap_plot
     use gs2_time, only: code_time ! NDCTESTnl
     implicit none
     complex, dimension (:,:,g_lo%llim_proc:), intent (in out) :: g
@@ -1452,6 +1453,27 @@ contains
 ! NB Moving to standard Fourier coeffs would impact considerably on diagnostics:
 !       e.g. fac in get_volume_average
 !
+    ! NDCTESTremap_plot
+    if(remap_plot_shear) then
+        write(*,*) "========================================"
+        write(*,*) "ORIG"
+        write(*,*) "========================================"
+        do ig=-ntgrid,ntgrid
+            do isgn=1,2
+                do iglo = g_lo%llim_proc, g_lo%ulim_proc
+                    it=it_idx(g_lo,iglo)
+                    ik=ik_idx(g_lo,iglo)
+                    ie=ie_idx(g_lo,iglo)
+                    il=il_idx(g_lo,iglo)
+                    is=is_idx(g_lo,iglo)
+                    if(ie==1 .and. il==1 .and. is==1 .and. isgn==1 .and. ig==1) then
+                        write(*,*) it," ",ik," ",g(ig,isgn,iglo) ! NDCTESTremap_plot
+                    end if
+                end do
+            end do
+        end do
+    end if
+    ! endNDCTESTremap_plot
 
     do iglo = g_lo%llim_proc, g_lo%ulim_proc
        if (ik_idx(g_lo, iglo) == 1) cycle
@@ -1462,6 +1484,29 @@ contains
 
     call transform_x (g, xxf)
     
+    ! NDCTESTremap_plot
+    if(remap_plot_shear) then
+        write(*,*) "========================================"
+        write(*,*) "nx=",nx," xxf_lo%nx=",xxf_lo%nx
+        write(*,*) "========================================"
+        write(*,*) "TRANSF X"
+        write(*,*) "========================================"
+        do ix=1,xxf_lo%nx
+            do ixxf = xxf_lo%llim_proc, xxf_lo%ulim_proc
+                ik=ik_idx(xxf_lo,ixxf)
+                ie=ie_idx(xxf_lo,ixxf)
+                il=il_idx(xxf_lo,ixxf)
+                is=is_idx(xxf_lo,ixxf)
+                ig=ig_idx(xxf_lo,ixxf)
+                isgn=isign_idx(xxf_lo,ixxf)
+                if(ie==1 .and. il==1 .and. is==1 .and. isgn==1 .and. ig==1) then
+                    write(*,*) ix," ",ik," ",xxf(ix,ixxf) ! NDCTESTremap_plot
+                end if
+            end do
+        end do
+    end if
+    ! endNDCTESTremap_plot
+
     ! NDCTESTnl: multiply by phase factor
     ! NDCTEST_nl_vs_lin: remove apply_flowshear_nonlin
     if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin .or. remap_plot_shear .or. remap_plot_nl) then
@@ -1494,6 +1539,29 @@ contains
         end do
     end if
     ! endNDCTESTremap_plot
+    ! NDCTESTremap_plot
+    if(remap_plot_shear) then
+        write(*,*) "========================================"
+        write(*,*) "ny=",ny," yxf_lo%ny=",yxf_lo%ny
+        write(*,*) "========================================"
+        write(*,*) "TRANSF Y"
+        write(*,*) "========================================"
+        do iy=1,yxf_lo%ny
+            do iyxf = yxf_lo%llim_proc, yxf_lo%ulim_proc
+                it=it_idx(yxf_lo,iyxf)
+                ie=ie_idx(yxf_lo,iyxf)
+                il=il_idx(yxf_lo,iyxf)
+                is=is_idx(yxf_lo,iyxf)
+                ig=ig_idx(yxf_lo,iyxf)
+                isgn=isign_idx(yxf_lo,iyxf)
+                if(ie==1 .and. il==1 .and. is==1 .and. isgn==1 .and. ig==1) then
+                    write(*,*) it," ",iy," ",yxf(iy,iyxf) ! NDCTESTremap_plot
+                end if
+            end do
+        end do
+    end if
+    ! endNDCTESTremap_plot
+
   end subroutine transform2_5d
 
   subroutine inverse2_5d (yxf, g)
