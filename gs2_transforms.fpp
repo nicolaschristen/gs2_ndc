@@ -218,7 +218,7 @@ contains
             end if
         end if
         dkx = akx(2)-akx(1)
-        dx = 1./(nx-1) * 2.*pi/dkx
+        dx = 1./nx * 2.*pi/dkx
 
         do ix = 1, nx/2+1
             x_grid(ix) = (ix-1)*dx
@@ -244,7 +244,7 @@ contains
                 open(72,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_1ky_1kx/y_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
             end if
             dky = aky(2)-aky(1)
-            dy = 1./(ny-1) * 2.*pi/dky
+            dy = 1./ny * 2.*pi/dky
 
             do iy = 1, ny/2+1
                 y_grid(iy) = (iy-1)*dy
@@ -1453,27 +1453,6 @@ contains
 ! NB Moving to standard Fourier coeffs would impact considerably on diagnostics:
 !       e.g. fac in get_volume_average
 !
-    ! NDCTESTremap_plot
-    if(remap_plot_shear) then
-        write(*,*) "========================================"
-        write(*,*) "ORIG"
-        write(*,*) "========================================"
-        do ig=-ntgrid,ntgrid
-            do isgn=1,2
-                do iglo = g_lo%llim_proc, g_lo%ulim_proc
-                    it=it_idx(g_lo,iglo)
-                    ik=ik_idx(g_lo,iglo)
-                    ie=ie_idx(g_lo,iglo)
-                    il=il_idx(g_lo,iglo)
-                    is=is_idx(g_lo,iglo)
-                    if(ie==1 .and. il==1 .and. is==1 .and. isgn==1 .and. ig==1) then
-                        write(*,*) it," ",ik," ",g(ig,isgn,iglo) ! NDCTESTremap_plot
-                    end if
-                end do
-            end do
-        end do
-    end if
-    ! endNDCTESTremap_plot
 
     do iglo = g_lo%llim_proc, g_lo%ulim_proc
        if (ik_idx(g_lo, iglo) == 1) cycle
@@ -1483,29 +1462,6 @@ contains
     end do
 
     call transform_x (g, xxf)
-    
-    ! NDCTESTremap_plot
-    if(remap_plot_shear) then
-        write(*,*) "========================================"
-        write(*,*) "nx=",nx," xxf_lo%nx=",xxf_lo%nx
-        write(*,*) "========================================"
-        write(*,*) "TRANSF X"
-        write(*,*) "========================================"
-        do ix=1,xxf_lo%nx
-            do ixxf = xxf_lo%llim_proc, xxf_lo%ulim_proc
-                ik=ik_idx(xxf_lo,ixxf)
-                ie=ie_idx(xxf_lo,ixxf)
-                il=il_idx(xxf_lo,ixxf)
-                is=is_idx(xxf_lo,ixxf)
-                ig=ig_idx(xxf_lo,ixxf)
-                isgn=isign_idx(xxf_lo,ixxf)
-                if(ie==1 .and. il==1 .and. is==1 .and. isgn==1 .and. ig==1) then
-                    write(*,*) ix," ",ik," ",xxf(ix,ixxf) ! NDCTESTremap_plot
-                end if
-            end do
-        end do
-    end if
-    ! endNDCTESTremap_plot
 
     ! NDCTESTnl: multiply by phase factor
     ! NDCTEST_nl_vs_lin: remove apply_flowshear_nonlin
@@ -1534,28 +1490,6 @@ contains
                 isgn=isign_idx(yxf_lo,iyxf)
                 if(ie==1 .and. il==1 .and. is==1 .and. isgn==1 .and. ig==1) then
                     write(83,"(I0,A,I0,A,E14.7)") it," ",iy," ",yxf(iy,iyxf) ! NDCTESTremap_plot
-                end if
-            end do
-        end do
-    end if
-    ! endNDCTESTremap_plot
-    ! NDCTESTremap_plot
-    if(remap_plot_shear) then
-        write(*,*) "========================================"
-        write(*,*) "ny=",ny," yxf_lo%ny=",yxf_lo%ny
-        write(*,*) "========================================"
-        write(*,*) "TRANSF Y"
-        write(*,*) "========================================"
-        do iy=1,yxf_lo%ny
-            do iyxf = yxf_lo%llim_proc, yxf_lo%ulim_proc
-                it=it_idx(yxf_lo,iyxf)
-                ie=ie_idx(yxf_lo,iyxf)
-                il=il_idx(yxf_lo,iyxf)
-                is=is_idx(yxf_lo,iyxf)
-                ig=ig_idx(yxf_lo,iyxf)
-                isgn=isign_idx(yxf_lo,iyxf)
-                if(ie==1 .and. il==1 .and. is==1 .and. isgn==1 .and. ig==1) then
-                    write(*,*) it," ",iy," ",yxf(iy,iyxf) ! NDCTESTremap_plot
                 end if
             end do
         end do
