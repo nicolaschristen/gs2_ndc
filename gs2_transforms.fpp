@@ -198,7 +198,7 @@ contains
         end if
         
         dkx = akx(2)-akx(1)
-        dx = 1./(nx-1) * 2.*pi/dkx
+        dx = 1./nx * 2.*pi/dkx
 
         do ix = 1, nx/2+1
             x_grid(ix) = (ix-1)*dx
