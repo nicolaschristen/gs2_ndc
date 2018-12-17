@@ -201,44 +201,44 @@ contains
        ! NDCTESTremap_plot
        if(remap_plot) then
            !!! Gaussian in kx & ky
-           !write(*,*) 'Initializing phi to Gaussian'
-           !dkx = akx(2)-akx(1)
-           !dky = aky(2)-aky(1)
-           !alpha_x = 1./64. * (2.*pi/dkx)**2 ! -> exp(-x**2/sig_x**2) with sig_x = 2*sqrt(alpha_x) = Lx/4
-           !alpha_y = 1./256. * (2.*pi/dky)**2 ! -> exp(-y**2/sig_y**2) with sig_y = 2*sqrt(alpha_y) = Ly/8
+           write(*,*) 'Initializing phi to Gaussian'
+           dkx = akx(2)-akx(1)
+           dky = aky(2)-aky(1)
+           alpha_x = 1./64. * (2.*pi/dkx)**2 ! -> exp(-x**2/sig_x**2) with sig_x = 2*sqrt(alpha_x) = Lx/4
+           alpha_y = 1./256. * (2.*pi/dky)**2 ! -> exp(-y**2/sig_y**2) with sig_y = 2*sqrt(alpha_y) = Ly/8
 
-           !! Gaussian in phi
-           !do ik = 1, naky
-           !    do it = 1, ntheta0
-           !        phinew(:,it,ik) = 100*exp(-1.*alpha_x*(akx(it)**2))*exp(-1.*alpha_y*(aky(ik)**2))
-           !    end do
-           !end do
-           !phi = phinew
-
-           !! Gaussian in g
-           !do iglo = g_lo%llim_proc, g_lo%ulim_proc
-           !    ik = ik_idx(g_lo,iglo)
-           !    it = it_idx(g_lo,iglo)
-           !    gnew(:,:,iglo) = exp(-1.*alpha_y*(akx(it)**2))*exp(-1.*alpha_x*(aky(ik)**2))
-           !end do
-           !g = gnew
-
-           !!! Single ky, kx=0
-           write(*,*) 'Initializing phi to single ky, kx=0'
-           phinew = 0.0
-           phinew(:,1,2) = 1.0
+           ! Gaussian in phi
+           do ik = 1, naky
+               do it = 1, ntheta0
+                   phinew(:,it,ik) = exp(-1.*alpha_x*(akx(it)**2))*exp(-1.*alpha_y*(aky(ik)**2))
+               end do
+           end do
            phi = phinew
 
+           ! Gaussian in g
            do iglo = g_lo%llim_proc, g_lo%ulim_proc
                ik = ik_idx(g_lo,iglo)
                it = it_idx(g_lo,iglo)
-               if(it==1 .and. ik==2) then
-                   gnew(:,:,iglo) = 1.0
-               else
-                   gnew(:,:,iglo) = 0.0
-               end if
+               gnew(:,:,iglo) = exp(-1.*alpha_y*(akx(it)**2))*exp(-1.*alpha_x*(aky(ik)**2))
            end do
            g = gnew
+
+           !!! Single ky, kx=0
+           !write(*,*) 'Initializing phi to single ky, kx=0'
+           !phinew = 0.0
+           !phinew(:,1,2) = 1.0
+           !phi = phinew
+
+           !do iglo = g_lo%llim_proc, g_lo%ulim_proc
+           !    ik = ik_idx(g_lo,iglo)
+           !    it = it_idx(g_lo,iglo)
+           !    if(it==1 .and. ik==2) then
+           !        gnew(:,:,iglo) = 1.0
+           !    else
+           !        gnew(:,:,iglo) = 0.0
+           !    end if
+           !end do
+           !g = gnew
        else
            call get_init_field (phinew, aparnew, bparnew)
            phi = phinew; apar = aparnew; bpar = bparnew; g = gnew
@@ -603,14 +603,14 @@ contains
                 open(83,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/analytic/dat/xystar_brack_"//trim(istep_str)//"_new.dat",status="replace") ! NDCTESTremap_plot_towrite
                 open(84,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/analytic/dat/xystar_phi1_"//trim(istep_str)//"_new.dat",status="replace") ! NDCTESTremap_plot_towrite
             else
-                open(83,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_1ky_1kx/xy_"//trim(istep_str)//"_new.dat",status="replace") ! NDCTESTremap_plot_towrite
+                open(83,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_gauss/xy_"//trim(istep_str)//"_new.dat",status="replace") ! NDCTESTremap_plot_towrite
             end if
         else
             if(remap_plot_nl_analytic) then
                 open(83,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/analytic/dat/xystar_brack_"//trim(istep_str)//"_old.dat",status="replace") ! NDCTESTremap_plot_towrite
                 open(84,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/analytic/dat/xystar_phi1_"//trim(istep_str)//"_old.dat",status="replace") ! NDCTESTremap_plot_towrite
             else
-                open(83,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_1ky_1kx/xy_"//trim(istep_str)//"_old.dat",status="replace") ! NDCTESTremap_plot_towrite
+                open(83,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_gauss/xy_"//trim(istep_str)//"_old.dat",status="replace") ! NDCTESTremap_plot_towrite
             end if
         end if
     end if

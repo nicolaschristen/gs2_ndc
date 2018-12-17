@@ -4775,9 +4775,9 @@ contains
                    ! NDCTESTremap_plot
                    if(remap_plot_shear) then
                        ! For Gaussian in kx ky
-                       !phi(:,ikx_indexed(it),ik) = exp(-1.*alpha_x*((akx(ikx_indexed(it))-(jump(ik)+mycount(ik))*dkx)**2))*exp(-1.*alpha_y*(aky(ik)**2))
+                       phi(:,ikx_indexed(it),ik) = exp(-1.*alpha_x*((akx(ikx_indexed(it))-(jump(ik)+mycount(ik))*dkx)**2))*exp(-1.*alpha_y*(aky(ik)**2))
                        ! For single ky, kx=0
-                       phi(:,ikx_indexed(it),ik) = 0.
+                       !phi(:,ikx_indexed(it),ik) = 0.
                    else
                        phi(:,ikx_indexed(it),ik) = 0.
                    end if
@@ -4867,9 +4867,9 @@ contains
                    ! NDCTESTremap_plot
                    if(remap_plot_shear) then
                        ! For Gaussian in kx ky
-                       !phi(:,ikx_indexed(it),ik) = exp(-1.*alpha_x*((akx(ikx_indexed(it))-(jump(ik)+mycount(ik))*dkx)**2))*exp(-1.*alpha_y*(aky(ik)**2))
+                       phi(:,ikx_indexed(it),ik) = exp(-1.*alpha_x*((akx(ikx_indexed(it))-(jump(ik)+mycount(ik))*dkx)**2))*exp(-1.*alpha_y*(aky(ik)**2))
                        ! For single ky, kx=0
-                       phi(:,ikx_indexed(it),ik) = 0.
+                       !phi(:,ikx_indexed(it),ik) = 0.
                    else
                        phi(:,ikx_indexed(it),ik) = 0.
                    end if

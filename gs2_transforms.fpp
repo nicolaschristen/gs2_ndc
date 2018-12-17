@@ -214,7 +214,7 @@ contains
             if(remap_plot_nl_analytic) then
                 open(71,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/analytic/dat/x_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
             else
-                open(71,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_1ky_1kx/x_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
+                open(71,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_gauss/x_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
             end if
         end if
         dkx = akx(2)-akx(1)
@@ -241,7 +241,7 @@ contains
             if(remap_plot_nl_analytic) then
                 open(72,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/analytic/dat/y_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
             else
-                open(72,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_1ky_1kx/y_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
+                open(72,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_gauss/y_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
             end if
             dky = aky(2)-aky(1)
             dy = 1./ny * 2.*pi/dky
