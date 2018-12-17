@@ -503,7 +503,7 @@ contains
                 do iglo = g_lo%llim_proc, g_lo%ulim_proc
                    it = it_idx(g_lo,iglo)
                    ik = ik_idx(g_lo,iglo)
-                   g1(:,:,iglo) = g1(:,:,iglo)*zi*(akx(it)+g_exb_opt*t_last_jump(ik)*aky(ik))
+                   g1(:,:,iglo) = g1(:,:,iglo)*zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))
                 enddo
             else
                 do iglo = g_lo%llim_proc, g_lo%ulim_proc
@@ -631,7 +631,7 @@ contains
                  it = it_idx(g_lo,iglo)
                  ik = ik_idx(g_lo,iglo)
                  do ig = -ntgrid, ntgrid
-                    fac = zi*(akx(it)+g_exb_opt*t_last_jump(ik))*aky(ik)*phi(ig,it,ik)*fphi
+                    fac = zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))*phi(ig,it,ik)*fphi
                     g1(ig,1,iglo) = fac
                     g1(ig,2,iglo) = fac
                  end do
