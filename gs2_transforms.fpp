@@ -142,7 +142,7 @@ contains
     integer :: ix ! NDCTESTnl
     ! NDCTESTremap_plot
     logical :: remap_plot = .true.
-    logical :: remap_plot_nl_analytic = .false.
+    logical :: remap_plot_nl_analytic = .true.
     real :: dky, dy
     integer :: iy
     ! endNDCTESTremap_plot
@@ -212,7 +212,7 @@ contains
         
         if(remap_plot) then
             if(remap_plot_nl_analytic) then
-                open(71,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/analytic/dat/x_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
+                open(71,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/x_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
             else
                 open(71,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/x_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
             end if
@@ -239,7 +239,7 @@ contains
         ! NDCTESTremap_plot
         if(remap_plot) then
             if(remap_plot_nl_analytic) then
-                open(72,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/analytic/dat/y_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
+                open(72,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/y_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
             else
                 open(72,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/y_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
             end if
@@ -278,7 +278,7 @@ contains
       real, intent(in) :: g_exb
       integer :: ix, ik
       logical :: remap_plot = .true. ! NDCTESTremap_plot
-      logical :: remap_plot_nl_analytic = .false. ! NDCTESTremap_plot
+      logical :: remap_plot_nl_analytic = .true. ! NDCTESTremap_plot
       
       do ix = 1, nx
           do ik = 1, naky
@@ -291,9 +291,9 @@ contains
                   if(apply_flowshear_nonlin .and. .not. remap_plot) then ! NDCTEST_nl_vs_lin: remove if statement and else part
                       flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*(code_time-t_last_jump(ik))*x_grid(ix))
                   else if(remap_plot) then
-                      if(remap_plot_nl_analytic) then ! visualizing in shearing frame
+                      if(remap_plot_nl_analytic) then ! in lab frame
                           if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-                              flowshear_phase_fac(ix,ik) = exp(zi*aky(ik)*g_exb*t_last_jump(ik)*x_grid(ix))
+                              flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*(code_time-t_last_jump(ik))*x_grid(ix))
                           else
                               flowshear_phase_fac(ix,ik) = 1.
                           end if

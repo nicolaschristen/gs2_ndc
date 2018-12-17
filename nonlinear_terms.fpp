@@ -345,7 +345,7 @@ contains
     ! NDCTESTremap_plot
     logical :: is_open
     logical :: remap_plot_nl = .true.
-    logical :: remap_plot_nl_analytic = .false.
+    logical :: remap_plot_nl_analytic = .true.
     integer :: iy,iyxf,ie,il,isgn
     ! endNDCTESTremap_plot
     

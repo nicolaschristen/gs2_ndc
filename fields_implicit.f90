@@ -585,7 +585,7 @@ contains
     ! NDCTESTremap_plot
     logical :: remap_plot_shear = .false.
     logical :: remap_plot_nl = .true.
-    logical :: remap_plot_nl_analytic = .false.
+    logical :: remap_plot_nl_analytic = .true.
     integer :: iglo,iy,ix,ie,il,is,isgn,iyxf
     real, dimension(:,:), allocatable :: fft_out
     complex, dimension(:,:,:), allocatable :: phi_5d
@@ -601,15 +601,15 @@ contains
         write(istep_str,"(I0)") istep
         if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
             if(remap_plot_nl_analytic) then
-                open(83,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/analytic/dat/xystar_brack_"//trim(istep_str)//"_new.dat",status="replace") ! NDCTESTremap_plot_towrite
-                open(84,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/analytic/dat/xystar_phi1_"//trim(istep_str)//"_new.dat",status="replace") ! NDCTESTremap_plot_towrite
+                open(83,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/xy_nl_"//trim(istep_str)//"_new.dat",status="replace") ! NDCTESTremap_plot_towrite
+                open(84,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/xy_phi_"//trim(istep_str)//"_new.dat",status="replace") ! NDCTESTremap_plot_towrite
             else
                 open(83,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/xy_"//trim(istep_str)//"_new.dat",status="replace") ! NDCTESTremap_plot_towrite
             end if
         else
             if(remap_plot_nl_analytic) then
-                open(83,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/analytic/dat/xystar_brack_"//trim(istep_str)//"_old.dat",status="replace") ! NDCTESTremap_plot_towrite
-                open(84,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/analytic/dat/xystar_phi1_"//trim(istep_str)//"_old.dat",status="replace") ! NDCTESTremap_plot_towrite
+                open(83,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/xy_nl_"//trim(istep_str)//"_old.dat",status="replace") ! NDCTESTremap_plot_towrite
+                open(84,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/xy_phi_"//trim(istep_str)//"_old.dat",status="replace") ! NDCTESTremap_plot_towrite
             else
                 open(83,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/xy_"//trim(istep_str)//"_old.dat",status="replace") ! NDCTESTremap_plot_towrite
             end if
