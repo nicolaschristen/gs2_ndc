@@ -436,6 +436,7 @@ contains
     else
        if(remap_plot_nl) then
            write(*,*) "kxfac=",kxfac
+       end if
        max_vel = 0.
        do j = yxf_lo%llim_proc, yxf_lo%ulim_proc
           do i = 1, yxf_lo%ny
