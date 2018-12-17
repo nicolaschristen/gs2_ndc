@@ -344,7 +344,7 @@ contains
     integer :: iglo, ik, it, is, ig, ia
     ! NDCTESTremap_plot
     logical :: is_open
-    logical :: remap_plot_nl = .false.
+    logical :: remap_plot_nl = .true.
     logical :: remap_plot_nl_analytic = .false.
     integer :: iy,iyxf,ie,il,isgn
     ! endNDCTESTremap_plot
@@ -434,6 +434,8 @@ contains
        max_vel = max_vel * cfly
 !       max_vel = maxval(abs(aba)*cfly)
     else
+       if(remap_plot_nl) then
+           write(*,*) "kxfac=",kxfac
        max_vel = 0.
        do j = yxf_lo%llim_proc, yxf_lo%ulim_proc
           do i = 1, yxf_lo%ny
@@ -628,7 +630,7 @@ contains
                  it = it_idx(g_lo,iglo)
                  ik = ik_idx(g_lo,iglo)
                  do ig = -ntgrid, ntgrid
-                    fac = zi*(akx(it)+g_exb_opt*t_last_jump(ik)*aky(ik))*phi(ig,it,ik)*fphi
+                    fac = zi*(akx(it)+g_exb_opt*t_last_jump(ik))*aky(ik)*phi(ig,it,ik)*fphi
                     g1(ig,1,iglo) = fac
                     g1(ig,2,iglo) = fac
                  end do

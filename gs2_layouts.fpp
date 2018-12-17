@@ -4002,7 +4002,7 @@ contains
     integer :: nprocset, ngroup, nblock, ntgridtotal, nsign
     real :: unbalanced_amount
     ! NDCTESTremap_plot
-    logical :: remap_plot_shear = .true.
+    logical :: remap_plot_shear = .false.
     ! endNDCTESTremap_plot
 
     !write (*,*) 'INIT_X_TR', initialized_x_transform
@@ -4994,7 +4994,7 @@ contains
     integer :: nnx, nny, ngroup, nprocset, nblock, ntgridtotal, nsign
     real :: unbalanced_amount
     ! NDCTESTremap_plot
-    logical :: remap_plot_shear = .true.
+    logical :: remap_plot_shear = .false.
     ! endNDCTESTremap_plot
 
     if (initialized_y_transform) return

@@ -4233,7 +4233,7 @@ contains
     integer,save :: istep_last=-1
     integer, parameter :: verb = 3
     ! NDCTESTremap_plot
-    logical :: remap_plot_nl = .false.
+    logical :: remap_plot_nl = .true.
     real :: c0,c1,c2,dt0,dt1,dt2
     ! endNDCTESTremap_plot
 
@@ -4470,7 +4470,7 @@ contains
     complex , dimension(-ntgrid:ntgrid) :: z
     character(130) :: str
     ! NDCTESTremap_plot
-    logical :: remap_plot_shear = .true.
+    logical :: remap_plot_shear = .false.
     real :: alpha_x, alpha_y
     real :: dky
     integer, dimension(:), allocatable :: mycount

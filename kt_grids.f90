@@ -563,7 +563,7 @@ contains
     use mp, only: mp_abort, proc0
     implicit none
     ! NDCTESTremap_plot
-    logical :: remap_plot_shear = .true.
+    logical :: remap_plot_shear = .false.
     ! endNDCTESTremap_plot
 
     call init_parameters_box

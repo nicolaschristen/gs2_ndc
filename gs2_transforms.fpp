@@ -214,7 +214,7 @@ contains
             if(remap_plot_nl_analytic) then
                 open(71,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/analytic/dat/x_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
             else
-                open(71,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_gauss/x_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
+                open(71,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/x_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
             end if
         end if
         dkx = akx(2)-akx(1)
@@ -241,7 +241,7 @@ contains
             if(remap_plot_nl_analytic) then
                 open(72,file="/home/christenl/data/gs2/flowtest/final/poisson_brack/analytic/dat/y_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
             else
-                open(72,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_gauss/y_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
+                open(72,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/y_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
             end if
             dky = aky(2)-aky(1)
             dy = 1./ny * 2.*pi/dky
@@ -1433,8 +1433,8 @@ contains
     integer :: iglo
     integer :: ix, ik, ixxf ! NDCTESTnl
     integer :: ig,ie,il,is,isgn,it, iy, iyxf ! NDCTESTremap_plot
-    logical :: remap_plot_shear =.true. ! NDCTESTremap_plot
-    logical :: remap_plot_nl =.false. ! NDCTESTremap_plot
+    logical :: remap_plot_shear =.false. ! NDCTESTremap_plot
+    logical :: remap_plot_nl =.true. ! NDCTESTremap_plot
     logical :: is_open ! NDCTESTremap_plot
 
     call debug_message(4, 'gs2_transforms::transform2_5d starting')
@@ -1510,8 +1510,8 @@ contains
     complex, dimension (:,:,g_lo%llim_proc:), intent (out) :: g
     integer :: iglo
     integer :: ix, ik, ixxf ! NDCTESTnl
-    logical :: remap_plot_shear =.true. ! NDCTESTremap_plot
-    logical :: remap_plot_nl =.false. ! NDCTESTremap_plot
+    logical :: remap_plot_shear =.false. ! NDCTESTremap_plot
+    logical :: remap_plot_nl =.true. ! NDCTESTremap_plot
 
     call inverse_y (yxf, xxf)
     
