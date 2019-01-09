@@ -180,7 +180,7 @@ contains
     logical :: local_gf_lo
     ! NDCTESTremap_plot
     logical :: remap_plot = .true.
-    real :: dkx, dky, alpha_x, alpha_y
+    real :: dkx, dky, alpha_x, alpha_y, C1, Nphi, Ng
     integer :: ik, it,iglo
     ! endNDCTESTremap_plot
 
@@ -204,13 +204,21 @@ contains
            write(*,*) 'Initializing phi to Gaussian'
            dkx = akx(2)-akx(1)
            dky = aky(2)-aky(1)
-           alpha_x = 1./64. * (2.*pi/dkx)**2 ! -> exp(-x**2/sig_x**2) with sig_x = 2*sqrt(alpha_x) = Lx/4
-           alpha_y = 1./256. * (2.*pi/dky)**2 ! -> exp(-y**2/sig_y**2) with sig_y = 2*sqrt(alpha_y) = Ly/8
+           ! Orig:
+           !alpha_x = 1./64. * (2.*pi/dkx)**2 ! -> exp(-x**2/sig_x**2) with sig_x = 2*sqrt(alpha_x) = Lx/4
+           !alpha_y = 1./256. * (2.*pi/dky)**2 ! -> exp(-y**2/sig_y**2) with sig_y = 2*sqrt(alpha_y) = Ly/8
+           ! Instead fix them
+           alpha_x = 1./32. * (2.*pi/0.05)**2
+           alpha_y = 1./64. * (2.*pi/0.05)**2
+
+           C1 = 2*pi/(dkx*dky)
+           Nphi = 300.0*500
+           Ng = 100.0*500
 
            ! Gaussian in phi
            do ik = 1, naky
                do it = 1, ntheta0
-                   phinew(:,it,ik) = 100.*exp(-1.*alpha_x*(akx(it)**2))*exp(-1.*alpha_y*(aky(ik)**2))
+                   phinew(:,it,ik) = Nphi/C1*exp(-1.*alpha_x*(akx(it)**2))*exp(-1.*alpha_y*(aky(ik)**2))
                end do
            end do
            phi = phinew
@@ -220,7 +228,7 @@ contains
            do iglo = g_lo%llim_proc, g_lo%ulim_proc
                ik = ik_idx(g_lo,iglo)
                it = it_idx(g_lo,iglo)
-               gnew(:,:,iglo) = exp(-1.*alpha_y*(akx(it)**2))*exp(-1.*alpha_x*(aky(ik)**2))
+               gnew(:,:,iglo) = Ng/C1*exp(-1.*alpha_y*(akx(it)**2))*exp(-1.*alpha_x*(aky(ik)**2))
            end do
            g = gnew
 
@@ -603,6 +611,7 @@ contains
             if(remap_plot_nl_analytic) then
                 open(83,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/xy_nl_"//trim(istep_str)//"_new.dat",status="replace") ! NDCTESTremap_plot_towrite
                 open(84,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/xy_phi_"//trim(istep_str)//"_new.dat",status="replace") ! NDCTESTremap_plot_towrite
+                open(144,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/xy_phi2_"//trim(istep_str)//"_new.dat",status="replace") ! NDCTESTremap_plot_towrite
             else
                 open(83,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/xy_"//trim(istep_str)//"_new.dat",status="replace") ! NDCTESTremap_plot_towrite
             end if
@@ -610,6 +619,7 @@ contains
             if(remap_plot_nl_analytic) then
                 open(83,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/xy_nl_"//trim(istep_str)//"_old.dat",status="replace") ! NDCTESTremap_plot_towrite
                 open(84,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/xy_phi_"//trim(istep_str)//"_old.dat",status="replace") ! NDCTESTremap_plot_towrite
+                open(144,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/xy_phi2_"//trim(istep_str)//"_old.dat",status="replace") ! NDCTESTremap_plot_towrite
             else
                 open(83,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/xy_"//trim(istep_str)//"_old.dat",status="replace") ! NDCTESTremap_plot_towrite
             end if
@@ -621,7 +631,7 @@ contains
     if(.not.no_driver) call antenna_amplitudes (apar_ext)
   
     ! NDCQUEST: how is the ExB remap undone if the timestep needs to be re-set ?    
-    if (allocated(kx_shift) .or. allocated(theta0_shift)) call exb_shear (gnew, phinew, aparnew, bparnew, istep) 
+    !if (allocated(kx_shift) .or. allocated(theta0_shift)) call exb_shear (gnew, phinew, aparnew, bparnew, istep) 
 
     g = gnew
     phi = phinew
@@ -821,6 +831,7 @@ contains
         close(83)
         if(remap_plot_nl_analytic) then
             close(84)
+            close(144)
         end if
     end if
     ! endNDCTESTremap_plot

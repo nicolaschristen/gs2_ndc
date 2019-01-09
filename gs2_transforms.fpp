@@ -280,6 +280,31 @@ contains
       logical :: remap_plot = .true. ! NDCTESTremap_plot
       logical :: remap_plot_nl_analytic = .true. ! NDCTESTremap_plot
       
+      write(*,*) 'calling update_flowshear_phase_fac ...'
+      write(*,*) '... with code_time =', code_time
+      if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
+          if(apply_flowshear_nonlin .and. .not. remap_plot) then
+              write(*,*) 'update_flowshear_phase_fac: remap_plot should be true'
+          else if(remap_plot) then
+              if(remap_plot_nl_analytic) then ! in lab frame
+                  write(*,*) 'update_flowshear_phase_fac: we are in the right place ...'
+                  if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+                      write(*,*) '... with a new algo'
+                  else
+                      write(*,*) '... with the old algo'
+                  end if
+              else ! visualizing in lab frame
+                  write(*,*) 'update_flowshear_phase_fac: remap_plot_nl_analytic should be true'
+              end if
+          else
+              write(*,*) 'update_flowshear_phase_fac: new algo and not applying NL fix.'
+          end if
+      else
+          write(*,*) 'update_flowshear_phase_fac: old algo and not applying NL fix.'
+      end if
+
+      write(*,*) 'update_flowshear_phase_fac: code_time =', code_time
+
       do ix = 1, nx
           do ik = 1, naky
               if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then ! NDCTESTremap_plot remove if statement and realign
@@ -1422,7 +1447,7 @@ contains
     use gs2_layouts, only: ie_idx,il_idx,is_idx,isign_idx,ig_idx,it_idx ! NDCTESTremap_plot
     use unit_tests,only: debug_message
     use constants, only: zi ! NDCTESTnl
-    use kt_grids, only: nx, aky, explicit_flowshear, implicit_flowshear, mixed_flowshear, & ! NDCTESTnl
+    use kt_grids, only: nx, akx, aky, explicit_flowshear, implicit_flowshear, mixed_flowshear, & ! NDCTESTnl
         apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
     use kt_grids, only: ny ! NDCTESTremap_plot
     use theta_grid, only: ntgrid ! NDCTESTremap_plot
@@ -1436,8 +1461,10 @@ contains
     logical :: remap_plot_shear =.false. ! NDCTESTremap_plot
     logical :: remap_plot_nl =.true. ! NDCTESTremap_plot
     logical :: is_open ! NDCTESTremap_plot
+    real :: dkx, dky
 
     call debug_message(4, 'gs2_transforms::transform2_5d starting')
+    write(*,*) 'calling transforms2_5d'
 
 !CMR+GC: 2/9/2013
 !  gs2's Fourier coefficients,  F_k^gs2, not standard form: i.e. f(x) = f_k e^(i k.x)
@@ -1477,6 +1504,12 @@ contains
 
     call transform_y (xxf, yxf)
 
+    !if(remap_plot_nl) then
+    !    dkx = akx(2)-akx(1)
+    !    dky = aky(2)-aky(1)
+    !    yxf = yxf*dkx*dky
+    !end if
+
     ! NDCTESTremap_plot
     inquire(unit=83,opened=is_open)
     if(remap_plot_shear .and. is_open) then
@@ -1502,7 +1535,7 @@ contains
     use gs2_layouts, only: g_lo, yxf_lo, ik_idx, &
         xxf_lo ! NDCTESTnl
     use constants, only: zi ! NDCTESTnl
-    use kt_grids, only: nx, aky, explicit_flowshear, implicit_flowshear, mixed_flowshear, & ! NDCTESTnl
+    use kt_grids, only: nx, akx, aky, explicit_flowshear, implicit_flowshear, mixed_flowshear, & ! NDCTESTnl
         apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
     use gs2_time, only: code_time ! NDCTESTnl
     implicit none
@@ -1512,6 +1545,15 @@ contains
     integer :: ix, ik, ixxf ! NDCTESTnl
     logical :: remap_plot_shear =.false. ! NDCTESTremap_plot
     logical :: remap_plot_nl =.true. ! NDCTESTremap_plot
+    real :: dkx,dky
+
+    write(*,*) 'calling inverse2_5d'
+    
+    !if(remap_plot_nl) then
+    !    dkx = akx(2)-akx(1)
+    !    dky = aky(2)-aky(1)
+    !    yxf = yxf/(dkx*dky)
+    !end if
 
     call inverse_y (yxf, xxf)
     
@@ -1539,7 +1581,9 @@ contains
 
     do iglo = g_lo%llim_proc, g_lo%ulim_proc
        if (ik_idx(g_lo, iglo) == 1) cycle
-       g(:,:,iglo) = g(:,:,iglo) * 2.0
+       if(.not. (remap_plot_shear .or. remap_plot_nl)) then
+           g(:,:,iglo) = g(:,:,iglo) * 2.0
+       end if
     end do
 
   end subroutine inverse2_5d

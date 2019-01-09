@@ -24,6 +24,7 @@ module nonlinear_terms
   public :: add_nl
   public :: zip
   public :: nl_forbid_force_zero
+  public :: gb ! NDCremap_plot_nl
 
   type gs2_gryfx_zonal_type
 
@@ -328,9 +329,9 @@ contains
     use gs2_transforms, only: transform2, inverse2
     use run_parameters, only: fapar, fbpar, fphi, reset, immediate_reset
     use kt_grids, only: aky, akx, &
-        ny ! NDCTESTremap_plot
+        nx, ny ! NDCTESTremap_plot
     use gs2_time, only: save_dt_cfl, check_time_step_too_large, code_time
-    use constants, only: zi
+    use constants, only: zi, pi
     use unit_tests, only: debug_message
     implicit none
     complex, dimension (-ntgrid:,:,g_lo%llim_proc:), intent (out) :: g1
@@ -347,34 +348,18 @@ contains
     logical :: remap_plot_nl = .true.
     logical :: remap_plot_nl_analytic = .true.
     integer :: iy,iyxf,ie,il,isgn
+    integer :: mycount = 0
+    real :: dkx, dky
     ! endNDCTESTremap_plot
+
+    write(*,*) 'calling add_nl'
+    if(present(g_exb_opt)) then
+        write(*,*) 'add_nl: g_exb_opt is present -> applying NL fix'
+    else
+        write(*,*) 'add_nl: g_exb_opt is NOT present -> NOT applying NL fix'
+    end if
     
     call debug_message(verb, 'nonlinear_terms::add_nl starting')
-
-    ! NDCTESTremap_plot: for Poisson bracket case, transform g to real space and print to file
-    if(remap_plot_nl_analytic) then
-        g1 = g
-        call transform2(g1, gb)
-        inquire(unit=84,opened=is_open)
-        if(is_open) then
-            do iy = 1, ny
-                do iyxf = yxf_lo%llim_proc, yxf_lo%ulim_proc
-                    it=it_idx(yxf_lo,iyxf)
-                    ie=ie_idx(yxf_lo,iyxf)
-                    il=il_idx(yxf_lo,iyxf)
-                    is=is_idx(yxf_lo,iyxf)
-                    ig=ig_idx(yxf_lo,iyxf)
-                    isgn=isign_idx(yxf_lo,iyxf)
-                    if(ie==1 .and. il==1 .and. is==1 .and. isgn==1 .and. ig==1) then
-                        write(84,"(I0,A,I0,A,E14.7)") it," ",iy," ",gb(iy,iyxf)
-                    end if
-                end do
-            end do
-        end if
-        g1 = 0.
-        gb = 0.
-    end if
-    ! endNDCTESTremap_plot
 
     !Initialise zero so we can be sure tests are sensible
     zero = epsilon(0.0)
@@ -434,18 +419,26 @@ contains
        max_vel = max_vel * cfly
 !       max_vel = maxval(abs(aba)*cfly)
     else
-       if(remap_plot_nl) then
-           write(*,*) "kxfac=",kxfac
+        if(remap_plot_nl) then ! don't use kxfac
+           max_vel = 0.
+           do j = yxf_lo%llim_proc, yxf_lo%ulim_proc
+              do i = 1, yxf_lo%ny
+                 bracket(i,j) = ba(i,j)*gb(i,j)
+                 max_vel = max(max_vel,abs(ba(i,j)))
+              end do
+           end do
+           max_vel = max_vel*cfly
+       else
+           max_vel = 0.
+           do j = yxf_lo%llim_proc, yxf_lo%ulim_proc
+              do i = 1, yxf_lo%ny
+                 bracket(i,j) = ba(i,j)*gb(i,j)*kxfac
+                 max_vel = max(max_vel,abs(ba(i,j)))
+              end do
+           end do
+           max_vel = max_vel*cfly
+!          max_vel = maxval(abs(ba)*cfly)
        end if
-       max_vel = 0.
-       do j = yxf_lo%llim_proc, yxf_lo%ulim_proc
-          do i = 1, yxf_lo%ny
-             bracket(i,j) = ba(i,j)*gb(i,j)*kxfac
-             max_vel = max(max_vel,abs(ba(i,j)))
-          end do
-       end do
-       max_vel = max_vel*cfly
-!       max_vel = maxval(abs(ba)*cfly)
     endif
 
     call debug_message(verb, 'nonlinear_terms::add_nl calculated dphi/dx.dg/dy')
@@ -542,12 +535,21 @@ contains
           end do
        end do
     else
-       do j = yxf_lo%llim_proc, yxf_lo%ulim_proc
-          do i = 1, yxf_lo%ny
-             bracket(i,j) = bracket(i,j) - ba(i,j)*gb(i,j)*kxfac
-             max_vel = max(max_vel,abs(ba(i,j))*cflx)
-          end do
-       end do
+       if(remap_plot_nl) then ! don't use kxfac
+           do j = yxf_lo%llim_proc, yxf_lo%ulim_proc
+              do i = 1, yxf_lo%ny
+                 bracket(i,j) = bracket(i,j) - ba(i,j)*gb(i,j)
+                 max_vel = max(max_vel,abs(ba(i,j))*cflx)
+              end do
+           end do
+       else
+           do j = yxf_lo%llim_proc, yxf_lo%ulim_proc
+              do i = 1, yxf_lo%ny
+                 bracket(i,j) = bracket(i,j) - ba(i,j)*gb(i,j)*kxfac
+                 max_vel = max(max_vel,abs(ba(i,j))*cflx)
+              end do
+           end do
+       end if
     end if
     call debug_message(verb, &
       'nonlinear_terms::add_nl calculated dphi/dx.dg/dy.dphi/dy.dg/dx')
@@ -592,13 +594,17 @@ contains
 
     !Transform NL source back to spectral space
     if (accelerated) then
+       write(*,*) 'add_nl: SHOULD NOT BE ACCELERATED'
        call inverse2 (abracket, g1, ia)
     else
        call inverse2 (bracket, g1)
     end if
 
     ! add_nl was adding twice the actual nonlinear term --NDC 11/2017
-    g1 = 0.5*g1
+    g1 = 0.5*g1 !?????????????????
+    !dkx = akx(2)-akx(1)
+    !dky = aky(2)-aky(1)
+    !g1 = dkx*dky*g1/(2*pi)
 
     call debug_message(verb, &
       'nonlinear_terms::add_nl calculated nonlinear term')

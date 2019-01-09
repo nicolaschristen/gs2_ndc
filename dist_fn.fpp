@@ -4221,10 +4221,14 @@ contains
     use mp, only: proc0 ! NDCTESTtime
     ! NDCTESTremap_plot
     use gs2_time, only: code_dt
+    use gs2_transforms, only: transform2
+    use nonlinear_terms, only: gb
+    use kt_grids, only: ny
+    use gs2_layouts, only: g_lo, yxf_lo, it_idx, ie_idx, il_idx, is_idx, ig_idx, isign_idx, ik_idx
     ! endNDCTESTremap_plot
     implicit none
-    complex, dimension (-ntgrid:,:,:), intent (in) :: phi, apar, bpar
-    complex, dimension (-ntgrid:,:,:), intent (in) :: phinew, aparnew, bparnew
+    complex, dimension (-ntgrid:,:,:), intent (in out) :: phi, apar, bpar
+    complex, dimension (-ntgrid:,:,:), intent (in out) :: phinew, aparnew, bparnew
     integer, intent (in) :: istep
     integer, optional, intent (in) :: mode
     logical, intent(in), optional :: trigger_aminv_opt ! NDCTESTtime
@@ -4234,11 +4238,93 @@ contains
     integer, parameter :: verb = 3
     ! NDCTESTremap_plot
     logical :: remap_plot_nl = .true.
+    logical :: remap_plot_nl_analytic = .true.
     real :: c0,c1,c2,dt0,dt1,dt2
+    logical :: is_open
+    integer :: iy, iyxf, it, ie, il, is, ig, isgn, iglo, ik
     ! endNDCTESTremap_plot
 
     ! NDCTESTremap_plot
     if(remap_plot_nl) then
+
+        write(*,*) ''
+        write(*,*) '--------------------------------------------'
+        write(*,*) ''
+        write(*,*) 'istep =', istep
+        write(*,*) 'istep_last =', istep_last
+        
+        ! NDCTESTremap_plot
+        if(remap_plot_nl_analytic) then
+            
+            !! Write g(code_time)
+            ! transform g to real space
+            gb = 0.
+            gexp_1 = g
+            call transform2(gexp_1, gb)
+
+            ! write to file
+            inquire(unit=84,opened=is_open)
+            if(is_open) then
+                do iy = 1, ny
+                    do iyxf = yxf_lo%llim_proc, yxf_lo%ulim_proc
+                        it=it_idx(yxf_lo,iyxf)
+                        ie=ie_idx(yxf_lo,iyxf)
+                        il=il_idx(yxf_lo,iyxf)
+                        is=is_idx(yxf_lo,iyxf)
+                        ig=ig_idx(yxf_lo,iyxf)
+                        isgn=isign_idx(yxf_lo,iyxf)
+                        if(ie==1 .and. il==1 .and. is==1 .and. isgn==1 .and. ig==1) then
+                            write(84,"(I0,A,I0,A,E14.7)") it," ",iy," ",gb(iy,iyxf)
+                        end if
+                    end do
+                end do
+            end if
+            ! Clean up
+            gexp_1 = 0.
+            gb = 0.
+            
+            !! Write phi(code_time)
+            ! transform phi to real space
+            gb = 0.
+            do iglo = g_lo%llim_proc, g_lo%ulim_proc
+               it = it_idx(g_lo,iglo)
+               ik = ik_idx(g_lo,iglo)
+               do ig = -ntgrid, ntgrid
+                  gexp_1(ig,:,iglo) = phi(ig,it,ik)
+               end do
+            end do
+            call transform2(gexp_1, gb)
+
+            ! write to file
+            inquire(unit=144,opened=is_open)
+            if(is_open) then
+                do iy = 1, ny
+                    do iyxf = yxf_lo%llim_proc, yxf_lo%ulim_proc
+                        it=it_idx(yxf_lo,iyxf)
+                        ie=ie_idx(yxf_lo,iyxf)
+                        il=il_idx(yxf_lo,iyxf)
+                        is=is_idx(yxf_lo,iyxf)
+                        ig=ig_idx(yxf_lo,iyxf)
+                        isgn=isign_idx(yxf_lo,iyxf)
+                        if(ie==1 .and. il==1 .and. is==1 .and. isgn==1 .and. ig==1) then
+                            write(144,"(I0,A,I0,A,E14.7)") it," ",iy," ",gb(iy,iyxf)
+                        end if
+                    end do
+                end do
+            end if
+            ! Clean up
+            gexp_1 = 0.
+            gb = 0.
+            
+            ! Call exb_shear
+            call exb_shear (gnew, phinew, aparnew, bparnew, istep) 
+            ! Also shift olg g & phi
+            g = gnew
+            phi = phinew
+            
+        end if
+        ! endNDCTESTremap_plot
+
         ! store NL term in gexp_1
         call add_explicit_terms (gexp_1, gexp_2, gexp_3, &
             phi, apar, bpar, istep, bkdiff(1))
@@ -4264,6 +4350,8 @@ contains
             ! code_dt is already in the AB3 coeffs
             gnew = g - (c0*gexp_1 + c1*gexp_2 + c2*gexp_3)
         end select
+        !gnew = g - code_dt*gexp_1
+        istep_last=istep
     else
         ! NDCTESTtime
         if(present(trigger_aminv_opt)) then
@@ -4487,6 +4575,7 @@ contains
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Initialize kx_shift, jump, idx_indexed
     if (exb_first) then
+       write(*,*) 'First time exb'
        exb_first = .false.
        if (box .or. shat .eq. 0.0) then
 
@@ -4528,10 +4617,12 @@ contains
     ! NDC 06/18
     undo_remap = .false.
     if (istep.eq.istep_last) then
+        write(*,*) 'exb_shear: istep=istep_last'
         if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin
             ! Check whether we are undoing an ExB remap done with the old dt,
             ! or whether we are remapping with the new dt.
             if(present(undo_remap_opt)) then
+                write(*,*) 'exb_shear: undoing'
                 undo_remap = undo_remap_opt
             end if
         else
@@ -4550,8 +4641,12 @@ contains
     ! necessary to get factor of 2 right in first time step and
     ! also to get things right after changing time step size
     ! added May 18, 2009 -- MAB
-    !gdt = code_dt ! NDCTEST
-    gdt = 0.5*(code_dt + code_dt_old)
+    gdt = code_dt ! NDCTEST
+    !gdt = 0.5*(code_dt + code_dt_old)
+    write(*,*) 'exb_shear: code_time =',code_time
+    write(*,*) 'exb_shear: code_dt =',code_dt
+    write(*,*) 'exb_shear: code_dt_old =',code_dt_old
+    write(*,*) 'exb_shear: gdt =',gdt
 
     !Update istep_last
     istep_last = istep
@@ -4566,6 +4661,7 @@ contains
 ! MR, 2007: kx_shift array gets saved in restart file
 ! CMR, 5/10/2010: multiply timestep by tunits(ik) for wstar_units=.true. 
     if ( box .or. shat .eq. 0.0 ) then
+       write(*,*) 'exb_shear: calling update_kx_shift_and_jump'
        call update_kx_shift_and_jump(gdt, undo_remap)
     else
        do ik=1, naky
@@ -4984,6 +5080,7 @@ contains
 
       undo_fac = 1
       if(undo_remap) undo_fac = -1
+      write(*,*) 'update_kx_shift_and_jump: undo_fac =',undo_fac
 
       ierr = error_unit()
 
@@ -4995,6 +5092,7 @@ contains
          !a suitable default definition for dkx.
       endif
       
+      write(*,*) 'exb_shear:'
       do ik = 1,naky
 
          kx_shift(ik) = kx_shift(ik) - undo_fac*aky(ik)*g_exb*g_exbfac*gdt*tunits(ik)
@@ -5013,6 +5111,7 @@ contains
          ! NDCTESTremap_plot: in if, remove last logical
          if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin
              t_last_jump(ik) = t_last_jump(ik) + undo_fac*abs(jump(ik))*remap_period(ik)*g_exbfac ! NDCTEST: need gg_exbfac ?
+             write(*,*) 'ik =',ik,' --- t_last_jump =',t_last_jump(ik)
          end if
          ! endNDCTESTnl
 
@@ -6203,6 +6302,7 @@ contains
 
           integer, parameter :: verb = 4
           integer :: isgn, iglo, it, ik
+          logical :: remap_plot_nl = .true.
 
           call debug_message(verb, 'dist_fn::add_explicit starting')
 
@@ -6217,8 +6317,12 @@ contains
           !
 
           call debug_message(verb, 'dist_fn::add_explicit copying old terms')
+          write(*,*) 'add_explicit: istep =',istep
+          write(*,*) 'add_explicit: istep_last =',istep_last
 
           if (istep /= istep_last) then
+
+              write(*,*) 'Adding explicit' ! NDCDEL
 
               g3 = g2 ! NDCQUEST: how is this undone if time-step is being re-set ? -> with if condition above ?
               g2 = g1
@@ -6251,8 +6355,10 @@ contains
                   ! Takes g1 containing the nonlinear term at grid points and returns g1 at cell centers.
                   ! Centering only needs to be applied to the nonlinear term,
                   ! not to the flowshear term (already bakdif'ed during computation). -- NDC 02/2018
-                  if (.not. reset) then
-                      call center (g1)
+                  if(.not. remap_plot_nl) then
+                      if (.not. reset) then
+                          call center (g1)
+                      end if
                   end if
 
               ! NDCTEST: remove ringing
@@ -6280,6 +6386,7 @@ contains
  
               ! Low flow cases
               if(explicit_lowflow) then
+                  write(*,*) 'WE SHOULD NOT BE HERE'
                   g1 = 0.
                   ! do something ?
               end if
