@@ -549,6 +549,7 @@ module kt_grids_box
   logical :: mixed_flowshear
   logical :: apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
   logical :: interp_before ! NDCTEST
+  logical :: remap_gexp
 
 contains
 
@@ -562,7 +563,8 @@ contains
          y0, rtwist, x0, nkpolar, rhostar_box, explicit_flowshear, implicit_flowshear, &
          mixed_flowshear, &
          apply_flowshear_nonlin, & ! NDCTEST_nl_vs_lin
-         interp_before ! NDCTEST
+         interp_before, & ! NDCTEST
+         remap_gexp
 
     if (parameters_read) return
     parameters_read = .true. 
@@ -582,6 +584,10 @@ contains
     apply_flowshear_nonlin = .false.
     ! endNDCTEST_nl_vs_lin
     interp_before = .false. ! NDCTEST
+    ! If the user has explicitly specified it in his input file, remap_gexp
+    ! will be set to this user provided value. If is not specified, it will be set to
+    ! true if a new flow shear algo is selected, false if the old algo is used.
+    remap_gexp = .false.
 
     gryfx = .false.
 
@@ -594,10 +600,13 @@ contains
     ! NDCTEST_nl_vs_lin: Set apply_flowshear_nonlin to default value: true if a new algorithm is used, false if not
     if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
         apply_flowshear_nonlin = .true.
+        remap_gexp = .true.
     else
         apply_flowshear_nonlin = .false.
+        remap_gexp = .false.
     end if
-    ! NDCTEST_nl_vs_lin: Read a second time to overwrite apply_flowshear_nonlin if the user specified it
+    ! NDCTEST_nl_vs_lin: Read a second time to overwrite
+    ! apply_flowshear_nonlin & remap_gexp if the user specified them
     in_file = input_unit_exist("kt_grids_box_parameters", exist)
     if (exist) read (in_file, nml=kt_grids_box_parameters)
   end subroutine init_parameters_box
@@ -865,19 +874,22 @@ contains
   subroutine box_get_flowshear_flags(explicit_flowshear_public, implicit_flowshear_public, &
           mixed_flowshear_public, &
           apply_flowshear_nonlin_public, & ! NDCTEST_nl_vs_lin
-          interp_before_public) ! NDCTEST
+          interp_before_public, & ! NDCTEST
+          remap_gexp_public)
       implicit none
       logical, intent(inout) :: explicit_flowshear_public
       logical, intent(inout) :: implicit_flowshear_public
       logical, intent(inout) :: mixed_flowshear_public
       logical, intent(inout) :: apply_flowshear_nonlin_public ! NDCTEST_nl_vs_lin
       logical, intent(inout) :: interp_before_public ! NDCTEST
+      logical, intent(inout) :: remap_gexp_public
 
       explicit_flowshear_public = explicit_flowshear
       implicit_flowshear_public = implicit_flowshear
       mixed_flowshear_public = mixed_flowshear
       apply_flowshear_nonlin_public = apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
       interp_before_public = interp_before ! NDCTEST
+      remap_gexp_public = remap_gexp
   end subroutine box_get_flowshear_flags
 end module kt_grids_box
 
@@ -906,6 +918,7 @@ module kt_grids
   public :: apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
   public :: interp_before ! NDCTEST
   public :: kperp2_tdep
+  public :: remap_gexp
   
   logical, dimension(:,:), allocatable :: kwork_filter
   real, dimension (:,:,:), allocatable :: kperp2
@@ -920,6 +933,7 @@ module kt_grids
   logical :: mixed_flowshear
   logical :: apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
   logical :: interp_before ! NDCTEST
+  logical :: remap_gexp
 
   type :: kperp2_tdep_type
     real, dimension(:,:,:), allocatable :: old
@@ -1046,19 +1060,22 @@ contains
             call box_get_flowshear_flags(explicit_flowshear, implicit_flowshear, &
                 mixed_flowshear, &
                 apply_flowshear_nonlin, & ! NDCTEST_nl_vs_lin
-                interp_before) ! NDCTEST
+                interp_before, & ! NDCTEST
+                remap_gexp)
         else
             explicit_flowshear = .false.
             implicit_flowshear = .false.
             mixed_flowshear = .false.
             apply_flowshear_nonlin = .false. ! NDCTEST_nl_vs_lin
             interp_before = .false. ! NDCTEST
+            remap_gexp = .false.
         end if
     end if
     call broadcast (explicit_flowshear)
     call broadcast (implicit_flowshear)
     call broadcast (mixed_flowshear)
     call broadcast (interp_before) ! NDCTEST
+    call broadcast (remap_gexp)
     
     call init_kperp2
   end subroutine init_kt_grids

@@ -4370,7 +4370,7 @@ contains
     use file_utils, only: error_unit
     use kt_grids, only: akx, aky, naky, ikx, ntheta0, box, theta0, &
         explicit_flowshear, implicit_flowshear,mixed_flowshear, &
-        apply_flowshear_nonlin
+        apply_flowshear_nonlin, remap_gexp_user => remap_gexp
     use le_grids, only: negrid, nlambda
     use species, only: nspec
     use run_parameters, only: fphi, fapar, fbpar
@@ -4379,6 +4379,7 @@ contains
     use gs2_time, only: code_dt, code_dt_old, code_time
     use constants, only: twopi   
     use fields_arrays, only: aparold
+    use nonlinear_terms, only: nonlinear_mode_switch, nonlinear_mode_on
 
     complex, dimension (-ntgrid:,:,:), intent (in out) :: phi,    apar,    bpar
     complex, dimension (-ntgrid:,:,g_lo%llim_proc:), intent (in out) :: g0
@@ -4400,8 +4401,14 @@ contains
     complex , dimension(-ntgrid:ntgrid) :: z
     character(130) :: str
     logical :: undo_remap
+    logical :: remap_gexp = .false.
 
     ierr = error_unit()
+
+    ! Determine if we have to remap gexp_1,2,3
+    if(remap_gexp_user .and. nonlinear_mode_switch==nonlinear_mode_on) then
+        remap_gexp = .true.
+    end if
 
 ! MR, March 2009: remove ExB restriction to box grids
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -4475,7 +4482,7 @@ contains
     ! necessary to get factor of 2 right in first time step and
     ! also to get things right after changing time step size
     ! added May 18, 2009 -- MAB
-    gdt = 0.5*(code_dt + code_dt_old)
+    gdt = 0.5*(code_dt + code_dt_old) ! NDCQUEST: is this correct ? what implications for phase factor update ?
 
     !Update istep_last
     istep_last = istep
@@ -4737,6 +4744,48 @@ contains
                    enddo
                 enddo
              enddo
+             if(remap_gexp) then
+                do is=1,nspec
+                   do ie=1,negrid
+                      do il=1,nlambda
+
+                         do it = 1, ntheta0 + jump(ik)                        
+
+                              to_iglo = idx(g_lo, ik, ikx_indexed(it),          il, ie, is)
+                            from_iglo = idx(g_lo, ik, ikx_indexed(it-jump(ik)), il, ie, is)
+
+                            if (idx_local(g_lo, to_iglo) .and. idx_local(g_lo, from_iglo)) then
+                               gexp_1(:,:,to_iglo) = gexp_1(:,:,from_iglo)
+                               gexp_2(:,:,to_iglo) = gexp_2(:,:,from_iglo)
+                               gexp_3(:,:,to_iglo) = gexp_3(:,:,from_iglo)
+                            else if (idx_local(g_lo, from_iglo)) then
+                               do isgn=1, 2
+                                  call send (gexp_1(:, isgn, from_iglo), proc_id (g_lo, to_iglo),1)
+                                  call send (gexp_2(:, isgn, from_iglo), proc_id (g_lo, to_iglo),2)
+                                  call send (gexp_3(:, isgn, from_iglo), proc_id (g_lo, to_iglo),3)
+                               enddo
+                            else if (idx_local(g_lo, to_iglo)) then
+                               do isgn=1, 2
+                                  call receive (gexp_1(:, isgn, to_iglo), proc_id (g_lo, from_iglo),1)
+                                  call receive (gexp_2(:, isgn, to_iglo), proc_id (g_lo, from_iglo),2)
+                                  call receive (gexp_3(:, isgn, to_iglo), proc_id (g_lo, from_iglo),3)
+                               enddo
+                            endif
+                         enddo
+
+                         do it = ntheta0 + jump(ik) + 1, ntheta0
+                            to_iglo = idx(g_lo, ik, ikx_indexed(it), il, ie, is)
+                            if (idx_local (g_lo, to_iglo)) then
+                               gexp_1(:,:,to_iglo) = 0.
+                               gexp_2(:,:,to_iglo) = 0.
+                               gexp_3(:,:,to_iglo) = 0.
+                            end if
+                         enddo
+
+                      enddo
+                   enddo
+                enddo
+             end if ! remap_gexp
           endif
 
           if (jump(ik) > 0) then 
@@ -4804,6 +4853,49 @@ contains
                    enddo
                 enddo
              enddo
+             if(remap_gexp) then
+                do is=1,nspec
+                   do ie=1,negrid
+                      do il=1,nlambda
+
+                         do it = ntheta0, 1+jump(ik), -1
+
+                              to_iglo = idx(g_lo, ik, ikx_indexed(it),          il, ie, is)
+                            from_iglo = idx(g_lo, ik, ikx_indexed(it-jump(ik)), il, ie, is)
+
+                            if (idx_local(g_lo, to_iglo) .and. idx_local(g_lo, from_iglo)) then
+                               gexp_1(:,:,to_iglo) = gexp_1(:,:,from_iglo)
+                               gexp_2(:,:,to_iglo) = gexp_2(:,:,from_iglo)
+                               gexp_3(:,:,to_iglo) = gexp_3(:,:,from_iglo)
+                            else if (idx_local(g_lo, from_iglo)) then
+                               do isgn=1, 2
+                                  call send(gexp_1(:, isgn, from_iglo), proc_id(g_lo, to_iglo),1)
+                                  call send(gexp_2(:, isgn, from_iglo), proc_id(g_lo, to_iglo),2)
+                                  call send(gexp_3(:, isgn, from_iglo), proc_id(g_lo, to_iglo),3)
+                               enddo
+                            else if (idx_local(g_lo, to_iglo)) then
+                               do isgn=1, 2
+                                  call receive(gexp_1(:, isgn, to_iglo), proc_id (g_lo, from_iglo),1)
+                                  call receive(gexp_2(:, isgn, to_iglo), proc_id (g_lo, from_iglo),2)
+                                  call receive(gexp_3(:, isgn, to_iglo), proc_id (g_lo, from_iglo),3)
+                               enddo
+                            endif
+                         enddo
+
+                         do it = jump(ik), 1, -1
+                            to_iglo = idx(g_lo, ik, ikx_indexed(it), il, ie, is)
+
+                            if (idx_local (g_lo, to_iglo)) then
+                               gexp_1(:,:,to_iglo) = 0.
+                               gexp_2(:,:,to_iglo) = 0.
+                               gexp_3(:,:,to_iglo) = 0.
+                            end if
+                         enddo
+
+                      enddo
+                   enddo
+                enddo
+             end if ! remap_gexp
           endif
        enddo
 
