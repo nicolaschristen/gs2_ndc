@@ -563,7 +563,7 @@ contains
          y0, rtwist, x0, nkpolar, rhostar_box, explicit_flowshear, implicit_flowshear, &
          mixed_flowshear, &
          apply_flowshear_nonlin, & ! NDCTEST_nl_vs_lin
-         interp_before, & ! NDCTEST
+         interp_before, & ! NDCTEST_before
          remap_gexp
 
     if (parameters_read) return
@@ -579,13 +579,13 @@ contains
     mixed_flowshear = .false.
     ! NDCTEST_nl_vs_lin
     ! If the user has explicitly specified it in his input file, apply_flowshear_nonlin
-    ! will be set to this user provided value. If is not specified, it will be set to
+    ! will be set to this user provided value. If it is not specified, it will be set to
     ! true if a new flow shear algo is selected, false if the old algo is used.
     apply_flowshear_nonlin = .false.
     ! endNDCTEST_nl_vs_lin
-    interp_before = .false. ! NDCTEST
+    interp_before = .false. ! NDCTEST_before
     ! If the user has explicitly specified it in his input file, remap_gexp
-    ! will be set to this user provided value. If is not specified, it will be set to
+    ! will be set to this user provided value. If it is not specified, it will be set to
     ! true if a new flow shear algo is selected, false if the old algo is used.
     remap_gexp = .false.
 
@@ -1060,21 +1060,22 @@ contains
             call box_get_flowshear_flags(explicit_flowshear, implicit_flowshear, &
                 mixed_flowshear, &
                 apply_flowshear_nonlin, & ! NDCTEST_nl_vs_lin
-                interp_before, & ! NDCTEST
+                interp_before, & ! NDCTEST_before
                 remap_gexp)
         else
             explicit_flowshear = .false.
             implicit_flowshear = .false.
             mixed_flowshear = .false.
             apply_flowshear_nonlin = .false. ! NDCTEST_nl_vs_lin
-            interp_before = .false. ! NDCTEST
+            interp_before = .false. ! NDCTEST_before
             remap_gexp = .false.
         end if
     end if
     call broadcast (explicit_flowshear)
     call broadcast (implicit_flowshear)
     call broadcast (mixed_flowshear)
-    call broadcast (interp_before) ! NDCTEST
+    call broadcast (apply_flowshear_nonlin) ! NDCTEST_nl_vs_lin
+    call broadcast (interp_before) ! NDCTEST_before
     call broadcast (remap_gexp)
     
     call init_kperp2
@@ -1218,6 +1219,12 @@ contains
         kperp2_tdep%old = kperp2
         allocate(kperp2_tdep%new(-ntgrid:ntgrid,ntheta0,naky))
         kperp2_tdep%new = kperp2
+    else
+        ! If not used, allocate small arrays to save mem. -- NDC 01/2019
+        allocate(kperp2_tdep%old(1,1,1))
+        kperp2_tdep%old = 0.0
+        allocate(kperp2_tdep%new(1,1,1))
+        kperp2_tdep%new = 0.0
     end if
 
   end subroutine init_kperp2

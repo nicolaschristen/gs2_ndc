@@ -20,13 +20,12 @@ module dist_fn_arrays
 
   public :: kx_shift_old
   public :: aj0_tdep, aj1_tdep
+  public :: gamtots_tdep_type
   public :: gamtot_tdep, gamtot1_tdep, gamtot2_tdep, gamtot3_tdep
   public :: t_last_jump
   public :: remap_period
-  ! NDCTESTneighb
   public :: jump
   public :: a, b, r, ainv
-  ! endNDCTESTneighb
   public :: kperp2_left
   public :: aj0_left, aj1_left
   public :: gamtot_left, gamtot1_left, gamtot2_left, gamtot3_left
@@ -103,7 +102,7 @@ module dist_fn_arrays
   real, dimension(:,:,:), allocatable :: kperp2_left, kperp2_right
   real, dimension(:,:), allocatable :: aj0_left, aj0_right
   real, dimension(:,:), allocatable :: aj1_left, aj1_right
-  real, dimension(:,:,:), allocatable :: gamtot_left, gamtot_right
+  real, dimension(:,:,:), allocatable, target :: gamtot_left, gamtot_right
   real, dimension(:,:,:), allocatable :: gamtot1_left, gamtot1_right
   real, dimension(:,:,:), allocatable :: gamtot2_left, gamtot2_right
   real, dimension(:,:,:), allocatable :: gamtot3_left, gamtot3_right

@@ -485,12 +485,17 @@ contains
     ! In cases with flow-shear, after kx_shift got updated in exb_shear,
     ! update time-dependent kperp2, aj0, gamtot, wdrift, wdriftttp, a, b, r, ainv.
     ! NDC 02/2018
-    ! NDCTEST_nl_vs_lin: delete last arg
-    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
+    ! NDCTEST_nl_vs_lin: delete last case
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
         
         call update_kperp2_tdep
         call update_bessel_tdep
         call update_gamtots_tdep
+
+    elseif(apply_flowshear_nonlin) then
+
+        call update_kperp2_tdep
+        call update_bessel_tdep
         
     end if
 
@@ -773,7 +778,7 @@ contains
     use kt_grids, only: naky, ntheta0, implicit_flowshear, mixed_flowshear, interp_before, &
         explicit_flowshear, akx, kperp2_tdep
     use dist_fn_arrays, only: g, kx_shift, &
-        a, b, r, ainv ! NDCTESTneighb
+        a, b, r, ainv
     use dist_fn_arrays, only: aj0_tdep, aj1_tdep, &
         gamtot_tdep, gamtot1_tdep, gamtot2_tdep, gamtot3_tdep, &
         kperp2_left, aj0_left, aj1_left, &
@@ -794,9 +799,9 @@ contains
     complex, dimension(:,:), allocatable :: am
     complex, dimension(:,:), allocatable :: am_left, am_right
     logical :: endpoint
-    real, dimension(naky) :: dkx ! NDCTESTshift
-    logical :: tadv_for_interp ! NDCTESTshift
-    real, dimension(naky) :: kx_shift_stored ! NDCTESTneighb
+    real, dimension(naky) :: dkx
+    logical :: tadv_for_interp
+    real, dimension(naky) :: kx_shift_stored
     logical :: michael_exp = .true.
 
     call prof_entering ("init_response_matrix", "fields_implicit")
@@ -869,16 +874,29 @@ contains
            allocate(aj0_left(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
            allocate(aj1_left(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
            allocate(gamtot_left(-ntgrid:ntgrid,ntheta0,naky))
+           ! NDCDEL
+           gamtot_left = 0.0
+           gamtot_left(-ntgrid,1,1) = 1.0
+           ! endNDCDEL
+           ! NDCQUEST : do we need t-dep versions of gamtot1,2 in electrostatic cases ?
            allocate(gamtot1_left(-ntgrid:ntgrid,ntheta0,naky))
            allocate(gamtot2_left(-ntgrid:ntgrid,ntheta0,naky))
            if(.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) then
                if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
                    allocate(gamtot3_left(-ntgrid:ntgrid,ntheta0,naky))
+               else
+                   allocate(gamtot3_left(1,1,1))
+                   gamtot3_left = 0.0
                end if
            end if
            if(implicit_flowshear) then
                allocate(r_left(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
                allocate(ainv_left(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+           else
+               allocate(r_left(1,1,1))
+               r_left = 0.0
+               allocate(ainv_left(1,1,1))
+               ainv_left = 0.0
            end if
            
            kx_shift = -0.5*dkx
@@ -888,7 +906,10 @@ contains
            call update_bessel_tdep
            aj0_left = aj0_tdep%new
            aj1_left = aj1_tdep%new
-           call update_gamtots_tdep
+           ! NDCDEL
+           call update_gamtots_tdep('l')
+           !call update_gamtots_tdep ! ORIG
+           ! endNDCDEL
            gamtot_left = gamtot_tdep%new
            gamtot1_left = gamtot1_tdep%new
            gamtot2_left = gamtot2_tdep%new

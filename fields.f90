@@ -473,7 +473,13 @@ contains
            if(explicit_flowshear .and. michael_exp) then
                allocate ( phistar_old (-ntgrid:ntgrid,ntheta0,naky)) ! NDCTESTmichaelnew
                allocate ( phistar_new (-ntgrid:ntgrid,ntheta0,naky)) ! NDCTESTmichaelnew
+           else
+               allocate ( phistar_old (1,1,1)) ! NDCTESTmichaelnew
+               allocate ( phistar_new (1,1,1)) ! NDCTESTmichaelnew
            end if
+       else
+           allocate ( phistar_old (1,1,1)) ! NDCTESTmichaelnew
+           allocate ( phistar_new (1,1,1)) ! NDCTESTmichaelnew
        end if
        if(fieldopt_switch .eq. fieldopt_gf_local) then
           !AJ It should be possible to reduce the size of these by only allocating them
@@ -494,10 +500,9 @@ contains
     phi = 0.; phinew = 0.
     apar = 0.; aparnew = 0.
     bpar = 0.; bparnew = 0.
-    if(explicit_flowshear .and. michael_exp) then
-        phistar_old = 0. ! NDCTESTmichaelnew
-        phistar_new = 0. ! NDCTESTmichaelnew
-    end if
+    phistar_old = 0. ! NDCTESTmichaelnew
+    phistar_new = 0. ! NDCTESTmichaelnew
+
     if(fieldopt_switch .eq. fieldopt_gf_local) then
        gf_phi = 0.; gf_phinew = 0.
        gf_apar = 0.; gf_aparnew = 0.

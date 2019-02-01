@@ -207,6 +207,14 @@ contains
             x_grid(ix) = (ix-nx-1)*dx
         end do
 
+    else
+
+        ! If not used, initialize to small arrays to save mem. -- NDC 01/2019
+        allocate(x_grid(1))
+        x_grid = 0.0
+        allocate(flowshear_phase_fac(1,1))
+        flowshear_phase_fac = 0.0
+
     end if
 
   end subroutine init_transforms

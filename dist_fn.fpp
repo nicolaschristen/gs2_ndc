@@ -719,9 +719,6 @@ contains
     ! we can take this line out and remove the dependency 
     ! dist_fn_arrays<=nonlinear_terms in gs2_init.rb. Anyone 
     ! see any problems with this?  EGH
-    !
-    ! It has to be here: allocation of gexp_1, gexp_2 & gexp_3
-    ! depends on nonlinear_terms::nonlin --NDC 11/2017
     if (debug) write(6,*) "init_dist_fn: nonlinear_terms"
     call init_nonlinear_terms
 
@@ -1815,6 +1812,18 @@ contains
         allocate(aj1_tdep%new(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
         aj1_tdep%new = aj1
 
+    else
+        
+        allocate(aj0_tdep%old(1,1))
+        aj0_tdep%old = 0.0
+        allocate(aj0_tdep%new(1,1))
+        aj0_tdep%new = 0.0
+
+        allocate(aj1_tdep%old(1,1))
+        aj1_tdep%old = 0.0
+        allocate(aj1_tdep%new(1,1))
+        aj1_tdep%new = 0.0
+
     end if
 
   end subroutine init_bessel
@@ -1963,7 +1972,7 @@ contains
   subroutine compute_a_b_r_ainv(my_a,my_b,my_r,my_ainv)
     
       use dist_fn_arrays, only: vpar, ittp, &
-          kx_shift, kx_shift_old ! NDCTESTneighb
+          kx_shift, kx_shift_old
       use species, only: spec
       use theta_grid, only: ntgrid, shat
       use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear
@@ -2081,7 +2090,6 @@ contains
       end do
 
   end subroutine compute_a_b_r_ainv
-  ! endNDCTESTneighb
 
   subroutine init_bc
     use theta_grid, only: ntgrid
@@ -2140,9 +2148,9 @@ contains
        end do
     endif
 
-    if(.not.opt_source) return
     ! NDCQUEST: new flow shear algo does not support opt_source:
-    ! the code below would not be executed
+    ! the code below next line would not be executed.
+    if(.not.opt_source) return
 
     !Setup the source coefficients
     !See comments in get_source_term and set_source
@@ -4191,12 +4199,10 @@ contains
        endif
        if (abs(g_exb*g_exbfac) > epsilon(0.)) then           ! MR 
 
-          ! NDCTESTneighb
           if(.not. allocated(jump)) then
               allocate(jump(naky))
               jump = 0
           end if
-          ! endNDCTESTneighb
 
           if ((box .or. shat .eq. 0.0) .and. .not. allocated(kx_shift)) then
              allocate (kx_shift(naky))
@@ -4212,10 +4218,19 @@ contains
                  do ik = 2, naky ! ky=0 is never re-mapped
                      remap_period(ik) = abs(dkx/(g_exb*aky(ik)))
                  end do
+             else
+                 allocate(t_last_jump(1))
+                 t_last_jump = 0.
+                 allocate(remap_period(1))
+                 remap_period = 0.
              end if
           else
              allocate (theta0_shift(naky))
              theta0_shift = 0.
+             allocate(t_last_jump(1))
+             t_last_jump = 0.
+             allocate(remap_period(1))
+             remap_period = 0.
           endif
        endif                           ! MR end
     endif
@@ -7984,12 +7999,17 @@ endif
     call integrate_species (g0, wgt, tot)
     gamtot = real(tot) + kperp2*poisfac
 
-    ! NDCTEST_nl_vs_lin: remove last arg
-    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
         allocate(gamtot_tdep%old(-ntgrid:ntgrid,ntheta0,naky))
         gamtot_tdep%old = gamtot
         allocate(gamtot_tdep%new(-ntgrid:ntgrid,ntheta0,naky))
         gamtot_tdep%new = gamtot
+    else
+        ! Not used, initialize to small arrays
+        allocate(gamtot_tdep%old(1,1,1))
+        gamtot_tdep%old = 0.0
+        allocate(gamtot_tdep%new(1,1,1))
+        gamtot_tdep%new = 0.0
     end if
 
     do iglo = g_lo%llim_proc, g_lo%ulim_proc
@@ -8004,12 +8024,17 @@ endif
     call integrate_species (g0, wgt, tot)
     gamtot1 = real(tot)
 
-    ! NDCTEST_nl_vs_lin: remove last arg
-    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
         allocate(gamtot1_tdep%old(-ntgrid:ntgrid,ntheta0,naky))
         gamtot1_tdep%old = gamtot1
         allocate(gamtot1_tdep%new(-ntgrid:ntgrid,ntheta0,naky))
         gamtot1_tdep%new = gamtot1
+    else
+        ! Not used, initialize to small arrays
+        allocate(gamtot1_tdep%old(1,1,1))
+        gamtot1_tdep%old = 0.0
+        allocate(gamtot1_tdep%new(1,1,1))
+        gamtot1_tdep%new = 0.0
     end if
     
     do iglo = g_lo%llim_proc, g_lo%ulim_proc
@@ -8023,15 +8048,21 @@ endif
     call integrate_species (g0, wgt, tot)
     gamtot2 = real(tot)
 
-    ! NDCTEST_nl_vs_lin: remove last arg
-    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
         allocate(gamtot2_tdep%old(-ntgrid:ntgrid,ntheta0,naky))
         gamtot2_tdep%old = gamtot2
         allocate(gamtot2_tdep%new(-ntgrid:ntgrid,ntheta0,naky))
         gamtot2_tdep%new = gamtot2
+    else
+        ! Not used, initialize to small arrays
+        allocate(gamtot2_tdep%old(1,1,1))
+        gamtot2_tdep%old = 0.0
+        allocate(gamtot2_tdep%new(1,1,1))
+        gamtot2_tdep%new = 0.0
     end if
 
     !<DD>Make sure gamtots are single valued
+    ! NDCQUEST: new flow shear algo not supporting esv.
     if(esv)then
        call ensure_single_val_fields_pass_r(gamtot)
        call ensure_single_val_fields_pass_r(gamtot1)
@@ -8041,11 +8072,25 @@ endif
 ! adiabatic electrons 
     if (.not. has_electron_species(spec) .or. .not. has_ion_species(spec) ) then
        
-       ! NDCQUEST: flow shear algo only supports adiabatic_option_fieldlineavg (iphi00=2)
        if (adiabatic_option_switch == adiabatic_option_yavg) then
+
           do ik = 1, naky
              if (aky(ik) > epsilon(0.0)) gamtot(:,:,ik) = gamtot(:,:,ik) + tite
           end do
+          if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+              do ik = 1, naky
+                 if (aky(ik) > epsilon(0.0)) then
+                     gamtot_tdep%old(:,:,ik) = gamtot_tdep%old(:,:,ik) + tite
+                     gamtot_tdep%new(:,:,ik) = gamtot_tdep%new(:,:,ik) + tite
+                 end if
+              end do
+          end if
+          ! Not used, initialize to small arrays
+          allocate (gamtot3_tdep%old(1,1,1))
+          gamtot3_tdep%old = 0.0
+          allocate (gamtot3_tdep%new(1,1,1))
+          gamtot3_tdep%new = 0.0
+
        elseif (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
           
           gamtot  = gamtot + tite
@@ -8055,36 +8100,70 @@ endif
           if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
               gamtot_tdep%old = gamtot_tdep%old + tite
               gamtot_tdep%new = gamtot_tdep%new + tite
+              allocate (gamtot3_tdep%old(-ntgrid:ntgrid,ntheta0,naky))
+              allocate (gamtot3_tdep%new(-ntgrid:ntgrid,ntheta0,naky))
               gamtot3_tdep%old = (gamtot_tdep%old-tite) / gamtot_tdep%old
               gamtot3_tdep%new = (gamtot_tdep%new-tite) / gamtot_tdep%new
               where (gamtot3_tdep%old < 2.*epsilon(0.0)) gamtot3_tdep%old = 1.0
               where (gamtot3_tdep%new < 2.*epsilon(0.0)) gamtot3_tdep%new = 1.0
+          else
+              ! Not used, initialize to small arrays
+              allocate (gamtot3_tdep%old(1,1,1))
+              gamtot3_tdep%old = 0.0
+              allocate (gamtot3_tdep%new(1,1,1))
+              gamtot3_tdep%new = 0.0
           end if
 
        else
-          gamtot = gamtot + tite 
+          
+          gamtot = gamtot + tite
+          if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+              gamtot_tdep%old = gamtot_tdep%old + tite
+              gamtot_tdep%new = gamtot_tdep%new + tite
+          end if
+          ! Not used, initialize to small arrays
+          allocate (gamtot3_tdep%old(1,1,1))
+          gamtot3_tdep%old = 0.0
+          allocate (gamtot3_tdep%new(1,1,1))
+          gamtot3_tdep%new = 0.0
+
        endif
     endif
 
   end subroutine init_fieldeq
 
   ! Updating time-dependent gamtots for cases with flow-shear. -- NDC 11/2018
-  subroutine update_gamtots_tdep
+  subroutine update_gamtots_tdep(interp_shift)
       
-      use dist_fn_arrays, only: aj0_tdep, aj1_tdep, vperp2
+      use dist_fn_arrays, only: aj0_tdep, aj1_tdep, vperp2, &
+          gamtot_tdep, gamtot1_tdep, gamtot2_tdep, gamtot3_tdep, & 
+          gamtot_left, gamtot_right
       use species, only: nspec, spec, has_electron_species
       use theta_grid, only: ntgrid
       use kt_grids, only: ntheta0, naky, kperp2_tdep
       use le_grids, only: anon, integrate_species
       use gs2_layouts, only: g_lo, ie_idx, is_idx
-      use dist_fn_arrays, only: gamtot_tdep, gamtot1_tdep, gamtot2_tdep, gamtot3_tdep
+      use dist_fn_arrays, only: gamtots_tdep_type
       use run_parameters, only: tite, fbpar
       
       implicit none
       
+      character, intent(in), optional :: interp_shift
       complex, dimension (-ntgrid:ntgrid,ntheta0,naky) :: tot
       real, dimension (nspec) :: wgt
       integer :: iglo, ie, is, isgn
+      real, dimension(:,:,:), pointer :: gamtot_tdep_ptr
+
+      if(present(interp_shift)) then
+          if(interp_shift == 'l') then
+              gamtot_tdep_ptr => gamtot_left
+          else if(interp_shift == 'r') then
+              gamtot_tdep_ptr => gamtot_right
+          end if
+          ! NDCDEL
+          write(*,*) 'HEEEEEY  :',gamtot_tdep_ptr(-ntgrid,1,1)
+          ! endNDCDEL
+      end if
       
       ! First gamtot
       ! First old
