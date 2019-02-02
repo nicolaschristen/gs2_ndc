@@ -918,6 +918,7 @@ module kt_grids
   public :: apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
   public :: interp_before ! NDCTEST
   public :: kperp2_tdep
+  public :: kperp2_tdep_ptr_type
   public :: remap_gexp
   
   logical, dimension(:,:), allocatable :: kwork_filter
@@ -940,7 +941,12 @@ module kt_grids
     real, dimension(:,:,:), allocatable :: new
   end type kperp2_tdep_type
 
-  type(kperp2_tdep_type) :: kperp2_tdep
+  type :: kperp2_tdep_ptr_type
+    real, dimension(:,:,:), pointer :: old
+    real, dimension(:,:,:), pointer :: new
+  end type kperp2_tdep_ptr_type
+
+  type(kperp2_tdep_type), target :: kperp2_tdep
 
   namelist /kt_grids_knobs/ grid_option
 

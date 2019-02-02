@@ -19,8 +19,9 @@ module dist_fn_arrays
 #endif
 
   public :: kx_shift_old
+  public :: bessel_tdep_ptr_type
   public :: aj0_tdep, aj1_tdep
-  public :: gamtots_tdep_type
+  public :: gamtots_tdep_ptr_type
   public :: gamtot_tdep, gamtot1_tdep, gamtot2_tdep, gamtot3_tdep
   public :: t_last_jump
   public :: remap_period
@@ -76,36 +77,44 @@ module dist_fn_arrays
       real, dimension(:,:), allocatable :: new
   end type bessel_tdep_type
 
-  type(bessel_tdep_type) :: aj0_tdep
-  type(bessel_tdep_type) :: aj1_tdep
+  type :: bessel_tdep_ptr_type
+      real, dimension(:,:), pointer :: old
+      real, dimension(:,:), pointer :: new
+  end type bessel_tdep_ptr_type
+
+  type(bessel_tdep_type), target :: aj0_tdep
+  type(bessel_tdep_type), target :: aj1_tdep
   
   type :: gamtots_tdep_type
       real, dimension(:,:,:), allocatable :: old
       real, dimension(:,:,:), allocatable :: new
   end type gamtots_tdep_type
+  
+  type :: gamtots_tdep_ptr_type
+      real, dimension(:,:,:), pointer :: old
+      real, dimension(:,:,:), pointer :: new
+  end type gamtots_tdep_ptr_type
 
-  type(gamtots_tdep_type) :: gamtot_tdep
-  type(gamtots_tdep_type) :: gamtot1_tdep
-  type(gamtots_tdep_type) :: gamtot2_tdep
-  type(gamtots_tdep_type) :: gamtot3_tdep
+  type(gamtots_tdep_type), target :: gamtot_tdep
+  type(gamtots_tdep_type), target :: gamtot1_tdep
+  type(gamtots_tdep_type), target :: gamtot2_tdep
+  type(gamtots_tdep_type), target :: gamtot3_tdep
 
   real, dimension(:), allocatable :: kx_shift_old
 
   real, dimension(:), allocatable :: t_last_jump
   real, dimension(:), allocatable :: remap_period
 
-  ! NDCTESTneighb
   integer, dimension(:), allocatable :: jump
   complex, dimension (:,:,:), allocatable :: a, b, r, ainv
-  ! endNDCTESTneighb
   
-  real, dimension(:,:,:), allocatable :: kperp2_left, kperp2_right
-  real, dimension(:,:), allocatable :: aj0_left, aj0_right
-  real, dimension(:,:), allocatable :: aj1_left, aj1_right
+  real, dimension(:,:,:), allocatable, target :: kperp2_left, kperp2_right
+  real, dimension(:,:), allocatable, target :: aj0_left, aj0_right
+  real, dimension(:,:), allocatable, target :: aj1_left, aj1_right
   real, dimension(:,:,:), allocatable, target :: gamtot_left, gamtot_right
-  real, dimension(:,:,:), allocatable :: gamtot1_left, gamtot1_right
-  real, dimension(:,:,:), allocatable :: gamtot2_left, gamtot2_right
-  real, dimension(:,:,:), allocatable :: gamtot3_left, gamtot3_right
+  real, dimension(:,:,:), allocatable, target :: gamtot1_left, gamtot1_right
+  real, dimension(:,:,:), allocatable, target :: gamtot2_left, gamtot2_right
+  real, dimension(:,:,:), allocatable, target :: gamtot3_left, gamtot3_right
   complex, dimension(:,:,:), allocatable :: r_left, r_right
   complex, dimension(:,:,:), allocatable :: ainv_left, ainv_right
   

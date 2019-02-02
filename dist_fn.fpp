@@ -8137,13 +8137,18 @@ endif
       
       use dist_fn_arrays, only: aj0_tdep, aj1_tdep, vperp2, &
           gamtot_tdep, gamtot1_tdep, gamtot2_tdep, gamtot3_tdep, & 
-          gamtot_left, gamtot_right
+          gamtot_left, gamtot1_left, gamtot2_left, gamtot3_left, &
+          gamtot_right, gamtot1_right, gamtot2_right, gamtot3_right, &
+          aj0_tdep, aj0_left, aj0_right, &
+          aj1_tdep, aj1_left, aj1_right, &
+          kperp2_left, kperp2_right
       use species, only: nspec, spec, has_electron_species
       use theta_grid, only: ntgrid
-      use kt_grids, only: ntheta0, naky, kperp2_tdep
+      use kt_grids, only: ntheta0, naky, kperp2_tdep, aky, &
+          kperp2_tdep_ptr_type, kperp2_tdep
       use le_grids, only: anon, integrate_species
       use gs2_layouts, only: g_lo, ie_idx, is_idx
-      use dist_fn_arrays, only: gamtots_tdep_type
+      use dist_fn_arrays, only: gamtots_tdep_ptr_type, bessel_tdep_ptr_type
       use run_parameters, only: tite, fbpar
       
       implicit none
@@ -8151,117 +8156,191 @@ endif
       character, intent(in), optional :: interp_shift
       complex, dimension (-ntgrid:ntgrid,ntheta0,naky) :: tot
       real, dimension (nspec) :: wgt
-      integer :: iglo, ie, is, isgn
-      real, dimension(:,:,:), pointer :: gamtot_tdep_ptr
+      integer :: iglo, ie, is, isgn, ik
+      type(kperp2_tdep_ptr_type) :: kperp2_ptr
+      type(bessel_tdep_ptr_type) :: aj0_ptr, aj1_ptr
+      type(gamtots_tdep_ptr_type) :: gamtot_ptr, gamtot1_ptr, gamtot2_ptr, gamtot3_ptr
 
       if(present(interp_shift)) then
+
           if(interp_shift == 'l') then
-              gamtot_tdep_ptr => gamtot_left
+
+              kperp2_ptr%new => kperp2_left
+              aj0_ptr%new => aj0_left
+              aj1_ptr%new => aj1_left
+              gamtot_ptr%new => gamtot_left
+              gamtot1_ptr%new => gamtot1_left
+              gamtot2_ptr%new => gamtot2_left
+              gamtot3_ptr%new => gamtot3_left
+
           else if(interp_shift == 'r') then
-              gamtot_tdep_ptr => gamtot_right
+
+              kperp2_ptr%new => kperp2_right
+              aj0_ptr%new => aj0_right
+              aj1_ptr%new => aj1_right
+              gamtot_ptr%new => gamtot_right
+              gamtot1_ptr%new => gamtot1_right
+              gamtot2_ptr%new => gamtot2_right
+              gamtot3_ptr%new => gamtot3_right
+
           end if
-          ! NDCDEL
-          write(*,*) 'HEEEEEY  :',gamtot_tdep_ptr(-ntgrid,1,1)
-          ! endNDCDEL
+
+      else
+
+          ! new
+          kperp2_ptr%new => kperp2_tdep%new
+          aj0_ptr%new => aj0_tdep%new
+          aj1_ptr%new => aj1_tdep%new
+          gamtot_ptr%new => gamtot_tdep%new
+          gamtot1_ptr%new => gamtot1_tdep%new
+          gamtot2_ptr%new => gamtot2_tdep%new
+          gamtot3_ptr%new => gamtot3_tdep%new
+          ! old
+          kperp2_ptr%old => kperp2_tdep%old
+          aj0_ptr%old => aj0_tdep%old
+          aj1_ptr%old => aj1_tdep%old
+          gamtot_ptr%old => gamtot_tdep%old
+          gamtot1_ptr%old => gamtot1_tdep%old
+          gamtot2_ptr%old => gamtot2_tdep%old
+          gamtot3_ptr%old => gamtot3_tdep%old
+
       end if
       
       ! First gamtot
-      ! First old
-      do iglo = g_lo%llim_proc, g_lo%ulim_proc
-          ie = ie_idx(g_lo,iglo)
-          is = is_idx(g_lo,iglo)
-          do isgn = 1,2
-              g0(:,isgn,iglo) = (1.0 - aj0_tdep%old(:,iglo)**2)*anon(ie)
+      ! First old (not needed if we are computing interpolation matrices)
+      if(.not. present(interp_shift)) then
+
+          do iglo = g_lo%llim_proc, g_lo%ulim_proc
+              ie = ie_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
+              do isgn = 1,2
+                  g0(:,isgn,iglo) = (1.0 - aj0_ptr%old(:,iglo)**2)*anon(ie)
+              end do
           end do
-      end do
-      wgt = spec%z*spec%z*spec%dens/spec%temp
-      call integrate_species (g0, wgt, tot)
-      gamtot_tdep%old = real(tot) + kperp2_tdep%old*poisfac
+          wgt = spec%z*spec%z*spec%dens/spec%temp
+          call integrate_species (g0, wgt, tot)
+          gamtot_ptr%old = real(tot) + kperp2_ptr%old*poisfac
+          
+      end if
       
       ! Then new
       do iglo = g_lo%llim_proc, g_lo%ulim_proc
           ie = ie_idx(g_lo,iglo)
           is = is_idx(g_lo,iglo)
           do isgn = 1,2
-              g0(:,isgn,iglo) = (1.0 - aj0_tdep%new(:,iglo)**2)*anon(ie)
+              g0(:,isgn,iglo) = (1.0 - aj0_ptr%new(:,iglo)**2)*anon(ie)
           end do
       end do
       wgt = spec%z*spec%z*spec%dens/spec%temp
       call integrate_species (g0, wgt, tot)
-      gamtot_tdep%new = real(tot) + kperp2_tdep%new*poisfac
+      gamtot_ptr%new = real(tot) + kperp2_ptr%new*poisfac
       
       ! NDCQUEST: are gamtot1 & gamtot2 needed when fbpar=0 ?
       if(fbpar>0.) then
           
           ! Then gamtot1
-          ! First old
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              ie = ie_idx(g_lo,iglo)
-              is = is_idx(g_lo,iglo)
-              do isgn = 1,2
-                  g0(:,isgn,iglo) = aj0_tdep%old(:,iglo)*aj1_tdep%old(:,iglo) &
-                       *2.0*vperp2(:,iglo)*anon(ie)
+          ! First old (not needed if we are computing interpolation matrices)
+          if(.not. present(interp_shift)) then
+
+              do iglo = g_lo%llim_proc, g_lo%ulim_proc
+                  ie = ie_idx(g_lo,iglo)
+                  is = is_idx(g_lo,iglo)
+                  do isgn = 1,2
+                      g0(:,isgn,iglo) = aj0_ptr%old(:,iglo)*aj1_ptr%old(:,iglo) &
+                           *2.0*vperp2(:,iglo)*anon(ie)
+                  end do
               end do
-          end do
-          wgt = spec%z*spec%dens
-          call integrate_species (g0, wgt, tot)
-          gamtot1_tdep%old = real(tot)
+              wgt = spec%z*spec%dens
+              call integrate_species (g0, wgt, tot)
+              gamtot1_ptr%old = real(tot)
+
+          end if
 
           ! Then new
           do iglo = g_lo%llim_proc, g_lo%ulim_proc
               ie = ie_idx(g_lo,iglo)
               is = is_idx(g_lo,iglo)
               do isgn = 1,2
-                  g0(:,isgn,iglo) = aj0_tdep%new(:,iglo)*aj1_tdep%new(:,iglo) &
+                  g0(:,isgn,iglo) = aj0_ptr%new(:,iglo)*aj1_ptr%new(:,iglo) &
                        *2.0*vperp2(:,iglo)*anon(ie)
               end do
           end do
           wgt = spec%z*spec%dens
           call integrate_species (g0, wgt, tot)
-          gamtot1_tdep%new = real(tot)
+          gamtot1_ptr%new = real(tot)
 
           ! Then gamtot2
-          ! First old
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              ie = ie_idx(g_lo,iglo)
-              is = is_idx(g_lo,iglo)
-              do isgn = 1, 2
-                  g0(:,isgn,iglo) = aj1_tdep%old(:,iglo)**2*2.0*vperp2(:,iglo)**2*anon(ie)
+          ! First old (not needed if we are computing interpolation matrices)
+          if(.not. present(interp_shift)) then
+
+              do iglo = g_lo%llim_proc, g_lo%ulim_proc
+                  ie = ie_idx(g_lo,iglo)
+                  is = is_idx(g_lo,iglo)
+                  do isgn = 1, 2
+                      g0(:,isgn,iglo) = aj1_ptr%old(:,iglo)**2*2.0*vperp2(:,iglo)**2*anon(ie)
+                  end do
               end do
-          end do
-          wgt = spec%temp*spec%dens
-          call integrate_species (g0, wgt, tot)
-          gamtot2_tdep%old = real(tot)
+              wgt = spec%temp*spec%dens
+              call integrate_species (g0, wgt, tot)
+              gamtot2_ptr%old = real(tot)
+
+          end if
 
           ! Then new
           do iglo = g_lo%llim_proc, g_lo%ulim_proc
               ie = ie_idx(g_lo,iglo)
               is = is_idx(g_lo,iglo)
               do isgn = 1, 2
-                  g0(:,isgn,iglo) = aj1_tdep%new(:,iglo)**2*2.0*vperp2(:,iglo)**2*anon(ie)
+                  g0(:,isgn,iglo) = aj1_ptr%new(:,iglo)**2*2.0*vperp2(:,iglo)**2*anon(ie)
               end do
           end do
           wgt = spec%temp*spec%dens
           call integrate_species (g0, wgt, tot)
-          gamtot2_tdep%new = real(tot)
+          gamtot2_ptr%new = real(tot)
 
       end if
 
       ! Adiabatic electrons
-      ! NDCQUEST: flow shear algo only supports adiabatic_option_fieldlineavg (iphi00=2)
       if (.not. has_electron_species(spec)) then
-          if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
-              ! First old
-              gamtot_tdep%old = gamtot_tdep%old + tite
-              gamtot3_tdep%old = (gamtot_tdep%old-tite) / gamtot_tdep%old
-              where (gamtot3_tdep%old < 2.*epsilon(0.0)) gamtot3_tdep%old = 1.0
+
+          if (adiabatic_option_switch == adiabatic_option_yavg) then
+
+              ! First old (not needed if we are computing interpolation matrices)
+              if(.not. present(interp_shift)) then
+                  do ik = 1, naky
+                     if (aky(ik) > epsilon(0.0)) then
+                         gamtot_ptr%old(:,:,ik) = gamtot_ptr%old(:,:,ik) + tite
+                     end if
+                  end do
+              end if
 
               ! Then new
-              gamtot_tdep%new = gamtot_tdep%new + tite
-              gamtot3_tdep%new = (gamtot_tdep%new-tite) / gamtot_tdep%new
-              where (gamtot3_tdep%new < 2.*epsilon(0.0)) gamtot3_tdep%new = 1.0
+              do ik = 1, naky
+                 if (aky(ik) > epsilon(0.0)) then
+                     gamtot_ptr%new(:,:,ik) = gamtot_ptr%new(:,:,ik) + tite
+                 end if
+              end do
+
+          else if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
+
+              ! First old (not needed if we are computing interpolation matrices)
+              if(.not. present(interp_shift)) then
+                  gamtot_ptr%old = gamtot_ptr%old + tite
+                  gamtot3_ptr%old = (gamtot_ptr%old-tite) / gamtot_ptr%old
+                  where (gamtot3_ptr%old < 2.*epsilon(0.0)) gamtot3_ptr%old = 1.0
+              end if
+
+              ! Then new
+              gamtot_ptr%new = gamtot_ptr%new + tite
+              gamtot3_ptr%new = (gamtot_ptr%new-tite) / gamtot_ptr%new
+              where (gamtot3_ptr%new < 2.*epsilon(0.0)) gamtot3_ptr%new = 1.0
           end if
+
       end if
+
+      ! Disassociate pointers
+      nullify(kperp2_ptr%new,aj0_ptr%new,aj1_ptr%new,gamtot_ptr%new,gamtot1_ptr%new,gamtot2_ptr%new,gamtot3_ptr%new)
+      nullify(kperp2_ptr%old,aj0_ptr%old,aj1_ptr%old,gamtot_ptr%old,gamtot1_ptr%old,gamtot2_ptr%old,gamtot3_ptr%old)
 
   end subroutine update_gamtots_tdep
 

@@ -874,10 +874,6 @@ contains
            allocate(aj0_left(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
            allocate(aj1_left(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
            allocate(gamtot_left(-ntgrid:ntgrid,ntheta0,naky))
-           ! NDCDEL
-           gamtot_left = 0.0
-           gamtot_left(-ntgrid,1,1) = 1.0
-           ! endNDCDEL
            ! NDCQUEST : do we need t-dep versions of gamtot1,2 in electrostatic cases ?
            allocate(gamtot1_left(-ntgrid:ntgrid,ntheta0,naky))
            allocate(gamtot2_left(-ntgrid:ntgrid,ntheta0,naky))
@@ -906,18 +902,7 @@ contains
            call update_bessel_tdep
            aj0_left = aj0_tdep%new
            aj1_left = aj1_tdep%new
-           ! NDCDEL
            call update_gamtots_tdep('l')
-           !call update_gamtots_tdep ! ORIG
-           ! endNDCDEL
-           gamtot_left = gamtot_tdep%new
-           gamtot1_left = gamtot1_tdep%new
-           gamtot2_left = gamtot2_tdep%new
-           if(.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) then
-               if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
-                   gamtot3_left = gamtot3_tdep%new
-               end if
-           end if
            if(implicit_flowshear) then
                call compute_a_b_r_ainv(a,b,r_left,ainv_left)
            end if
@@ -950,15 +935,7 @@ contains
            call update_bessel_tdep
            aj0_right = aj0_tdep%new
            aj1_right = aj1_tdep%new
-           call update_gamtots_tdep
-           gamtot_right = gamtot_tdep%new
-           gamtot1_right = gamtot1_tdep%new
-           gamtot2_right = gamtot2_tdep%new
-           if(.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) then
-               if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
-                   gamtot3_right = gamtot3_tdep%new
-               end if
-           end if
+           call update_gamtots_tdep('r')
            if(implicit_flowshear) then
                call compute_a_b_r_ainv(a,b,r_right,ainv_right)
            end if
