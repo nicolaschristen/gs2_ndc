@@ -442,10 +442,10 @@ contains
         gamtot, getan, & ! NDCTESTmichael
         expflowopt, expflowopt_none, expflowopt_felix, expflowopt_antot_old, expflowopt_antot_tdep_old, & ! NDCTESTmichael
         expflowopt_antot_new, expflowopt_antot_tdep_new ! NDCTESTmichael
-    use dist_fn, only: first_gk_solve, compute_a_b_r_ainv ! NDCTESTneighb
+    use dist_fn, only: first_gk_solve, compute_a_b_r_ainv
     use dist_fn_arrays, only: g, gnew, kx_shift, theta0_shift, &
         gamtot_tdep, & ! NDCTESTmichael
-        a, b, r, ainv ! NDCTESTneighb
+        a, b, r, ainv
     use unit_tests, only: debug_message
     use mp, only: iproc
     use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear, &
@@ -895,13 +895,8 @@ contains
                ainv_left = 0.0
            end if
            
-           kx_shift = -0.5*dkx
-           
-           call update_kperp2_tdep
-           kperp2_left = kperp2_tdep%new
-           call update_bessel_tdep
-           aj0_left = aj0_tdep%new
-           aj1_left = aj1_tdep%new
+           call update_kperp2_tdep('l')
+           call update_bessel_tdep('l')
            call update_gamtots_tdep('l')
            if(implicit_flowshear) then
                call compute_a_b_r_ainv(a,b,r_left,ainv_left)
@@ -928,13 +923,8 @@ contains
                allocate(ainv_right(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
            end if
 
-           kx_shift = 0.5*dkx
-
-           call update_kperp2_tdep
-           kperp2_right = kperp2_tdep%new
-           call update_bessel_tdep
-           aj0_right = aj0_tdep%new
-           aj1_right = aj1_tdep%new
+           call update_kperp2_tdep('r')
+           call update_bessel_tdep('r')
            call update_gamtots_tdep('r')
            if(implicit_flowshear) then
                call compute_a_b_r_ainv(a,b,r_right,ainv_right)

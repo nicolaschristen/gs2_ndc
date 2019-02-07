@@ -1829,58 +1829,133 @@ contains
   end subroutine init_bessel
         
   ! Updating time-dependent kperp2 for cases with flow-shear -- NDC 02/2018
-  subroutine update_kperp2_tdep
+  subroutine update_kperp2_tdep(interp_shift)
       
       use theta_grid, only: ntgrid, gds21, gds22, shat
-      use kt_grids, only: akx, aky, theta0, naky, ntheta0, kperp2, kperp2_tdep
-      use dist_fn_arrays, only: kx_shift, kx_shift_old
+      use kt_grids, only: akx, aky, theta0, naky, ntheta0, kperp2, kperp2_tdep, &
+          kperp2_tdep_ptr_type
+      use dist_fn_arrays, only: kx_shift, kx_shift_old, kperp2_left, kperp2_right
       
       implicit none
 
+      character, intent(in), optional :: interp_shift
       integer :: ik, it
+      type(kperp2_tdep_ptr_type) :: kperp2_ptr
+      real, dimension(naky) :: kx_shift_loc
+      real :: dkx = 0.0
 
+      if(present(interp_shift)) then
+          dkx = (akx(2) - akx(1))
+          if(interp_shift == 'l') then
+              ! Shift kx's by -dkx/2
+              kx_shift_loc = -0.5*dkx
+              kperp2_ptr%new => kperp2_left
+          else if(interp_shift == 'r') then
+              ! Shift kx's by +dkx/2
+              kx_shift_loc = 0.5*dkx
+              kperp2_ptr%new => kperp2_right
+          end if
+      else
+          kx_shift_loc = kx_shift
+          ! new
+          kperp2_ptr%new => kperp2_tdep%new
+          ! old
+          kperp2_ptr%old => kperp2_tdep%old
+      end if
+
+      ! First old (not needed if we are computing interpolation matrices)
+      if(.not. present(interp_shift)) then
+          do ik = 1, naky
+              ! flowshear has no effect on kperp if ky==0
+              if (aky(ik) /= 0.0) then
+                  do it = 1, ntheta0
+                      kperp2_ptr%old(:,it,ik) = kperp2(:,it,ik) + &
+                          kx_shift_old(ik)*kx_shift_old(ik)*gds22/(shat*shat) + &
+                          2.0*kx_shift_old(ik)*aky(ik)*gds21/shat + &
+                          2.0*kx_shift_old(ik)*akx(it)*gds22/(shat*shat)
+                  end do
+              end if
+          end do
+      end if
+
+      ! Then new
       do ik = 1, naky
-          
           ! flowshear has no effect on kperp if ky==0
           if (aky(ik) /= 0.0) then
-
               do it = 1, ntheta0
-
-                  ! First old
-                  kperp2_tdep%old(:,it,ik) = kperp2(:,it,ik) + &
-                      kx_shift_old(ik)*kx_shift_old(ik)*gds22/(shat*shat) + &
-                      2.0*kx_shift_old(ik)*aky(ik)*gds21/shat + &
-                      2.0*kx_shift_old(ik)*akx(it)*gds22/(shat*shat)
-
-                  ! Then new
-                  kperp2_tdep%new(:,it,ik) = kperp2(:,it,ik) + &
-                      kx_shift(ik)*kx_shift(ik)*gds22/(shat*shat) + &
-                      2.0*kx_shift(ik)*aky(ik)*gds21/shat + &
-                      2.0*kx_shift(ik)*theta0(it,ik)*aky(ik)*gds22/shat
-              
+                  kperp2_ptr%new(:,it,ik) = kperp2(:,it,ik) + &
+                      kx_shift_loc(ik)*kx_shift_loc(ik)*gds22/(shat*shat) + &
+                      2.0*kx_shift_loc(ik)*aky(ik)*gds21/shat + &
+                      2.0*kx_shift_loc(ik)*theta0(it,ik)*aky(ik)*gds22/shat
               end do
-
           end if
-
       end do
+
+      nullify(kperp2_ptr%new, kperp2_ptr%old)
+
   end subroutine update_kperp2_tdep
 
   ! Updating time-dependent bessel funcs for cases with flow-shear -- NDC 11/2018
-  subroutine update_bessel_tdep
+  subroutine update_bessel_tdep(interp_shift)
       
-      use kt_grids, only: kperp2_tdep, aky
+      use kt_grids, only: kperp2_tdep, aky, kperp2_tdep_ptr_type
       use species, only: spec
       use theta_grid, only: ntgrid, bmag
       use le_grids, only: energy, al
       use gs2_layouts, only: g_lo, ik_idx, it_idx, il_idx, ie_idx, is_idx
       use spfunc, only: j0, j1
-      use dist_fn_arrays, only: aj0_tdep, aj1_tdep
+      use dist_fn_arrays, only: bessel_tdep_ptr_type, &
+          aj0_tdep, aj1_tdep, &
+          aj0_left, aj1_left, kperp2_left, &
+          aj0_right, aj1_right, kperp2_right
       use run_parameters, only: fbpar
       
       implicit none
 
+      character, intent(in), optional :: interp_shift
       integer :: iglo, ik, it, il, ie, is, ig
       real :: arg
+      type(kperp2_tdep_ptr_type) :: kperp2_ptr
+      type(bessel_tdep_ptr_type) :: aj0_ptr, aj1_ptr
+
+      if(present(interp_shift)) then
+
+          if(interp_shift == 'l') then
+
+              ! new
+              kperp2_ptr%new => kperp2_left
+              aj0_ptr%new => aj0_left
+              aj1_ptr%new => aj1_left
+              ! old (changes to old quantities are irrelevant, but make code below faster)
+              kperp2_ptr%old => kperp2_tdep%old
+              aj0_ptr%old => aj0_tdep%old
+              aj1_ptr%old => aj1_tdep%old
+
+          else if(interp_shift == 'r') then
+
+              ! new
+              kperp2_ptr%new => kperp2_right
+              aj0_ptr%new => aj0_right
+              aj1_ptr%new => aj1_right
+              ! old (changes to old quantities are irrelevant, but make code below faster)
+              kperp2_ptr%old => kperp2_tdep%old
+              aj0_ptr%old => aj0_tdep%old
+              aj1_ptr%old => aj1_tdep%old
+
+          end if
+
+      else
+
+          ! new
+          kperp2_ptr%new => kperp2_tdep%new
+          aj0_ptr%new => aj0_tdep%new
+          aj1_ptr%new => aj1_tdep%new
+          ! old
+          kperp2_ptr%old => kperp2_tdep%old
+          aj0_ptr%old => aj0_tdep%old
+          aj1_ptr%old => aj1_tdep%old
+
+      end if
 
       ! First aj0
       do iglo = g_lo%llim_proc, g_lo%ulim_alloc
@@ -1897,12 +1972,12 @@ contains
               do ig = -ntgrid, ntgrid
 
                   ! First old
-                  arg = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ig)*kperp2_tdep%old(ig,it,ik))
-                  aj0_tdep%old(ig,iglo) = j0(arg)
+                  arg = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ig)*kperp2_ptr%old(ig,it,ik))
+                  aj0_ptr%old(ig,iglo) = j0(arg)
 
                   ! Then new
-                  arg = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ig)*kperp2_tdep%new(ig,it,ik))
-                  aj0_tdep%new(ig,iglo) = j0(arg)
+                  arg = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ig)*kperp2_ptr%new(ig,it,ik))
+                  aj0_ptr%new(ig,iglo) = j0(arg)
               
               end do
 
@@ -1912,7 +1987,7 @@ contains
 
       ! Then aj1
       ! NDCQUEST: do we need aj1 if fbpar=0 ?
-      if(fbpar>0.) then
+      if(fbpar > 0.) then
 
           do iglo = g_lo%llim_proc, g_lo%ulim_alloc
               
@@ -1928,12 +2003,12 @@ contains
                   do ig = -ntgrid, ntgrid
 
                       ! First old
-                      arg = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ig)*kperp2_tdep%old(ig,it,ik))
-                      aj1_tdep%old(ig,iglo) = j1(arg)
+                      arg = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ig)*kperp2_ptr%old(ig,it,ik))
+                      aj1_ptr%old(ig,iglo) = j1(arg)
 
                       ! Then new
-                      arg = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ig)*kperp2_tdep%new(ig,it,ik))
-                      aj1_tdep%new(ig,iglo) = j1(arg)
+                      arg = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ig)*kperp2_ptr%new(ig,it,ik))
+                      aj1_ptr%new(ig,iglo) = j1(arg)
                   
                   end do
 
@@ -1942,6 +2017,11 @@ contains
           end do
 
       end if
+
+      ! Disassociate pointers
+      nullify(kperp2_ptr%new,aj0_ptr%new,aj1_ptr%new)
+      nullify(kperp2_ptr%old,aj0_ptr%old,aj1_ptr%old)
+
   end subroutine update_bessel_tdep
 
   subroutine init_invert_rhs
