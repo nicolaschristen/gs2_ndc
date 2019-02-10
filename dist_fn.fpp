@@ -6875,7 +6875,8 @@ endif
     use run_parameters, only: fbpar, fphi
     use species, only: spec
     use spfunc, only: j0, j1
-    use kt_grids, only: naky, kperp2_ptr, ntheta0
+    use kt_grids, only: naky, kperp2_ptr, ntheta0, &
+        explicit_flowshear ! NDCTEST_explicit
     use fields_arrays, only: phistar_old
 
     implicit none
