@@ -438,14 +438,14 @@ contains
     use fields_arrays, only: apar_ext
     use antenna, only: antenna_amplitudes, no_driver
     use dist_fn, only: timeadv, exb_shear, collisions_advance, &
-        update_kperp2_tdep, update_bessel_tdep, update_gamtots_tdep, &
+        update_kperp2_tdep, update_bessel_tdep, update_gamtots_tdep, update_kx_tdep, &
         gamtot, getan, & ! NDCTESTmichael
         expflowopt, expflowopt_none, expflowopt_felix, expflowopt_antot_old, expflowopt_antot_tdep_old, & ! NDCTESTmichael
-        expflowopt_antot_new, expflowopt_antot_tdep_new ! NDCTESTmichael
+        expflowopt_antot_new, expflowopt_antot_tdep_new, & ! NDCTESTmichael
+        shift_ptr_to_tdep, shift_ptr_from_tdep ! NDCTEST_nl_vs_lin
     use dist_fn, only: first_gk_solve, compute_a_b_r_ainv
     use dist_fn_arrays, only: g, gnew, kx_shift, theta0_shift, &
-        gamtot_tdep, & ! NDCTESTmichael
-        a, b, r, ainv
+        gamtot_tdep ! NDCTESTmichael
     use unit_tests, only: debug_message
     use mp, only: iproc
     use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear, &
@@ -488,20 +488,24 @@ contains
     ! NDCTEST_nl_vs_lin: delete last case
     if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
         
+        call update_kx_tdep
         call update_kperp2_tdep
         call update_bessel_tdep
         call update_gamtots_tdep
 
     elseif(apply_flowshear_nonlin) then
 
+        call shift_ptr_to_tdep
+        call update_kx_tdep
         call update_kperp2_tdep
         call update_bessel_tdep
+        call shift_ptr_from_tdep
         
     end if
 
     if(implicit_flowshear) then
         
-        call compute_a_b_r_ainv(a,b,r,ainv) ! NDCTESTneighb
+        call compute_a_b_r_ainv ! NDCTESTneighb
         
     end if
 
@@ -776,15 +780,14 @@ contains
         phistar_old
     use theta_grid, only: ntgrid
     use kt_grids, only: naky, ntheta0, implicit_flowshear, mixed_flowshear, interp_before, &
-        explicit_flowshear, akx, kperp2_tdep
+        explicit_flowshear, akx, kperp2_tdep, kperp2_ptr, kperp2_left, kperp2_right
     use dist_fn_arrays, only: g, kx_shift, &
-        a, b, r, ainv
-    use dist_fn_arrays, only: aj0_tdep, aj1_tdep, &
+        r, r_ptr, r_left, r_right, ainv, ainv_ptr, ainv_left, ainv_right
+    use dist_fn_arrays, only: aj0_tdep, aj1_tdep, aj0_left, aj1_left, aj0_right, aj1_right, aj0_ptr, aj1_ptr, &
         gamtot_tdep, gamtot1_tdep, gamtot2_tdep, gamtot3_tdep, &
-        kperp2_left, aj0_left, aj1_left, &
-        gamtot_left, gamtot1_left, gamtot2_left, gamtot3_left, r_left, ainv_left, &
-        kperp2_right, aj0_right, aj1_right, &
-        gamtot_right, gamtot1_right, gamtot2_right, gamtot3_right, r_right, ainv_right
+        gamtot_ptr, gamtot1_ptr, gamtot2_ptr, gamtot3_ptr, &
+        gamtot_left, gamtot1_left, gamtot2_left, gamtot3_left, &
+        gamtot_right, gamtot1_right, gamtot2_right, gamtot3_right
     use dist_fn, only: M_class, N_class, i_class, &
         update_kperp2_tdep, update_bessel_tdep, update_gamtots_tdep, compute_a_b_r_ainv, &
         for_interp_left, for_interp_right, &
@@ -803,6 +806,7 @@ contains
     logical :: tadv_for_interp
     real, dimension(naky) :: kx_shift_stored
     logical :: michael_exp = .true.
+    logical :: skip_old = .true.
 
     call prof_entering ("init_response_matrix", "fields_implicit")
 
@@ -875,8 +879,15 @@ contains
            allocate(aj1_left(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
            allocate(gamtot_left(-ntgrid:ntgrid,ntheta0,naky))
            ! NDCQUEST : do we need t-dep versions of gamtot1,2 in electrostatic cases ?
-           allocate(gamtot1_left(-ntgrid:ntgrid,ntheta0,naky))
-           allocate(gamtot2_left(-ntgrid:ntgrid,ntheta0,naky))
+           if(fbpar>0.) then
+               allocate(gamtot1_left(-ntgrid:ntgrid,ntheta0,naky))
+               allocate(gamtot2_left(-ntgrid:ntgrid,ntheta0,naky))
+           else
+               allocate(gamtot1_left(1,1,1))
+               gamtot1_left = 0.0
+               allocate(gamtot2_left(1,1,1))
+               gamtot2_left = 0.0
+           end if
            if(.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) then
                if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
                    allocate(gamtot3_left(-ntgrid:ntgrid,ntheta0,naky))
@@ -884,6 +895,9 @@ contains
                    allocate(gamtot3_left(1,1,1))
                    gamtot3_left = 0.0
                end if
+           else
+               allocate(gamtot3_left(1,1,1))
+               gamtot3_left = 0.0
            end if
            if(implicit_flowshear) then
                allocate(r_left(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
@@ -894,12 +908,22 @@ contains
                allocate(ainv_left(1,1,1))
                ainv_left = 0.0
            end if
-           
-           call update_kperp2_tdep('l')
-           call update_bessel_tdep('l')
-           call update_gamtots_tdep('l')
+
+           kx_shift = -0.5*dkx
+           kperp2_ptr%new => kperp2_left
+           aj0_ptr%new => aj0_left
+           aj1_ptr%new => aj1_left
+           gamtot_ptr%new => gamtot_left
+           gamtot1_ptr%new => gamtot1_left
+           gamtot2_ptr%new => gamtot2_left
+           gamtot3_ptr%new => gamtot3_left
+           call update_kperp2_tdep(skip_old)
+           call update_bessel_tdep(skip_old)
+           call update_gamtots_tdep(skip_old)
            if(implicit_flowshear) then
-               call compute_a_b_r_ainv(a,b,r_left,ainv_left)
+               r_ptr => r_left
+               ainv_ptr => ainv_left
+               call compute_a_b_r_ainv
            end if
 
            ! Flow shear, interpolation of am matrix:
@@ -911,23 +935,51 @@ contains
            allocate(aj0_right(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
            allocate(aj1_right(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
            allocate(gamtot_right(-ntgrid:ntgrid,ntheta0,naky))
-           allocate(gamtot1_right(-ntgrid:ntgrid,ntheta0,naky))
-           allocate(gamtot2_right(-ntgrid:ntgrid,ntheta0,naky))
+           if(fbpar>0.) then
+               allocate(gamtot1_right(-ntgrid:ntgrid,ntheta0,naky))
+               allocate(gamtot2_right(-ntgrid:ntgrid,ntheta0,naky))
+           else
+               allocate(gamtot1_right(1,1,1))
+               gamtot1_right = 0.0
+               allocate(gamtot2_right(1,1,1))
+               gamtot2_right = 0.0
+           end if
            if(.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) then
                if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
                    allocate(gamtot3_right(-ntgrid:ntgrid,ntheta0,naky))
+               else
+                   allocate(gamtot3_right(1,1,1))
+                   gamtot3_right = 0.0
                end if
+           else
+               allocate(gamtot3_right(1,1,1))
+               gamtot3_right = 0.0
            end if
            if(implicit_flowshear) then
                allocate(r_right(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
                allocate(ainv_right(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+           else
+               allocate(r_right(1,1,1))
+               r_right = 0.0
+               allocate(ainv_right(1,1,1))
+               ainv_right = 0.0
            end if
 
-           call update_kperp2_tdep('r')
-           call update_bessel_tdep('r')
-           call update_gamtots_tdep('r')
+           kx_shift = 0.5*dkx
+           kperp2_ptr%new => kperp2_right
+           aj0_ptr%new => aj0_right
+           aj1_ptr%new => aj1_right
+           gamtot_ptr%new => gamtot_right
+           gamtot1_ptr%new => gamtot1_right
+           gamtot2_ptr%new => gamtot2_right
+           gamtot3_ptr%new => gamtot3_right
+           call update_kperp2_tdep(skip_old)
+           call update_bessel_tdep(skip_old)
+           call update_gamtots_tdep(skip_old)
            if(implicit_flowshear) then
-               call compute_a_b_r_ainv(a,b,r_right,ainv_right)
+               r_ptr => r_right
+               ainv_ptr => ainv_right
+               call compute_a_b_r_ainv
            end if
 
            ! Flow shear, interpolation of am matrix:
@@ -935,11 +987,20 @@ contains
            ! use it to compute corresponding kperp Bessel funcs, gamtots.
            ! NDC 11/2018
            kx_shift = 0.
-           call update_kperp2_tdep
-           call update_bessel_tdep
-           call update_gamtots_tdep
+           kperp2_ptr%new => kperp2_tdep%new
+           aj0_ptr%new => aj0_tdep%new
+           aj1_ptr%new => aj1_tdep%new
+           gamtot_ptr%new => gamtot_tdep%new
+           gamtot1_ptr%new => gamtot1_tdep%new
+           gamtot2_ptr%new => gamtot2_tdep%new
+           gamtot3_ptr%new => gamtot3_tdep%new
+           call update_kperp2_tdep(skip_old)
+           call update_bessel_tdep(skip_old)
+           call update_gamtots_tdep(skip_old)
            if(implicit_flowshear) then
-               call compute_a_b_r_ainv(a,b,r,ainv)
+               r_ptr => r
+               ainv_ptr => ainv
+               call compute_a_b_r_ainv
            end if
        end if
 
@@ -1014,7 +1075,7 @@ contains
           aparnew = 0.0
           bparnew = 0.0
 
-          if(mixed_flowshear .or. explicit_flowshear) then
+          if((mixed_flowshear .or. explicit_flowshear) .and. fbpar>0.) then
               aparold = 0.
           end if
 
@@ -1263,11 +1324,11 @@ contains
            
            ! Restore time dependent quantities from before matrix computation
            kx_shift = kx_shift_stored
-           call update_kperp2_tdep
-           call update_bessel_tdep
-           call update_gamtots_tdep
+           call update_kperp2_tdep(skip_old)
+           call update_bessel_tdep(skip_old)
+           call update_gamtots_tdep(skip_old)
            if(implicit_flowshear) then
-               call compute_a_b_r_ainv(a,b,r,ainv)
+               call compute_a_b_r_ainv
            end if
 
        end if
@@ -1283,7 +1344,8 @@ contains
     use fields_arrays, only: phi, apar, bpar, phinew, aparnew, bparnew
     use theta_grid, only: ntgrid
     use kt_grids, only: naky, ntheta0
-    use dist_fn, only: getfieldeq, timeadv, M_class, N_class
+    use dist_fn, only: getfieldeq, timeadv, M_class, N_class, &
+        skip_explicit_for_response
     use run_parameters, only: fphi, fapar, fbpar
     use gs2_layouts, only: f_lo, idx, idx_local
     use prof, only: prof_entering, prof_leaving
@@ -1320,7 +1382,9 @@ contains
     ! NDCTESTshift: no need to call timeadv for interpolation matrices in mixed flow-shear approach
     if(tadv) then
         
+        skip_explicit_for_response = .true.
         call timeadv (phi, apar, bpar, phinew, aparnew, bparnew, 0)
+        skip_explicit_for_response = .false.
 
     end if
 

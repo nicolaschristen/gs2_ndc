@@ -219,40 +219,22 @@ contains
 
   end subroutine init_transforms
 
-  subroutine update_flowshear_phase_fac(g_exb)
+  subroutine update_flowshear_phase_fac
       
-      use kt_grids, only: nx, naky, aky, &
-          explicit_flowshear, implicit_flowshear, mixed_flowshear, &
-          apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
-      use dist_fn_arrays, only: t_last_jump
-      use gs2_time, only: code_time
+      use kt_grids, only: nx, naky, akx, kx_ptr
       use constants, only: zi
 
       implicit none
 
-      real, intent(in) :: g_exb
       integer :: ix, ik
       
       do ix = 1, nx
           do ik = 1, naky
-              if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-                  ! NDCTESTremap_plot: transform to y**
-                  !flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*(maxval(t_last_jump)-t_last_jump(ik))*x_grid(ix))
-                  ! NDCTESTremap_plot: transform to y*
-                  !flowshear_phase_fac(ix,ik) = exp(zi*aky(ik)*g_exb*t_last_jump(ik)*x_grid(ix))
-                  ! NDCTESTremap_plot: transform to y
-                  if(apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin: remove if statement and second part
-                      flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*(code_time-t_last_jump(ik))*x_grid(ix))
-                  else
-                      flowshear_phase_fac(ix,ik) = 1.
-                  end if
-              else
-                  if(apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin: remove if statement and first part
-                      flowshear_phase_fac(ix,ik) = exp(-1.*zi*aky(ik)*g_exb*(code_time-t_last_jump(ik))*x_grid(ix))
-                  else
-                      flowshear_phase_fac(ix,ik) = 1.
-                  end if
-              end if
+              ! kx_ptr%old-akx = 0,            with old flow shear algo
+              !                = kx_shift_old, with new flow shear algo
+              ! NDC 02/2019
+              ! NDCTEST_nl_vs_lin: =kx_shift_old when apply_flowshear_nonlin is true, =0 if false.
+              flowshear_phase_fac(ix,ik) = exp(zi*(kx_ptr%old(1,ik)-akx(1))*x_grid(ix))
           end do
       end do
 

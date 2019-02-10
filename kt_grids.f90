@@ -912,17 +912,25 @@ module kt_grids
   public :: gridopt_single, gridopt_range, gridopt_specified, gridopt_box
   public :: kwork_filter, kperp2
   public :: gryfx
+
   public :: explicit_flowshear
   public :: implicit_flowshear
   public :: mixed_flowshear
-  public :: apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
+  public :: apply_flowshear_nonlin
   public :: interp_before ! NDCTEST
-  public :: kperp2_tdep
-  public :: kperp2_tdep_ptr_type
   public :: remap_gexp
+
+  public :: akx_extended
+  public :: kx_tdep
+  public :: kx_ptr
+
+  public :: kperp2_tdep
+  public :: kperp2_ptr
+  public :: kperp2_tdep_ptr_type
+  public :: kperp2_left, kperp2_right
   
   logical, dimension(:,:), allocatable :: kwork_filter
-  real, dimension (:,:,:), allocatable :: kperp2
+  real, dimension (:,:,:), allocatable, target :: kperp2
   real, dimension (:,:), allocatable :: theta0
   real, dimension (:), allocatable :: aky, akx
   integer, dimension(:), allocatable :: ikx, iky
@@ -935,6 +943,20 @@ module kt_grids
   logical :: apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
   logical :: interp_before ! NDCTEST
   logical :: remap_gexp
+  real, dimension(:,:), allocatable, target :: akx_extended
+
+  type :: kx_tdep_type
+    real, dimension(:,:), allocatable :: old
+    real, dimension(:,:), allocatable :: new
+  end type kx_tdep_type
+
+  type :: kx_tdep_ptr_type
+    real, dimension(:,:), pointer :: old
+    real, dimension(:,:), pointer :: new
+  end type kx_tdep_ptr_type
+
+  type(kx_tdep_type), target :: kx_tdep
+  type(kx_tdep_ptr_type) :: kx_ptr
 
   type :: kperp2_tdep_type
     real, dimension(:,:,:), allocatable :: old
@@ -947,6 +969,8 @@ module kt_grids
   end type kperp2_tdep_ptr_type
 
   type(kperp2_tdep_type), target :: kperp2_tdep
+  type(kperp2_tdep_ptr_type) :: kperp2_ptr
+  real, dimension(:,:,:), allocatable, target :: kperp2_left, kperp2_right
 
   namelist /kt_grids_knobs/ grid_option
 
@@ -1084,6 +1108,7 @@ contains
     call broadcast (interp_before) ! NDCTEST_before
     call broadcast (remap_gexp)
     
+    call init_kx_tdep
     call init_kperp2
   end subroutine init_kt_grids
 
@@ -1153,6 +1178,48 @@ contains
     allocate (iky(naky))
   end subroutine allocate_arrays
 
+  subroutine init_kx_tdep
+
+    implicit none
+    integer :: ik
+
+    allocate(akx_extended(ntheta0,naky))
+    do ik = 1, naky
+        akx_extended(:,ik) = akx
+    end do
+
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
+
+        allocate(kx_tdep%old(ntheta0,naky))
+        kx_tdep%old = akx_extended
+        kx_ptr%old => kx_tdep%old
+        allocate(kx_tdep%new(ntheta0,naky))
+        kx_tdep%new = akx_extended
+        kx_ptr%new => kx_tdep%new
+
+        ! NDCTEST_nl_vs_lin: remove this case
+    else if(apply_flowshear_nonlin) then
+
+        allocate(kx_tdep%old(ntheta0,naky))
+        kx_tdep%old = akx_extended
+        kx_ptr%old => akx_extended
+        allocate(kx_tdep%new(ntheta0,naky))
+        kx_tdep%new = akx_extended
+        kx_ptr%new => akx_extended
+
+    else
+
+        allocate(kx_tdep%old(1,1))
+        kx_tdep%old = 0.0
+        kx_ptr%old => akx_extended
+        allocate(kx_tdep%new(1,1))
+        kx_tdep%new = 0.0
+        kx_ptr%new => akx_extended
+
+    end if
+
+  end subroutine init_kx_tdep
+
   subroutine get_sizes
     use kt_grids_single, only: init_kt_grids_single, single_get_sizes
     use kt_grids_range, only: init_kt_grids_range, range_get_sizes
@@ -1219,18 +1286,32 @@ contains
     end do
 
     ! At t=0, kperp2_tdep = kperp2 -- NDC 11/2017
-    ! NDCTEST_nl_vs_lin: remove last arg
-    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear .or. apply_flowshear_nonlin) then
+    if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
         allocate(kperp2_tdep%old(-ntgrid:ntgrid,ntheta0,naky))
         kperp2_tdep%old = kperp2
         allocate(kperp2_tdep%new(-ntgrid:ntgrid,ntheta0,naky))
         kperp2_tdep%new = kperp2
+        ! Use pointers to reduce memory use. -- NDC 02/2019
+        kperp2_ptr%old => kperp2_tdep%old
+        kperp2_ptr%new => kperp2_tdep%new
+    ! NDCTEST_nl_vs_lin: remove this case
+    else if(apply_flowshear_nonlin) then
+        allocate(kperp2_tdep%old(-ntgrid:ntgrid,ntheta0,naky))
+        kperp2_tdep%old = kperp2
+        allocate(kperp2_tdep%new(-ntgrid:ntgrid,ntheta0,naky))
+        kperp2_tdep%new = kperp2
+        ! Use pointers to reduce memory use. -- NDC 02/2019
+        kperp2_ptr%old => kperp2
+        kperp2_ptr%new => kperp2
     else
         ! If not used, allocate small arrays to save mem. -- NDC 01/2019
         allocate(kperp2_tdep%old(1,1,1))
         kperp2_tdep%old = 0.0
         allocate(kperp2_tdep%new(1,1,1))
         kperp2_tdep%new = 0.0
+        ! Use pointers to reduce memory use. -- NDC 02/2019
+        kperp2_ptr%old => kperp2
+        kperp2_ptr%new => kperp2
     end if
 
   end subroutine init_kperp2
@@ -1243,8 +1324,12 @@ contains
     if (allocated(kwork_filter)) deallocate(kwork_filter)
     if (allocated(kperp2)) deallocate(kperp2)
 
+    if(allocated(akx_extended)) deallocate(akx_extended, kx_tdep%old, kx_tdep%new)
+    nullify(kx_ptr%old, kx_ptr%new)
+
     if(allocated(kperp2_tdep%old)) deallocate(kperp2_tdep%old)
     if(allocated(kperp2_tdep%new)) deallocate(kperp2_tdep%new)
+    nullify(kperp2_ptr%old, kperp2_ptr%new)
     
     reality = .false. ; box = .false.
     kp2init = .false.

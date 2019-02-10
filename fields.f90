@@ -478,6 +478,7 @@ contains
                allocate ( phistar_new (1,1,1)) ! NDCTESTmichaelnew
            end if
        else
+           allocate(aparold(1,1,1))
            allocate ( phistar_old (1,1,1)) ! NDCTESTmichaelnew
            allocate ( phistar_new (1,1,1)) ! NDCTESTmichaelnew
        end if
@@ -500,6 +501,7 @@ contains
     phi = 0.; phinew = 0.
     apar = 0.; aparnew = 0.
     bpar = 0.; bparnew = 0.
+    aparold = 0.
     phistar_old = 0. ! NDCTESTmichaelnew
     phistar_new = 0. ! NDCTESTmichaelnew
 

@@ -319,28 +319,26 @@ contains
     call add_nl(g1, phi, apar, bpar)
   end subroutine nonlinear_terms_unit_test_time_add_nl
 
-  subroutine add_nl (g1, phi, apar, bpar, g_exb_opt)
+  subroutine add_nl (g1, phi, apar, bpar)
     use mp, only: max_allreduce, nb_max_allreduce, iproc, nproc
     use theta_grid, only: ntgrid, kxfac
     use gs2_layouts, only: g_lo, ik_idx, it_idx
     use gs2_layouts, only: accelx_lo, yxf_lo
-    use dist_fn_arrays, only: g, g_adjust, &
-        t_last_jump, aj0_tdep, aj1_tdep
+    use dist_fn_arrays, only: g, g_adjust
     use species, only: spec
     use gs2_transforms, only: transform2, inverse2
     use run_parameters, only: fapar, fbpar, fphi, reset, immediate_reset
-    use kt_grids, only: aky, akx, &
-        explicit_flowshear, implicit_flowshear, mixed_flowshear, apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
+    use kt_grids, only: aky, kx_ptr
     use gs2_time, only: save_dt_cfl, check_time_step_too_large, code_time
     use constants, only: zi
     use unit_tests, only: debug_message
     implicit none
     complex, dimension (-ntgrid:,:,g_lo%llim_proc:), intent (out) :: g1
     complex, dimension (-ntgrid:,:,:), intent (in) :: phi, apar, bpar
-    real, intent(in), optional :: g_exb_opt
     integer :: i, j, k
     real :: dt_cfl
     integer, parameter :: verb = 4
+    logical :: adjust_old = .true.
 
     integer :: iglo, ik, it, is, ig, ia
     
@@ -371,16 +369,7 @@ contains
     
     !Form g1=i*ky*g_wesson
     g1=g
-    if(present(g_exb_opt)) then ! case with new flowshear algo -- NDC 08/18
-        if(apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin: delete this line and replace with the following one
-        !if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-            call g_adjust(g1,phi,bpar,fphi,fbpar,aj0_tdep%old,aj1_tdep%old)
-        else ! NDCTEST_nl_vs_lin: delete this section and merge above ifs
-            call g_adjust(g1,phi,bpar,fphi,fbpar)
-        end if
-    else
-        call g_adjust(g1,phi,bpar,fphi,fbpar)
-    end if
+    call g_adjust(g1,phi,bpar,fphi,fbpar,adjust_old)
     do iglo = g_lo%llim_proc, g_lo%ulim_proc
        ik = ik_idx(g_lo,iglo)
        g1(:,:,iglo)=g1(:,:,iglo)*zi*aky(ik)
@@ -445,49 +434,22 @@ contains
 
     !Form g1=i*kx*g_wesson
     g1=g
-    if(present(g_exb_opt)) then ! case with new flowshear algo -- NDC 08/18
-        if(apply_flowshear_nonlin) then ! NDCTEST_nl_vs_lin: delete this line and replace with the following one
-        !if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-            call g_adjust(g1,phi,bpar,fphi,fbpar,aj0_tdep%old,aj1_tdep%old)
-        else ! NDCTEST_nl_vs_lin: delete this section and merge above ifs
-            call g_adjust(g1,phi,bpar,fphi,fbpar)
-        end if
-    else
-        call g_adjust(g1,phi,bpar,fphi,fbpar)
-    end if
-    if(present(g_exb_opt)) then
-        if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. apply_flowshear_nonlin) then
-            do iglo = g_lo%llim_proc, g_lo%ulim_proc
-               ! Need to take derivatives at fixed x,y (not y*) so that terms taken into
-               ! account by the CFL condition are not continuously growing over time.
-               ! NDC 08/18
-               it = it_idx(g_lo,iglo)
-               ik = ik_idx(g_lo,iglo)
-               ! NB: code_time is the old time
-               g1(:,:,iglo) = g1(:,:,iglo)*zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))
-            enddo
-        else if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. .not. apply_flowshear_nonlin) then
-            ! NDCTEST_nl_vs_lin: meant for new algo with apply_flowshear_nonlin=false -> delete it
-            do iglo = g_lo%llim_proc, g_lo%ulim_proc
-               it = it_idx(g_lo,iglo)
-               ik = ik_idx(g_lo,iglo)
-               g1(:,:,iglo) = g1(:,:,iglo)*zi*akx(it)
-            enddo
-        else if(apply_flowshear_nonlin) then
-            ! NDCTEST_nl_vs_lin: meant for old algo with apply_flowshear_nonlin=true -> delete it
-            do iglo = g_lo%llim_proc, g_lo%ulim_proc
-               it = it_idx(g_lo,iglo)
-               ik = ik_idx(g_lo,iglo)
-               ! NB: code_time is the old time
-               g1(:,:,iglo) = g1(:,:,iglo)*zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))
-            enddo
-        end if
-    else
-        do iglo = g_lo%llim_proc, g_lo%ulim_proc
-           it = it_idx(g_lo,iglo)
-           g1(:,:,iglo)=g1(:,:,iglo)*zi*akx(it)
-        enddo
-    end if
+    call g_adjust(g1,phi,bpar,fphi,fbpar,adjust_old)
+    do iglo = g_lo%llim_proc, g_lo%ulim_proc
+       ! Need to take derivatives at fixed x,y (not y*) so that terms taken into
+       ! account by the CFL condition are not continuously growing over time.
+       ! NDC 08/18
+       ! kx_ptr%old = akx,                with old flow shear algo
+       !            = akx + kx_shift_old, with new flow shear algo
+       ! NDC 02/2019
+       ! NDCTEST_nl_vs_lin:
+       ! = akx + kx_shift_old, when apply_flowshear_nonlin is true
+       ! = akx,                when apply_flowshear_nonlin is false
+       ! end NDCTEST_nl_vs_lin
+       it = it_idx(g_lo,iglo)
+       ik = ik_idx(g_lo,iglo)
+       g1(:,:,iglo) = g1(:,:,iglo)*zi*kx_ptr%old(it,ik)
+    enddo
     
     !Transform to real space
     if (accelerated) then
@@ -548,6 +510,7 @@ contains
     end if
 
     ! add_nl was adding twice the actual nonlinear term --NDC 11/2017
+    ! NDCQUEST: VERIFY FACTORS OF 2 !
     g1 = 0.5*g1
 
     call debug_message(verb, &
@@ -558,113 +521,60 @@ contains
     !      allow more general cases in the future.
     subroutine load_kx_phi
 
-      use dist_fn_arrays, only: aj0
+      use dist_fn_arrays, only: aj0_ptr
       complex :: fac
 
       ! Flowshear cases: J0 has to be time dependent -- NDC 8/18
-      if(present(g_exb_opt)) then
-          ! NDCTEST_nl_vs_lin: delete last argument in if
-          if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. apply_flowshear_nonlin) then
-              do iglo = g_lo%llim_proc, g_lo%ulim_proc
-                 it = it_idx(g_lo,iglo)
-                 ik = ik_idx(g_lo,iglo)
-                 do ig = -ntgrid, ntgrid
-                    ! Need to take derivatives at fixed x,y so that terms taken into
-                    ! account by the CFL condition are not secularly growing over time.
-                    ! NB: code_time is the old time
-                    ! NDC 08/18
-                    fac = zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))*aj0_tdep%old(ig,iglo)*phi(ig,it,ik)*fphi
-                    g1(ig,1,iglo) = fac
-                    g1(ig,2,iglo) = fac
-                 end do
-              end do
-          else if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. .not. apply_flowshear_nonlin) then
-              ! NDCTEST_nl_vs_lin: this else section is meant for new algo with apply_flowshear_nonlin=false: delete it
-              do iglo = g_lo%llim_proc, g_lo%ulim_proc
-                 it = it_idx(g_lo,iglo)
-                 ik = ik_idx(g_lo,iglo)
-                 do ig = -ntgrid, ntgrid
-                    fac = zi*akx(it)*aj0(ig,iglo)*phi(ig,it,ik)*fphi
-                    g1(ig,1,iglo) = fac
-                    g1(ig,2,iglo) = fac
-                 end do
-              end do
-          else if(apply_flowshear_nonlin) then
-              ! NDCTEST_nl_vs_lin: this else section is meant for old algo with apply_flowshear_nonlin=true: delete it
-              do iglo = g_lo%llim_proc, g_lo%ulim_proc
-                 it = it_idx(g_lo,iglo)
-                 ik = ik_idx(g_lo,iglo)
-                 do ig = -ntgrid, ntgrid
-                    fac = zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))*aj0_tdep%old(ig,iglo)*phi(ig,it,ik)*fphi
-                    g1(ig,1,iglo) = fac
-                    g1(ig,2,iglo) = fac
-                 end do
-              end do
-          end if
-      else
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-             it = it_idx(g_lo,iglo)
-             ik = ik_idx(g_lo,iglo)
-             do ig = -ntgrid, ntgrid
-                fac = zi*akx(it)*aj0(ig,iglo)*phi(ig,it,ik)*fphi
-                g1(ig,1,iglo) = fac
-                g1(ig,2,iglo) = fac
-             end do
-          end do
-      end if
+      do iglo = g_lo%llim_proc, g_lo%ulim_proc
+         it = it_idx(g_lo,iglo)
+         ik = ik_idx(g_lo,iglo)
+         do ig = -ntgrid, ntgrid
+            ! Need to take derivatives at fixed x,y so that terms taken into
+            ! account by the CFL condition are not secularly growing over time.
+            ! NB: code_time is the old time
+            ! NDC 08/18
+            ! kx_ptr%old = akx,                with old flow shear algo
+            !            = akx + kx_shift_old, with new flow shear algo
+            ! aj0_ptr%old = aj0,          with old flow shear algo
+            !             = aj0_tdep%old, with new flow shear algo
+            ! NDC 02/2019
+            ! NDCTEST_nl_vs_lin: overwriting above statement with
+            ! kx_ptr%old = akx + kx_shift_old, when apply_flowshear_nonlin is true
+            !            = akx,                when apply_flowshear_nonlin is false
+            ! aj0_ptr%old = aj0_tdep%old, when apply_flowshear_nonlin is true
+            !             = aj0,          when apply_flowshear_nonlin is false
+            ! end NDCTEST_nl_vs_lin
+            fac = zi*kx_ptr%old(it,ik)*aj0_ptr%old(ig,iglo)*phi(ig,it,ik)*fphi
+            g1(ig,1,iglo) = fac
+            g1(ig,2,iglo) = fac
+         end do
+      end do
 
     end subroutine load_kx_phi
 
     subroutine load_ky_phi
 
-      use dist_fn_arrays, only: aj0
+      use dist_fn_arrays, only: aj0_ptr
       complex :: fac
 
       ! Flowshear cases: J0 has to be time dependent -- NDC 8/18
-      ! NDCTEST_nl_vs_lin: delete last arg
-      if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. apply_flowshear_nonlin) then
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-             it = it_idx(g_lo,iglo)
-             ik = ik_idx(g_lo,iglo)
-             do ig = -ntgrid, ntgrid
-                fac = zi*aky(ik)*aj0_tdep%old(ig,iglo)*phi(ig,it,ik)*fphi
-                g1(ig,1,iglo) = fac
-                g1(ig,2,iglo) = fac
-             end do
-          end do
-      else if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. .not. apply_flowshear_nonlin) then
-          ! NDCTEST_nl_vs_lin: this else section is meant for new algo with apply_flowshear_nonlin=false: delete it
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-             it = it_idx(g_lo,iglo)
-             ik = ik_idx(g_lo,iglo)
-             do ig = -ntgrid, ntgrid
-                fac = zi*aky(ik)*aj0(ig,iglo)*phi(ig,it,ik)*fphi
-                g1(ig,1,iglo) = fac
-                g1(ig,2,iglo) = fac
-             end do
-          end do
-      else if(apply_flowshear_nonlin) then
-          ! NDCTEST_nl_vs_lin: this else section is meant for old algo with apply_flowshear_nonlin=true: delete it
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-             it = it_idx(g_lo,iglo)
-             ik = ik_idx(g_lo,iglo)
-             do ig = -ntgrid, ntgrid
-                fac = zi*aky(ik)*aj0_tdep%old(ig,iglo)*phi(ig,it,ik)*fphi
-                g1(ig,1,iglo) = fac
-                g1(ig,2,iglo) = fac
-             end do
-          end do
-      else
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-             it = it_idx(g_lo,iglo)
-             ik = ik_idx(g_lo,iglo)
-             do ig = -ntgrid, ntgrid
-                fac = zi*aky(ik)*aj0(ig,iglo)*phi(ig,it,ik)*fphi
-                g1(ig,1,iglo) = fac
-                g1(ig,2,iglo) = fac
-             end do
-          end do
-      end if
+      do iglo = g_lo%llim_proc, g_lo%ulim_proc
+         it = it_idx(g_lo,iglo)
+         ik = ik_idx(g_lo,iglo)
+         do ig = -ntgrid, ntgrid
+            ! NDC 08/18
+            ! aj0_ptr%old = aj0,          with old flow shear algo
+            !             = aj0_tdep%old, with new flow shear algo
+            ! NDC 02/2019
+            ! NDCTEST_nl_vs_lin: overwriting above statement with
+            ! aj0_ptr%old = aj0_tdep%old, when apply_flowshear_nonlin is true
+            !             = aj0,          when apply_flowshear_nonlin is false
+            ! end NDCTEST_nl_vs_lin
+            fac = zi*aky(ik)*aj0_ptr%old(ig,iglo)*phi(ig,it,ik)*fphi
+            g1(ig,1,iglo) = fac
+            g1(ig,2,iglo) = fac
+         end do
+      end do
 
     end subroutine load_ky_phi
 
@@ -672,285 +582,131 @@ contains
 
     subroutine load_kx_apar
 
-      use dist_fn_arrays, only: vpa, aj0
+      use dist_fn_arrays, only: vpa, aj0_ptr
       use gs2_layouts, only: is_idx
       complex :: fac
 
-      ! NDCTEST_nl_vs_lin: delete last arg
-      if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. apply_flowshear_nonlin) then
-          
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              it = it_idx(g_lo,iglo)
-              ik = ik_idx(g_lo,iglo)
-              is = is_idx(g_lo,iglo)
-              do ig = -ntgrid, ntgrid
-                  fac = zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))*aj0_tdep%old(ig,iglo)*spec(is)%stm*apar(ig,it,ik)*fapar
-                  g1(ig,1,iglo) = g1(ig,1,iglo) - fac*vpa(ig,1,iglo)
-                  g1(ig,2,iglo) = g1(ig,2,iglo) - fac*vpa(ig,2,iglo)
-              end do
+      ! Need to take derivatives at fixed x,y so that terms taken into
+      ! account by the CFL condition are not secularly growing over time.
+      ! NB: code_time is the old time
+      ! NDC 08/18
+      ! kx_ptr%old = akx,                with old flow shear algo
+      !            = akx + kx_shift_old, with new flow shear algo
+      ! aj0_ptr%old = aj0,          with old flow shear algo
+      !             = aj0_tdep%old, with new flow shear algo
+      ! NDC 02/2019
+      ! NDCTEST_nl_vs_lin: overwriting above statement with
+      ! kx_ptr%old = akx + kx_shift_old, when apply_flowshear_nonlin is true
+      !            = akx,                when apply_flowshear_nonlin is false
+      ! aj0_ptr%old = aj0_tdep%old, when apply_flowshear_nonlin is true
+      !             = aj0,          when apply_flowshear_nonlin is false
+      ! end NDCTEST_nl_vs_lin
+      do iglo = g_lo%llim_proc, g_lo%ulim_proc
+          it = it_idx(g_lo,iglo)
+          ik = ik_idx(g_lo,iglo)
+          is = is_idx(g_lo,iglo)
+          do ig = -ntgrid, ntgrid
+              fac = zi*kx_ptr%old(it,ik)*aj0_ptr%old(ig,iglo)*spec(is)%stm*apar(ig,it,ik)*fapar
+              g1(ig,1,iglo) = g1(ig,1,iglo) - fac*vpa(ig,1,iglo)
+              g1(ig,2,iglo) = g1(ig,2,iglo) - fac*vpa(ig,2,iglo)
           end do
-
-      else if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. .not. apply_flowshear_nonlin) then
-          
-          ! NDCTEST_nl_vs_lin: this else section is meant for new algo with apply_flowshear_nonlin=false: delete it
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              it = it_idx(g_lo,iglo)
-              ik = ik_idx(g_lo,iglo)
-              is = is_idx(g_lo,iglo)
-              do ig = -ntgrid, ntgrid
-                  fac = zi*akx(it)*aj0(ig,iglo)*spec(is)%stm*apar(ig,it,ik)*fapar
-                  g1(ig,1,iglo) = g1(ig,1,iglo) - fac*vpa(ig,1,iglo)
-                  g1(ig,2,iglo) = g1(ig,2,iglo) - fac*vpa(ig,2,iglo)
-              end do
-          end do
-
-      else if(apply_flowshear_nonlin) then
-          
-          ! NDCTEST_nl_vs_lin: this else section is meant for old algo with apply_flowshear_nonlin=true: delete it
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              it = it_idx(g_lo,iglo)
-              ik = ik_idx(g_lo,iglo)
-              is = is_idx(g_lo,iglo)
-              do ig = -ntgrid, ntgrid
-                  fac = zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))*aj0_tdep%old(ig,iglo)*spec(is)%stm*apar(ig,it,ik)*fapar
-                  g1(ig,1,iglo) = g1(ig,1,iglo) - fac*vpa(ig,1,iglo)
-                  g1(ig,2,iglo) = g1(ig,2,iglo) - fac*vpa(ig,2,iglo)
-              end do
-          end do
-
-      else
-
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              it = it_idx(g_lo,iglo)
-              ik = ik_idx(g_lo,iglo)
-              is = is_idx(g_lo,iglo)
-!AJ Optimisatin
-              do ig = -ntgrid, ntgrid
-                  fac = zi*akx(it)*aj0(ig,iglo)*spec(is)%stm*apar(ig,it,ik)*fapar
-                  g1(ig,1,iglo) = g1(ig,1,iglo) - fac*vpa(ig,1,iglo)
-!         end do
-!         do ig = -ntgrid, ntgrid
-!            g1(ig,2,iglo) = g1(ig,2,iglo) - zi*akx(it)*aj0(ig,iglo)*spec(is)%stm &
-!                 *vpa(ig,2,iglo)*apar(ig,it,ik)*fapar 
-                  g1(ig,2,iglo) = g1(ig,2,iglo) - fac*vpa(ig,2,iglo)
-              end do
-          end do
-
-      end if
+      end do
 
     end subroutine load_kx_apar
 
     subroutine load_ky_apar
 
-      use dist_fn_arrays, only: vpa, aj0
+      use dist_fn_arrays, only: vpa, aj0_ptr
       use gs2_layouts, only: is_idx
       complex :: fac
 
-      ! NDCTEST_nl_vs_lin: delete last arg
-      if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. apply_flowshear_nonlin) then
-          
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              it = it_idx(g_lo,iglo)
-              ik = ik_idx(g_lo,iglo)
-              is = is_idx(g_lo,iglo)
-              do ig = -ntgrid, ntgrid
-                  fac = zi*aky(ik)*aj0_tdep%old(ig,iglo)*spec(is)%stm*apar(ig,it,ik)*fapar
-                  g1(ig,1,iglo) = g1(ig,1,iglo) - fac*vpa(ig,1,iglo)
-                  g1(ig,2,iglo) = g1(ig,2,iglo) - fac*vpa(ig,2,iglo)
-              end do
+      ! Need to take derivatives at fixed x,y so that terms taken into
+      ! account by the CFL condition are not secularly growing over time.
+      ! NB: code_time is the old time
+      ! NDC 08/18
+      ! aj0_ptr%old = aj0,          with old flow shear algo
+      !             = aj0_tdep%old, with new flow shear algo
+      ! NDC 02/2019
+      ! NDCTEST_nl_vs_lin: overwriting above statement with
+      ! aj0_ptr%old = aj0_tdep%old, when apply_flowshear_nonlin is true
+      !             = aj0,          when apply_flowshear_nonlin is false
+      ! end NDCTEST_nl_vs_lin
+      do iglo = g_lo%llim_proc, g_lo%ulim_proc
+          it = it_idx(g_lo,iglo)
+          ik = ik_idx(g_lo,iglo)
+          is = is_idx(g_lo,iglo)
+          do ig = -ntgrid, ntgrid
+              fac = zi*aky(ik)*aj0_ptr%old(ig,iglo)*spec(is)%stm*apar(ig,it,ik)*fapar
+              g1(ig,1,iglo) = g1(ig,1,iglo) - fac*vpa(ig,1,iglo)
+              g1(ig,2,iglo) = g1(ig,2,iglo) - fac*vpa(ig,2,iglo)
           end do
-
-      else if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. .not. apply_flowshear_nonlin) then
-          
-          ! NDCTEST_nl_vs_lin: this else section is meant for new algo with apply_flowshear_nonlin=false: delete it
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              it = it_idx(g_lo,iglo)
-              ik = ik_idx(g_lo,iglo)
-              is = is_idx(g_lo,iglo)
-              do ig = -ntgrid, ntgrid
-                  fac = zi*aky(ik)*aj0(ig,iglo)*spec(is)%stm*apar(ig,it,ik)*fapar
-                  g1(ig,1,iglo) = g1(ig,1,iglo) - fac*vpa(ig,1,iglo)
-                  g1(ig,2,iglo) = g1(ig,2,iglo) - fac*vpa(ig,2,iglo)
-              end do
-          end do
-
-      else if(apply_flowshear_nonlin) then
-          
-          ! NDCTEST_nl_vs_lin: this else section is meant for old algo with apply_flowshear_nonlin=true: delete it
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              it = it_idx(g_lo,iglo)
-              ik = ik_idx(g_lo,iglo)
-              is = is_idx(g_lo,iglo)
-              do ig = -ntgrid, ntgrid
-                  fac = zi*aky(ik)*aj0_tdep%old(ig,iglo)*spec(is)%stm*apar(ig,it,ik)*fapar
-                  g1(ig,1,iglo) = g1(ig,1,iglo) - fac*vpa(ig,1,iglo)
-                  g1(ig,2,iglo) = g1(ig,2,iglo) - fac*vpa(ig,2,iglo)
-              end do
-          end do
-
-      else
-
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              it = it_idx(g_lo,iglo)
-              ik = ik_idx(g_lo,iglo)
-              is = is_idx(g_lo,iglo)
-!AJ Optimisation
-              do ig = -ntgrid, ntgrid
-                  fac = zi*aky(ik)*aj0(ig,iglo)*spec(is)%stm*apar(ig,it,ik)*fapar
-                  g1(ig,1,iglo) = g1(ig,1,iglo) - fac*vpa(ig,1,iglo)
-!            g1(ig,1,iglo) = g1(ig,1,iglo) - zi*aky(ik)*aj0(ig,iglo)*spec(is)%stm &
-!                 *vpa(ig,1,iglo)*apar(ig,it,ik)*fapar 
-!         end do
-!         do ig = -ntgrid, ntgrid
-!            g1(ig,2,iglo) = g1(ig,2,iglo) - zi*aky(ik)*aj0(ig,iglo)*spec(is)%stm &
-!                 *vpa(ig,2,iglo)*apar(ig,it,ik)*fapar 
-                  g1(ig,2,iglo) = g1(ig,2,iglo) - fac*vpa(ig,2,iglo)
-              end do
-          end do
-
-      end if
+      end do
 
     end subroutine load_ky_apar
 
     subroutine load_kx_bpar
 
-      use dist_fn_arrays, only: vperp2, aj1
+      use dist_fn_arrays, only: vperp2, aj1_ptr
       use gs2_layouts, only: is_idx
       complex :: fac
-
-      ! NDCTEST_nl_vs_lin: delete last arg
-      if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. apply_flowshear_nonlin) then
           
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              it = it_idx(g_lo,iglo)
-              ik = ik_idx(g_lo,iglo)
-              is = is_idx(g_lo,iglo)
-              do ig = -ntgrid, ntgrid
-                  fac = g1(ig,1,iglo) + zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))*aj1_tdep%old(ig,iglo) &
-                      *2.0*vperp2(ig,iglo)*spec(is)%tz*bpar(ig,it,ik)*fbpar
-                  g1(ig,1,iglo) = fac
-                  g1(ig,2,iglo) = fac
-              end do
+      ! Need to take derivatives at fixed x,y so that terms taken into
+      ! account by the CFL condition are not secularly growing over time.
+      ! NB: code_time is the old time
+      ! NDC 08/18
+      ! kx_ptr%old = akx,                with old flow shear algo
+      !            = akx + kx_shift_old, with new flow shear algo
+      ! aj1_ptr%old = aj1,          with old flow shear algo
+      !             = aj1_tdep%old, with new flow shear algo
+      ! NDC 02/2019
+      ! NDCTEST_nl_vs_lin: overwriting above statement with
+      ! kx_ptr%old = akx + kx_shift_old, when apply_flowshear_nonlin is true
+      !            = akx,                when apply_flowshear_nonlin is false
+      ! aj1_ptr%old = aj1_tdep%old, when apply_flowshear_nonlin is true
+      !             = aj1,          when apply_flowshear_nonlin is false
+      ! end NDCTEST_nl_vs_lin
+      do iglo = g_lo%llim_proc, g_lo%ulim_proc
+          it = it_idx(g_lo,iglo)
+          ik = ik_idx(g_lo,iglo)
+          is = is_idx(g_lo,iglo)
+          do ig = -ntgrid, ntgrid
+              fac = g1(ig,1,iglo) + zi*kx_ptr%old(it,ik)*aj1_ptr%old(ig,iglo) &
+                  *2.0*vperp2(ig,iglo)*spec(is)%tz*bpar(ig,it,ik)*fbpar
+              g1(ig,1,iglo) = fac
+              g1(ig,2,iglo) = fac
           end do
-
-      else if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. .not. apply_flowshear_nonlin) then
-          
-          ! NDCTEST_nl_vs_lin: this else section is meant for new algo with apply_flowshear_nonlin=false: delete it
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              it = it_idx(g_lo,iglo)
-              ik = ik_idx(g_lo,iglo)
-              is = is_idx(g_lo,iglo)
-              do ig = -ntgrid, ntgrid
-                  fac = g1(ig,1,iglo) + zi*akx(it)*aj1(ig,iglo) &
-                      *2.0*vperp2(ig,iglo)*spec(is)%tz*bpar(ig,it,ik)*fbpar
-                  g1(ig,1,iglo) = fac
-                  g1(ig,2,iglo) = fac
-              end do
-          end do
-
-      else if(apply_flowshear_nonlin) then
-          
-          ! NDCTEST_nl_vs_lin: this else section is meant for old algo with apply_flowshear_nonlin=true: delete it
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              it = it_idx(g_lo,iglo)
-              ik = ik_idx(g_lo,iglo)
-              is = is_idx(g_lo,iglo)
-              do ig = -ntgrid, ntgrid
-                  fac = g1(ig,1,iglo) + zi*(akx(it)-g_exb_opt*(code_time-t_last_jump(ik))*aky(ik))*aj1_tdep%old(ig,iglo) &
-                      *2.0*vperp2(ig,iglo)*spec(is)%tz*bpar(ig,it,ik)*fbpar
-                  g1(ig,1,iglo) = fac
-                  g1(ig,2,iglo) = fac
-              end do
-          end do
-
-      else
-
-! Is this factor of two from the old normalization?
-
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              it = it_idx(g_lo,iglo)
-              ik = ik_idx(g_lo,iglo)
-              is = is_idx(g_lo,iglo)
-              do ig = -ntgrid, ntgrid
-                  fac = g1(ig,1,iglo) + zi*akx(it)*aj1(ig,iglo) &
-                       *2.0*vperp2(ig,iglo)*spec(is)%tz*bpar(ig,it,ik)*fbpar
-                  g1(ig,1,iglo) = fac
-                  g1(ig,2,iglo) = fac
-              end do
-          end do
-
-      end if
+      end do
 
     end subroutine load_kx_bpar
 
     subroutine load_ky_bpar
 
-      use dist_fn_arrays, only: vperp2, aj1
+      use dist_fn_arrays, only: vperp2, aj1_ptr
       use gs2_layouts, only: is_idx
       complex :: fac
 
-      ! NDCTEST_nl_vs_lin: delete last arg
-      if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. apply_flowshear_nonlin) then
-          
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              it = it_idx(g_lo,iglo)
-              ik = ik_idx(g_lo,iglo)
-              is = is_idx(g_lo,iglo)
-              do ig = -ntgrid, ntgrid
-                  fac = g1(ig,1,iglo) + zi*aky(ik)*aj1_tdep%old(ig,iglo) &
-                       *2.0*vperp2(ig,iglo)*spec(is)%tz*bpar(ig,it,ik)*fbpar
-                  g1(ig,1,iglo) = fac 
-                  g1(ig,2,iglo) = fac
-              end do
+      ! Need to take derivatives at fixed x,y so that terms taken into
+      ! account by the CFL condition are not secularly growing over time.
+      ! NB: code_time is the old time
+      ! NDC 08/18
+      ! aj1_ptr%old = aj1,          with old flow shear algo
+      !             = aj1_tdep%old, with new flow shear algo
+      ! NDC 02/2019
+      ! NDCTEST_nl_vs_lin: overwriting above statement with
+      ! aj1_ptr%old = aj1_tdep%old, when apply_flowshear_nonlin is true
+      !             = aj1,          when apply_flowshear_nonlin is false
+      ! end NDCTEST_nl_vs_lin
+      do iglo = g_lo%llim_proc, g_lo%ulim_proc
+          it = it_idx(g_lo,iglo)
+          ik = ik_idx(g_lo,iglo)
+          is = is_idx(g_lo,iglo)
+          do ig = -ntgrid, ntgrid
+              fac = g1(ig,1,iglo) + zi*aky(ik)*aj1_ptr%old(ig,iglo) &
+                   *2.0*vperp2(ig,iglo)*spec(is)%tz*bpar(ig,it,ik)*fbpar
+              g1(ig,1,iglo) = fac 
+              g1(ig,2,iglo) = fac
           end do
-
-      else if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. .not. apply_flowshear_nonlin) then
-          
-          ! NDCTEST_nl_vs_lin: this else section is meant for new algo with apply_flowshear_nonlin=false: delete it
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              it = it_idx(g_lo,iglo)
-              ik = ik_idx(g_lo,iglo)
-              is = is_idx(g_lo,iglo)
-              do ig = -ntgrid, ntgrid
-                  fac = g1(ig,1,iglo) + zi*aky(ik)*aj1(ig,iglo) &
-                       *2.0*vperp2(ig,iglo)*spec(is)%tz*bpar(ig,it,ik)*fbpar
-                  g1(ig,1,iglo) = fac 
-                  g1(ig,2,iglo) = fac
-              end do
-          end do
-
-      else if(apply_flowshear_nonlin) then
-          
-          ! NDCTEST_nl_vs_lin: this else section is meant for old algo with apply_flowshear_nonlin=true: delete it
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              it = it_idx(g_lo,iglo)
-              ik = ik_idx(g_lo,iglo)
-              is = is_idx(g_lo,iglo)
-              do ig = -ntgrid, ntgrid
-                  fac = g1(ig,1,iglo) + zi*aky(ik)*aj1_tdep%old(ig,iglo) &
-                       *2.0*vperp2(ig,iglo)*spec(is)%tz*bpar(ig,it,ik)*fbpar
-                  g1(ig,1,iglo) = fac 
-                  g1(ig,2,iglo) = fac
-              end do
-          end do
-
-      else
-
-! Is this factor of two from the old normalization?
-
-          do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              it = it_idx(g_lo,iglo)
-              ik = ik_idx(g_lo,iglo)
-              is = is_idx(g_lo,iglo)
-              do ig = -ntgrid, ntgrid
-                  fac = g1(ig,1,iglo) + zi*aky(ik)*aj1(ig,iglo) &
-                       *2.0*vperp2(ig,iglo)*spec(is)%tz*bpar(ig,it,ik)*fbpar
-                  g1(ig,1,iglo) = fac 
-                  g1(ig,2,iglo) = fac
-              end do
-          end do
-
-      end if
+      end do
 
     end subroutine load_ky_bpar
 

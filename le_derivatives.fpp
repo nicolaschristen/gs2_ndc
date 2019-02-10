@@ -55,6 +55,7 @@ contains
     complex, dimension (:,:,:), allocatable :: gle
     complex, dimension (:,:,:), allocatable :: gc1, gc2, gc3
     logical :: heating_flag
+    logical :: adjust_old = .true.
 
     if (present(gtoc)) then 
        g_to_c=gtoc 
@@ -78,7 +79,7 @@ contains
 
           if (adjust) then
              call g_adjust (g, phinew, bparnew, fphi, fbpar)
-             if (heating_flag) call g_adjust (gold, phi, bpar, fphi, fbpar)
+             if (heating_flag) call g_adjust (gold, phi, bpar, fphi, fbpar, adjust_old)
           end if
           if (heating_flag) then
              allocate (gc3(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
@@ -134,7 +135,7 @@ contains
 
           if (adjust) then
              call g_adjust (g, phinew, bparnew, -fphi, -fbpar)
-             if (heating_flag) call g_adjust (gold, phi, bpar, -fphi, -fbpar)
+             if (heating_flag) call g_adjust (gold, phi, bpar, -fphi, -fbpar, adjust_old)
           endif
 
 # ifndef LOWFLOW
@@ -162,7 +163,7 @@ contains
 
          if (adjust) then
             call g_adjust (g, phinew, bparnew, fphi, fbpar)
-            if (heating_flag) call g_adjust (gold, phi, bpar, fphi, fbpar)
+            if (heating_flag) call g_adjust (gold, phi, bpar, fphi, fbpar, adjust_old)
          end if
 
          if (heating_flag) gc3 = g
@@ -187,7 +188,7 @@ contains
 
          if (adjust) then
             call g_adjust (g, phinew, bparnew, -fphi, -fbpar)
-            if (heating_flag) call g_adjust (gold, phi, bpar, -fphi, -fbpar)
+            if (heating_flag) call g_adjust (gold, phi, bpar, -fphi, -fbpar, adjust_old)
          end if
       end if
 

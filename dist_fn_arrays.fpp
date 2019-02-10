@@ -19,22 +19,25 @@ module dist_fn_arrays
 #endif
 
   public :: kx_shift_old
+
   public :: bessel_tdep_ptr_type
   public :: aj0_tdep, aj1_tdep
+  public :: aj0_ptr, aj1_ptr
+  public :: aj0_left, aj1_left
+  public :: aj0_right, aj1_right
+
   public :: gamtots_tdep_ptr_type
   public :: gamtot_tdep, gamtot1_tdep, gamtot2_tdep, gamtot3_tdep
-  public :: t_last_jump
-  public :: remap_period
-  public :: jump
-  public :: a, b, r, ainv
-  public :: kperp2_left
-  public :: aj0_left, aj1_left
+  public :: gamtot_ptr, gamtot1_ptr, gamtot2_ptr, gamtot3_ptr
   public :: gamtot_left, gamtot1_left, gamtot2_left, gamtot3_left
-  public :: r_left, ainv_left
-  public :: kperp2_right
-  public :: aj0_right, aj1_right
   public :: gamtot_right, gamtot1_right, gamtot2_right, gamtot3_right
+
+  public :: a, b, r, ainv
+  public :: r_ptr, ainv_ptr
+  public :: r_left, ainv_left
   public :: r_right, ainv_right
+
+  public :: jump
   
   ! dist fn
   complex, dimension (:,:,:), allocatable :: g, gnew, g_restart_tmp
@@ -49,7 +52,8 @@ module dist_fn_arrays
   real, dimension (:,:,:), allocatable :: vperp2_gf
   ! (-ntgrid:ntgrid,2, -g-layout-)
 
-  real, dimension (:,:), allocatable :: vperp2, aj0, aj1
+  real, dimension (:,:), allocatable :: vperp2
+  real, dimension (:,:), allocatable, target :: aj0, aj1
   ! (-ntgrid:ntgrid, -g-layout-)
 
 !AJ
@@ -69,6 +73,18 @@ module dist_fn_arrays
   real, dimension (:,:,:,:,:,:), allocatable :: wdttpfac
   ! (-ntgrid:ntgrid,ntheta0,naky,negrid,nspecies,2)
 #endif
+
+  real, dimension(:), allocatable :: kx_shift_old
+
+  integer, dimension(:), allocatable :: jump
+
+  complex, dimension (:,:,:), allocatable :: a, b
+  complex, dimension(:,:,:), allocatable, target :: r
+  complex, dimension(:,:,:), allocatable, target :: r_left, r_right
+  complex, dimension(:,:,:), pointer :: r_ptr
+  complex, dimension(:,:,:), allocatable, target :: ainv
+  complex, dimension(:,:,:), allocatable, target :: ainv_left, ainv_right
+  complex, dimension(:,:,:), pointer :: ainv_ptr
   
   ! Time-dependent versions of bessel functions and gamtots, containing values for present and next
   ! time-steps. Used for flow-shear cases. --NDC 11/2018
@@ -82,8 +98,10 @@ module dist_fn_arrays
       real, dimension(:,:), pointer :: new
   end type bessel_tdep_ptr_type
 
-  type(bessel_tdep_type), target :: aj0_tdep
-  type(bessel_tdep_type), target :: aj1_tdep
+  type(bessel_tdep_type), target :: aj0_tdep, aj1_tdep
+  type(bessel_tdep_ptr_type) :: aj0_ptr, aj1_ptr
+  real, dimension(:,:), allocatable, target :: aj0_left, aj0_right
+  real, dimension(:,:), allocatable, target :: aj1_left, aj1_right
   
   type :: gamtots_tdep_type
       real, dimension(:,:,:), allocatable :: old
@@ -95,32 +113,16 @@ module dist_fn_arrays
       real, dimension(:,:,:), pointer :: new
   end type gamtots_tdep_ptr_type
 
-  type(gamtots_tdep_type), target :: gamtot_tdep
-  type(gamtots_tdep_type), target :: gamtot1_tdep
-  type(gamtots_tdep_type), target :: gamtot2_tdep
-  type(gamtots_tdep_type), target :: gamtot3_tdep
-
-  real, dimension(:), allocatable :: kx_shift_old
-
-  real, dimension(:), allocatable :: t_last_jump
-  real, dimension(:), allocatable :: remap_period
-
-  integer, dimension(:), allocatable :: jump
-  complex, dimension (:,:,:), allocatable :: a, b, r, ainv
-  
-  real, dimension(:,:,:), allocatable, target :: kperp2_left, kperp2_right
-  real, dimension(:,:), allocatable, target :: aj0_left, aj0_right
-  real, dimension(:,:), allocatable, target :: aj1_left, aj1_right
+  type(gamtots_tdep_type), target :: gamtot_tdep, gamtot1_tdep, gamtot2_tdep, gamtot3_tdep
+  type(gamtots_tdep_ptr_type) :: gamtot_ptr, gamtot1_ptr, gamtot2_ptr, gamtot3_ptr
   real, dimension(:,:,:), allocatable, target :: gamtot_left, gamtot_right
   real, dimension(:,:,:), allocatable, target :: gamtot1_left, gamtot1_right
   real, dimension(:,:,:), allocatable, target :: gamtot2_left, gamtot2_right
   real, dimension(:,:,:), allocatable, target :: gamtot3_left, gamtot3_right
-  complex, dimension(:,:,:), allocatable :: r_left, r_right
-  complex, dimension(:,:,:), allocatable :: ainv_left, ainv_right
   
 contains
 
-  subroutine g_adjust (g, phi, bpar, facphi, facbpar, aj0_opt, aj1_opt)
+  subroutine g_adjust (g, phi, bpar, facphi, facbpar, adjust_old)
     !CMR, 17/4/2012: 
     ! g_adjust transforms between representations of perturbed dist'n func'n.
     !    <delta_f> = g_wesson J0(Z) - q phi/T F_m  where <> = gyroaverage
@@ -138,65 +140,55 @@ contains
     use theta_grid, only: ntgrid
     use le_grids, only: anon, jend, ng2
     use gs2_layouts, only: g_lo, ik_idx, it_idx, ie_idx, is_idx, il_idx
-    use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear
     implicit none
     complex, dimension (-ntgrid:,:,g_lo%llim_proc:), intent (in out) :: g
     complex, dimension (-ntgrid:,:,:), intent (in) :: phi, bpar
     real, intent (in) :: facphi, facbpar
-    real, dimension(-ntgrid:,g_lo%llim_proc:), intent(in), optional :: aj0_opt, aj1_opt
+    logical, intent(in), optional :: adjust_old
 
     integer :: iglo, ig, ik, it, ie, is, il
     complex :: adj
     logical :: trapped=.false.
+    real, dimension(:,:), pointer :: my_aj0, my_aj1
+
+    if(present(adjust_old)) then
+        my_aj0 => aj0_ptr%old
+        my_aj1 => aj1_ptr%old
+    else
+        my_aj0 => aj0_ptr%new
+        my_aj1 => aj1_ptr%new
+    end if
 
     if (minval(jend) .gt. ng2) trapped=.true.
 
     ! Flow shear cases: we can pass time dependent bessel funcs as arguments -- NDC 11/18
-    if(present(aj0_opt) .and. present(aj1_opt)) then
-        do iglo = g_lo%llim_proc, g_lo%ulim_proc
-           ik = ik_idx(g_lo,iglo)
-           it = it_idx(g_lo,iglo)
-           ie = ie_idx(g_lo,iglo)
-           is = is_idx(g_lo,iglo)
-           il = il_idx(g_lo,iglo)
+    do iglo = g_lo%llim_proc, g_lo%ulim_proc
+       ik = ik_idx(g_lo,iglo)
+       it = it_idx(g_lo,iglo)
+       ie = ie_idx(g_lo,iglo)
+       is = is_idx(g_lo,iglo)
+       il = il_idx(g_lo,iglo)
 
-           do ig = -ntgrid, ntgrid
-              if ( trapped .and. il > jend(ig)) cycle 
-
-              adj = anon(ie)*2.0*vperp2(ig,iglo)*aj1_opt(ig,iglo) &
-                   *bpar(ig,it,ik)*facbpar &
-                   + spec(is)%z*anon(ie)*phi(ig,it,ik)*aj0_opt(ig,iglo) &
-                   /spec(is)%temp*facphi
-              g(ig,1,iglo) = g(ig,1,iglo) + adj
-              g(ig,2,iglo) = g(ig,2,iglo) + adj
-           end do
-        end do
-    else ! usage before new flow shear algo
-        do iglo = g_lo%llim_proc, g_lo%ulim_proc
-           ik = ik_idx(g_lo,iglo)
-           it = it_idx(g_lo,iglo)
-           ie = ie_idx(g_lo,iglo)
-           is = is_idx(g_lo,iglo)
-           il = il_idx(g_lo,iglo)
-
-           ! BD:  bpar == delta B_parallel / B_0(theta) so no extra factor of 
-           ! 1/bmag is needed here.
-           do ig = -ntgrid, ntgrid
-              !<DD>Don't adjust in the forbidden region as we don't set g/h here
+       ! BD:  bpar == delta B_parallel / B_0(theta) so no extra factor of 
+       ! 1/bmag is needed here.
+       do ig = -ntgrid, ntgrid
+          !<DD>Don't adjust in the forbidden region as we don't set g/h here
 !CMR, 13/10/2014: attempting minor reduction in memory bandwidth by replacing 
-!             if( forbid(ig,il) ) cycle with 
-!             if ( trapped .and. il > jend(ig))
-              if ( trapped .and. il > jend(ig)) cycle 
+!         if( forbid(ig,il) ) cycle with 
+!         if ( trapped .and. il > jend(ig))
+          if ( trapped .and. il > jend(ig)) cycle 
 
-              adj = anon(ie)*2.0*vperp2(ig,iglo)*aj1(ig,iglo) &
-                   *bpar(ig,it,ik)*facbpar &
-                   + spec(is)%z*anon(ie)*phi(ig,it,ik)*aj0(ig,iglo) &
-                   /spec(is)%temp*facphi
-              g(ig,1,iglo) = g(ig,1,iglo) + adj
-              g(ig,2,iglo) = g(ig,2,iglo) + adj
-           end do
-        end do
-    end if
+          adj = anon(ie)*2.0*vperp2(ig,iglo)*my_aj1(ig,iglo) &
+               *bpar(ig,it,ik)*facbpar &
+               + spec(is)%z*anon(ie)*phi(ig,it,ik)*my_aj0(ig,iglo) &
+               /spec(is)%temp*facphi
+          g(ig,1,iglo) = g(ig,1,iglo) + adj
+          g(ig,2,iglo) = g(ig,2,iglo) + adj
+       end do
+    end do
+
+    nullify(my_aj0, my_aj1)
+
   end subroutine g_adjust
 
   subroutine check_g_bouncepoints(g, ik,it,il,ie,is,err,tol)
