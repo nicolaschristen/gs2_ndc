@@ -6453,19 +6453,18 @@ contains
        (phi, apar, bpar, phinew, aparnew, bparnew, istep, &
         iglo, sourcefac)
     use dist_fn_arrays, only: gnew, ittp, vperp2, &
-        aj0, aj0_tdep, aj0_left, aj0_right, &
-        aj1, aj1_tdep, aj1_left, aj1_right, &
-        r, r_left, r_right, ainv, ainv_left, ainv_right ! NDCTESTneighb
+        aj0_ptr, aj1_ptr, &
+        r_ptr, ainv_ptr
     use run_parameters, only: eqzip, secondary, tertiary, harris
     use theta_grid, only: ntgrid
     use le_grids, only: nlambda, ng2, lmax, forbid, anon
-    use kt_grids, only: aky, ntheta0, kwork_filter, explicit_flowshear, &
-        implicit_flowshear, mixed_flowshear, naky
+    use kt_grids, only: aky, ntheta0, kwork_filter, naky, &
+        explicit_flowshear ! NDCTEST_explicit
     use gs2_layouts, only: g_lo, ik_idx, it_idx, il_idx, ie_idx, is_idx
     use prof, only: prof_entering, prof_leaving
     use run_parameters, only: fbpar, fphi, ieqzip
     use species, only: spec
-    use fields_arrays, only: phistar_old ! NDCTESTneighb
+    use fields_arrays, only: phistar_old ! NDCTEST_explicit
     implicit none
     complex, dimension (-ntgrid:,:,:), intent (in) :: phi,    apar,    bpar
     complex, dimension (-ntgrid:,:,:), intent (in) :: phinew, aparnew, bparnew
@@ -6482,12 +6481,9 @@ contains
     logical :: use_pass_homog, speriod_flag
     integer :: ntgl, ntgr
     logical :: michael_exp = .true. ! NDCTESTswitchexp
-    ! NDCTESTneighb
     real :: aj0_l, aj0_r
     real :: aj1_l, aj1_r
     complex :: phi_l, phi_r
-    ! endNDCTESTneighb
-    complex, dimension(-ntgrid:ntgrid,2) :: my_r, my_ainv
           
 !    call prof_entering ("invert_rhs_1", "dist_fn")
 
@@ -6547,68 +6543,24 @@ contains
     ! gnew is the inhomogeneous solution
     gnew(:,:,iglo) = 0.0
 
-    ! Select correct Bessel funcs depending on the flow shear algo,
-    ! and whether we are currently computing a shifted am matrix
-    ! for interpolation. -- NDC 11/18
-    if(mixed_flowshear .or. implicit_flowshear) then
-        if(for_interp_left) then
-            aj0_l = aj0_left(-ntgrid,iglo)
-            aj0_r = aj0_left(ntgrid,iglo)
-            aj1_l = aj1_left(-ntgrid,iglo)
-            aj1_r = aj1_left(ntgrid,iglo)
-        elseif(for_interp_right) then
-            aj0_l = aj0_right(-ntgrid,iglo)
-            aj0_r = aj0_right(ntgrid,iglo)
-            aj1_l = aj1_right(-ntgrid,iglo)
-            aj1_r = aj1_right(ntgrid,iglo)
-        else
-            aj0_l = aj0_tdep%new(-ntgrid,iglo)
-            aj0_r = aj0_tdep%new(ntgrid,iglo)
-            aj1_l = aj1_tdep%new(-ntgrid,iglo)
-            aj1_r = aj1_tdep%new(ntgrid,iglo)
-        end if
-    elseif(explicit_flowshear) then
-        aj0_l = aj0_tdep%new(-ntgrid,iglo)
-        aj0_r = aj0_tdep%new(ntgrid,iglo)
-        aj1_l = aj1_tdep%new(-ntgrid,iglo)
-        aj1_r = aj1_tdep%new(ntgrid,iglo)
-    else
-        aj0_l = aj0(-ntgrid,iglo)
-        aj0_r = aj0(ntgrid,iglo)
-        aj1_l = aj1(-ntgrid,iglo)
-        aj1_r = aj1(ntgrid,iglo)
-    end if
+    ! aj0_ptr%old = aj0,           (old flow shear algo)
+    !             = aj0_tdep%old   (new algo & standard timeadv)
+    !             = aj0_left/right (new algo & interp amin matrices)
+    ! aj1_ptr%old = aj1,           (old flow shear algo)
+    !             = aj1_tdep%old   (new algo & standard timeadv)
+    !             = aj1_left/right (new algo & interp amin matrices)
+    ! NDC 02/2019
+    aj0_l = aj0_ptr%new(-ntgrid,iglo)
+    aj0_r = aj0_ptr%new(ntgrid,iglo)
+    aj1_l = aj1_ptr%new(-ntgrid,iglo)
+    aj1_r = aj1_ptr%new(ntgrid,iglo)
 
-    ! Select correct r & ainv depending on the flow shear algo,
-    ! and whether we are currently computing a shifted am matrix
-    ! for interpolation. -- NDC 11/18
-    if(implicit_flowshear) then
-        if(for_interp_left) then
-            do isgn = 1,2
-                my_r(:,isgn) = r_left(:,isgn,iglo)
-                my_ainv(:,isgn) = ainv_left(:,isgn,iglo)
-            end do
-        elseif(for_interp_right) then
-            do isgn = 1,2
-                my_r(:,isgn) = r_right(:,isgn,iglo)
-                my_ainv(:,isgn) = ainv_right(:,isgn,iglo)
-            end do
-        else
-            do isgn = 1,2
-                my_r(:,isgn) = r(:,isgn,iglo)
-                my_ainv(:,isgn) = ainv(:,isgn,iglo)
-            end do
-        end if
-    else
-        do isgn = 1,2
-            my_r(:,isgn) = r(:,isgn,iglo)
-            my_ainv(:,isgn) = ainv(:,isgn,iglo)
-        end do
-    end if
-
+    ! NDCTEST_explicit:
     ! When adjusting g, we need to use the potential.
     ! In the explicit approach, phi is not the full potential,
     ! and we need to add phistar to it. -- NDC 11/18
+    ! end NDCTEST_explicit
+    ! IF WE DROP THIS ALGO, GET RID OF THE COPYING
     ! NDCQUEST: would we need a similar approach with apar & bpar if EM & explicit ?
     if(explicit_flowshear .and. michael_exp) then
         if (first_gk_solve) then
@@ -6705,8 +6657,14 @@ contains
 ! inhomogeneous part: gnew
 ! r=ainv=0 if forbid(ig,il) or forbid(ig+1,il), so gnew=0 in forbidden
 ! region and at upper bounce point
+
+    ! r_ptr%old = r_left/right (new flow shear algo & interp aminv matrices)
+    !           = r            (otherwise)
+    ! ainv_ptr%old = ainv_left/right (new flow shear algo & interp aminv matrices)
+    !              = ainv            (otherwise)
+    ! NDC 02/2019
     do ig = ntgrid-1, -ntgrid, -1
-       gnew(ig,2,iglo) = -gnew(ig+1,2,iglo)*my_r(ig,2) + my_ainv(ig,2)*source(ig,2)
+       gnew(ig,2,iglo) = -gnew(ig+1,2,iglo)*r_ptr(ig,2,iglo) + ainv_ptr(ig,2,iglo)*source(ig,2)
     end do
 
     if (use_pass_homog) then
@@ -6722,7 +6680,7 @@ contains
 
     if (il >= ilmin) then
        do ig = ntgrid-1, -ntgrid, -1
-          g1(ig,2) = -g1(ig+1,2)*my_r(ig,2) + g2(ig,2)
+          g1(ig,2) = -g1(ig+1,2)*r_ptr(ig,2,iglo) + g2(ig,2)
        end do
     end if
 
@@ -6753,7 +6711,7 @@ contains
     ! time advance vpar > 0 inhomogeneous part
     if (il <= lmax) then
        do ig = -ntgrid, ntgrid-1
-          gnew(ig+1,1,iglo) = -gnew(ig,1,iglo)*my_r(ig,1) + my_ainv(ig,1)*source(ig,1)
+          gnew(ig+1,1,iglo) = -gnew(ig,1,iglo)*r_ptr(ig,1,iglo) + ainv_ptr(ig,1,iglo)*source(ig,1)
        end do
     end if
 
@@ -6773,7 +6731,7 @@ contains
     if (il >= ilmin) then
        do ig = -ntgrid, ntgrid-1
 !CMR, 17/4/2012:  use consistent homogeneous trapped solution (g2) at lbp
-          g1(ig+1,1) = -g1(ig,1)*my_r(ig,1) + g2(ig+1,1)
+          g1(ig+1,1) = -g1(ig,1)*r_ptr(ig,1,iglo) + g2(ig+1,1)
        end do
     end if
 
@@ -6917,8 +6875,7 @@ endif
     use run_parameters, only: fbpar, fphi
     use species, only: spec
     use spfunc, only: j0, j1
-    use kt_grids, only: naky, kperp2, kperp2_tdep, explicit_flowshear, implicit_flowshear, mixed_flowshear, ntheta0, &
-        kperp2_left, kperp2_right
+    use kt_grids, only: naky, kperp2_ptr, ntheta0
     use fields_arrays, only: phistar_old
 
     implicit none
@@ -6939,10 +6896,7 @@ endif
     integer :: ie, is, itl, itr
     complex :: adjl, adjr, dadj
     real :: vperp2left, vperp2right, argl, argr, aj0l, aj0r, aj1l, aj1r
-    ! NDCTESTneighb
-    real, dimension(ntheta0,naky) :: kperp2_l, kperp2_r
     complex, dimension(ntheta0,naky) :: phi_l, phi_r
-    ! endNDCTESTneighb
     logical :: michael_exp = .true. ! NDCTESTswitchexp
     
 
@@ -6967,52 +6921,12 @@ endif
        call fill (wfb_p, gnew, g_adj)
        call fill (wfb_h, g_h, g_adj)
 
-       ! NDCTESTneighb
-       ! Select correct kperp2 depending on the flow shear algo,
-       ! and whether we are currently computing a shifted am matrix
-       ! for interpolation. -- NDC 11/18
-       if(implicit_flowshear .or. mixed_flowshear) then
-           if(for_interp_left) then
-               do it = 1,ntheta0
-                   do ik = 1,naky
-                       kperp2_l(it,ik) = kperp2_left(-ntgrid,it,ik)
-                       kperp2_r(it,ik) = kperp2_left(ntgrid,it,ik)
-                   end do
-               end do
-           elseif(for_interp_right) then
-               do it = 1,ntheta0
-                   do ik = 1,naky
-                       kperp2_l(it,ik) = kperp2_right(-ntgrid,it,ik)
-                       kperp2_r(it,ik) = kperp2_right(ntgrid,it,ik)
-                   end do
-               end do
-           else
-               do it = 1,ntheta0
-                   do ik = 1,naky
-                       kperp2_l(it,ik) = kperp2_tdep%new(-ntgrid,it,ik)
-                       kperp2_r(it,ik) = kperp2_tdep%new(ntgrid,it,ik)
-                   end do
-               end do
-           end if
-       elseif(explicit_flowshear) then
-           do it = 1,ntheta0
-               do ik = 1,naky
-                   kperp2_l(it,ik) = kperp2_tdep%new(-ntgrid,it,ik)
-                   kperp2_r(it,ik) = kperp2_tdep%new(ntgrid,it,ik)
-               end do
-           end do
-       else
-           do it = 1,ntheta0
-               do ik = 1,naky
-                   kperp2_l(it,ik) = kperp2(-ntgrid,it,ik)
-                   kperp2_r(it,ik) = kperp2(ntgrid,it,ik)
-               end do
-           end do
-       end if
-
+       ! NDCTEST_explicit:
        ! When adjusting g, we need to use the potential.
        ! In the explicit approach, phi is not the full potential,
        ! and we need to add phistar to it. -- NDC 11/18
+       ! IF WE DROP THIS APPROACH, GET RID OF THE COPYING.
+       ! end NDCTEST_explicit
        ! NDCQUEST: would we need a similar approach with apar & bpar if EM & explicit ?
        if(explicit_flowshear .and. michael_exp) then
            if(first_gk_solve) then
@@ -7041,7 +6955,6 @@ endif
                end do
            end do
        end if
-       ! endNDCTESTneighb
 
        do iglo = g_lo%llim_proc, g_lo%ulim_proc
           ik = ik_idx(g_lo,iglo)
@@ -7067,8 +6980,12 @@ endif
 !      
              vperp2left = bmag(-ntgrid)*al(il)*energy(ie)
              vperp2right = bmag(ntgrid)*al(il)*energy(ie)
-             argl = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(-ntgrid)*kperp2_l(itl,ik))
-             argr = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ntgrid)*kperp2_r(itr,ik))
+             ! kperp2_ptr%new = kperp2,                (old flow shear algo)
+             !                = kperp2_tdep%new,       (new algo & standard timeadv)
+             !                = kperp2_left/right,     (new algo for interp aminv matrices)
+             ! NDC 02/2019
+             argl = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(-ntgrid)*kperp2_ptr%new(-ntgrid,itl,ik))
+             argr = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ntgrid)*kperp2_ptr%new(ntgrid,itr,ik))
              aj0l = j0(argl)
              aj0r = j0(argr)
              aj1l = j1(argl)
