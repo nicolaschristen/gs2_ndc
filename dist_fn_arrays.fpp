@@ -23,6 +23,7 @@ module dist_fn_arrays
   public :: bessel_tdep_ptr_type
   public :: aj0_tdep, aj1_tdep
   public :: aj0_ptr, aj1_ptr
+  public :: aj0_ptr_src, aj1_ptr_src
   public :: aj0_left, aj1_left
   public :: aj0_right, aj1_right
 
@@ -100,6 +101,7 @@ module dist_fn_arrays
 
   type(bessel_tdep_type), target :: aj0_tdep, aj1_tdep
   type(bessel_tdep_ptr_type) :: aj0_ptr, aj1_ptr
+  type(bessel_tdep_ptr_type) :: aj0_ptr_src, aj1_ptr_src
   real, dimension(:,:), allocatable, target :: aj0_left, aj0_right
   real, dimension(:,:), allocatable, target :: aj1_left, aj1_right
   

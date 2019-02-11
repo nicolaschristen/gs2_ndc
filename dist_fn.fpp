@@ -929,7 +929,7 @@ contains
 
   subroutine finish_dist_fn_level_2
     use dist_fn_arrays, only: aj0, aj1, aj0_gf, aj1_gf, aj0_tdep, aj1_tdep, &
-        aj0_ptr, aj1_ptr, &
+        aj0_ptr_src, aj1_ptr_src, aj0_ptr, aj1_ptr, &
         gamtot_tdep, gamtot1_tdep, gamtot2_tdep, gamtot3_tdep, &
         gamtot_ptr, gamtot1_ptr, gamtot2_ptr, gamtot3_ptr, &
         a, b, r, ainv, r_ptr, ainv_ptr
@@ -946,9 +946,11 @@ contains
     if (allocated(aj0_tdep%old)) deallocate (aj0_tdep%old)
     if (allocated(aj0_tdep%new)) deallocate (aj0_tdep%new)
     nullify(aj0_ptr%old, aj0_ptr%new)
+    nullify(aj0_ptr_src%old, aj0_ptr_src%new)
     if (allocated(aj1_tdep%old)) deallocate (aj1_tdep%old)
     if (allocated(aj1_tdep%new)) deallocate (aj1_tdep%new)
     nullify(aj1_ptr%old, aj1_ptr%new)
+    nullify(aj1_ptr_src%old, aj1_ptr_src%new)
     if (allocated(gamtot_tdep%old)) deallocate (gamtot_tdep%old)
     if (allocated(gamtot_tdep%new)) deallocate (gamtot_tdep%new)
     nullify(gamtot_ptr%old, gamtot_ptr%new)
@@ -1743,7 +1745,8 @@ contains
   end subroutine init_wstar
 
   subroutine init_bessel
-    use dist_fn_arrays, only: aj0, aj1, aj0_ptr, aj1_ptr, aj0_tdep, aj1_tdep
+    use dist_fn_arrays, only: aj0, aj1, aj0_ptr, aj1_ptr, aj0_ptr_src, aj1_ptr_src, &
+        aj0_tdep, aj1_tdep
  !AJ
     use dist_fn_arrays, only: aj0_gf, aj1_gf
     use kt_grids, only: kperp2, naky, ntheta0, &
@@ -1828,6 +1831,22 @@ contains
         aj1_tdep%new = aj1
         aj1_ptr%new => aj1_tdep%new
 
+        if(implicit_flowshear) then
+
+            aj0_ptr_src%old => aj0_ptr%old
+            aj0_ptr_src%new => aj0_ptr%new
+            aj1_ptr_src%old => aj1_ptr%old
+            aj1_ptr_src%new => aj1_ptr%new
+
+        else
+
+            aj0_ptr_src%old => aj0
+            aj0_ptr_src%new => aj0
+            aj1_ptr_src%old => aj1
+            aj1_ptr_src%new => aj1
+
+        end if
+
     ! NDCTEST_nl_vs_lin: remove this case
     else if(apply_flowshear_nonlin) then
         
@@ -1845,6 +1864,11 @@ contains
         aj1_tdep%new = aj1
         aj1_ptr%new => aj1
 
+        aj0_ptr_src%old => aj0
+        aj0_ptr_src%new => aj0
+        aj1_ptr_src%old => aj1
+        aj1_ptr_src%new => aj1
+
     else
         
         allocate(aj0_tdep%old(1,1))
@@ -1860,6 +1884,11 @@ contains
         allocate(aj1_tdep%new(1,1))
         aj1_tdep%new = 0.0
         aj1_ptr%new => aj1
+
+        aj0_ptr_src%old => aj0
+        aj0_ptr_src%new => aj0
+        aj1_ptr_src%old => aj1
+        aj1_ptr_src%new => aj1
 
     end if
 
@@ -5387,7 +5416,7 @@ contains
     use dist_fn_arrays, only: aj0, aj1, vperp2, vpar, vpac, g, ittp, &
         aj0_tdep, aj1_tdep, kx_shift, kx_shift_old, &
         a, b
-    use dist_fn_arrays, only: aj0_ptr, aj1_ptr
+    use dist_fn_arrays, only: aj0_ptr, aj1_ptr, aj0_ptr_src, aj1_ptr_src
     use theta_grid, only: ntgrid, shat, itor_over_B
     use kt_grids, only: aky, explicit_flowshear, implicit_flowshear, mixed_flowshear
     use le_grids, only: nlambda, ng2, lmax, anon, negrid
@@ -5442,14 +5471,18 @@ contains
     ! NDCTESTneighb
     ! Old flow shear algo: source uses time independent quantities.
     ! Mixed algo: source contains the same terms as in the old algo,
-    !             plus new time dependent terms.
+    !             plus new time dependent terms 
+    !             (added in add_source_flowshear_mixed_and_explicit,
+    !              and add_dapardt_flowshear_mixed_and_explicit).
     ! Implicit algo: source has the same form as in the old algo,
     !                except that all quantities are now time dependent.
+    !                (through the use of _ptr_src variables, see below)
     ! Explicit algo: source contains the same terms as in the mixed algo,
     !                plus new time dependent terms.
+    !                (added in add_source_flowshear_explicit_first)
     ! NDC 11/18
 
-    ! Pick correct Bessel funcs and kx_shift depending on
+    ! Pick correct wdrift depending on
     ! the flow shear algo and whether we are currently calculating
     ! a shifted am matrix for interpolation. -- NDC 11/18
     if(implicit_flowshear) then
@@ -5474,14 +5507,21 @@ contains
 
     end if
 
+    ! aj0_ptr_src = aj0,            (old/mixed/explicit flow shear algos)
+    !             = aj0_tdep,       (implicit algo & standard timeadv)
+    !             = aj0_left/right, (implicit algo & interp aminv matrices)
+    ! aj1_ptr_src = aj1,            (old/mixed/explicit flow shear algos)
+    !             = aj1_tdep,       (implicit algo & standard timeadv)
+    !             = aj1_left/right, (implicit algo & interp aminv matrices)
+    ! NDC 02/2019
     phigavgB = fexp(is) * &
-        ( fphi*aj0_ptr%old(:,iglo)*phi(:,it,ik) + fbpar*2.0*spec(is)%tz*vperp2(:,iglo)*aj1_ptr%old(:,iglo)*bpar(:,it,ik) ) &
+        ( fphi*aj0_ptr_src%old(:,iglo)*phi(:,it,ik) + fbpar*2.0*spec(is)%tz*vperp2(:,iglo)*aj1_ptr_src%old(:,iglo)*bpar(:,it,ik) ) &
         + (1.0-fexp(is)) * &
-        ( fphi*aj0_ptr%new(:,iglo)*phinew(:,it,ik) + fbpar*2.0*spec(is)%tz*vperp2(:,iglo)*aj1_ptr%new(:,iglo)*bparnew(:,it,ik) )
+        ( fphi*aj0_ptr_src%new(:,iglo)*phinew(:,it,ik) + fbpar*2.0*spec(is)%tz*vperp2(:,iglo)*aj1_ptr_src%new(:,iglo)*bparnew(:,it,ik) )
     wdttp_term = fexp(is) * wdttpold * &
-        ( fphi*aj0_ptr%old(:,iglo)*phi(:,it,ik) + fbpar*2.0*spec(is)%tz*vperp2(:,iglo)*aj1_ptr%old(:,iglo)*bpar(:,it,ik) ) &
+        ( fphi*aj0_ptr_src%old(:,iglo)*phi(:,it,ik) + fbpar*2.0*spec(is)%tz*vperp2(:,iglo)*aj1_ptr_src%old(:,iglo)*bpar(:,it,ik) ) &
         + (1.0-fexp(is)) * wdttpnew * &
-        ( fphi*aj0_ptr%new(:,iglo)*phinew(:,it,ik) + fbpar*2.0*spec(is)%tz*vperp2(:,iglo)*aj1_ptr%new(:,iglo)*bparnew(:,it,ik) )
+        ( fphi*aj0_ptr_src%new(:,iglo)*phinew(:,it,ik) + fbpar*2.0*spec(is)%tz*vperp2(:,iglo)*aj1_ptr_src%new(:,iglo)*bparnew(:,it,ik) )
     if(mixed_flowshear .or. explicit_flowshear) then
         phigavgB_tdep_new = fphi*aj0_tdep%new(:,iglo)*phi(:,it,ik) &
             + fbpar*2.0*spec(is)%tz*vperp2(:,iglo)*aj1_tdep%new(:,iglo)*bpar(:,it,ik)
@@ -5750,23 +5790,23 @@ contains
          
          phigavgB_bd = bdfac_r*phigavgB(ig+1) + bdfac_l*phigavgB(ig)
          apargavg_bd = fapar * fexp(is) * ( &
-             bdfac_r*aj0_ptr%old(ig+1,iglo)*apar(ig+1,it,ik) + bdfac_l*aj0_ptr%old(ig,iglo)*apar(ig,it,ik) ) &
+             bdfac_r*aj0_ptr_src%old(ig+1,iglo)*apar(ig+1,it,ik) + bdfac_l*aj0_ptr_src%old(ig,iglo)*apar(ig,it,ik) ) &
              + fapar * (1.0-fexp(is)) * ( &
-             bdfac_r*aj0_ptr%new(ig+1,iglo)*aparnew(ig+1,it,ik) + bdfac_l*aj0_ptr%new(ig,iglo)*aparnew(ig,it,ik) )
+             bdfac_r*aj0_ptr_src%new(ig+1,iglo)*aparnew(ig+1,it,ik) + bdfac_l*aj0_ptr_src%new(ig,iglo)*aparnew(ig,it,ik) )
          chigavg_bd = phigavgB_bd - spec(is)%stm*vpac(ig,isgn,iglo)*apargavg_bd
          dapargavg = 2.0*fapar * ( &
-             bdfac_r*(aj0_ptr%new(ig+1,iglo)*aparnew(ig+1,it,ik)-aj0_ptr%old(ig+1,iglo)*apar(ig+1,it,ik)) + &
-             bdfac_l*(aj0_ptr%new(ig,iglo)*aparnew(ig,it,ik)-aj0_ptr%old(ig,iglo)*apar(ig,it,ik)) )
+             bdfac_r*(aj0_ptr_src%new(ig+1,iglo)*aparnew(ig+1,it,ik)-aj0_ptr_src%old(ig+1,iglo)*apar(ig+1,it,ik)) + &
+             bdfac_l*(aj0_ptr_src%new(ig,iglo)*aparnew(ig,it,ik)-aj0_ptr_src%old(ig,iglo)*apar(ig,it,ik)) )
          wd_term = fexp(is) * wdold(ig) * ( &
-                 bdfac_r * ( fphi*aj0_ptr%old(ig+1,iglo)*phi(ig+1,it,ik) &
-                     + fbpar*2.0*spec(is)%tz*vperp2(ig+1,iglo)*aj1_ptr%old(ig+1,iglo)*bpar(ig+1,it,ik) ) &
-                 + bdfac_l * ( fphi*aj0_ptr%old(ig,iglo)*phi(ig,it,ik) &
-                     + fbpar*2.0*spec(is)%tz*vperp2(ig,iglo)*aj1_ptr%old(ig,iglo)*bpar(ig,it,ik) ) ) &
+                 bdfac_r * ( fphi*aj0_ptr_src%old(ig+1,iglo)*phi(ig+1,it,ik) &
+                     + fbpar*2.0*spec(is)%tz*vperp2(ig+1,iglo)*aj1_ptr_src%old(ig+1,iglo)*bpar(ig+1,it,ik) ) &
+                 + bdfac_l * ( fphi*aj0_ptr_src%old(ig,iglo)*phi(ig,it,ik) &
+                     + fbpar*2.0*spec(is)%tz*vperp2(ig,iglo)*aj1_ptr_src%old(ig,iglo)*bpar(ig,it,ik) ) ) &
              + (1.0-fexp(is)) * wdnew(ig) * ( &
-                 bdfac_r * ( fphi*aj0_ptr%new(ig+1,iglo)*phinew(ig+1,it,ik) &
-                     + fbpar*2.0*spec(is)%tz*vperp2(ig+1,iglo)*aj1_ptr%new(ig+1,iglo)*bparnew(ig+1,it,ik) ) & 
-                 + bdfac_l * ( fphi*aj0_ptr%new(ig,iglo)*phinew(ig,it,ik) &
-                     + fbpar*2.0*spec(is)%tz*vperp2(ig,iglo)*aj1_ptr%new(ig,iglo)*bparnew(ig,it,ik)) )
+                 bdfac_r * ( fphi*aj0_ptr_src%new(ig+1,iglo)*phinew(ig+1,it,ik) &
+                     + fbpar*2.0*spec(is)%tz*vperp2(ig+1,iglo)*aj1_ptr_src%new(ig+1,iglo)*bparnew(ig+1,it,ik) ) & 
+                 + bdfac_l * ( fphi*aj0_ptr_src%new(ig,iglo)*phinew(ig,it,ik) &
+                     + fbpar*2.0*spec(is)%tz*vperp2(ig,iglo)*aj1_ptr_src%new(ig,iglo)*bparnew(ig,it,ik)) )
          
 !MAB, 6/5/2009:
 ! added the omprimfac source term arising with equilibrium flow shear  
@@ -5785,7 +5825,7 @@ contains
               -spec(is)%zstm*vpac(ig,isgn,iglo) &
               *(dapargavg  &
               + 2.0*D_res(it,ik)*apargavg_bd) &
-              -2.*zi*wdfac(ig,isgn,iglo)*phigavgB_bd &
+              -2.*zi*wdfac(ig,isgn,iglo)*phigavgB_bd) &
               + 2.*zi*(wstarfac(ig,isgn,iglo) &
               + vpac(ig,isgn,iglo)*code_dt*wunits(ik)*ufac(ie,is) &
               -2.0*omprimfac*vpac(ig,isgn,iglo)*code_dt*wunits(ik)*g_exb*itor_over_B(ig)/spec(is)%stm) &
