@@ -434,34 +434,34 @@ contains
     use run_parameters, only: reset
     use fields_arrays, only: phi, apar, bpar, phinew, aparnew, bparnew, &
         aparold, &
-        phistar_old, phistar_new ! NDCTESTmichaelnew
+        phistar_old, phistar_new ! NDCTEST_explicit_first
     use fields_arrays, only: apar_ext
     use antenna, only: antenna_amplitudes, no_driver
     use dist_fn, only: timeadv, exb_shear, collisions_advance, &
         update_kperp2_tdep, update_bessel_tdep, update_gamtots_tdep, update_kx_tdep, &
-        gamtot, getan, & ! NDCTESTmichael
-        expflowopt, expflowopt_none, expflowopt_felix, expflowopt_antot_old, expflowopt_antot_tdep_old, & ! NDCTESTmichael
-        expflowopt_antot_new, expflowopt_antot_tdep_new, & ! NDCTESTmichael
+        gamtot, getan, & ! NDCTEST_explicit_first
+        expflowopt, expflowopt_none, expflowopt_second, expflowopt_antot_old, expflowopt_antot_tdep_old, & ! NDCTEST_explicit_first
+        expflowopt_antot_new, expflowopt_antot_tdep_new, & ! NDCTEST_explicit_first
         shift_ptr_to_tdep, shift_ptr_from_tdep ! NDCTEST_nl_vs_lin
     use dist_fn, only: first_gk_solve, compute_a_b_r_ainv
     use dist_fn_arrays, only: g, gnew, kx_shift, theta0_shift, &
-        gamtot_tdep ! NDCTESTmichael
+        gamtot_tdep ! NDCTEST_explicit_first
     use unit_tests, only: debug_message
     use mp, only: iproc
     use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear, &
-        aky, naky, ntheta0, & ! NDCTESTmichael
+        aky, naky, ntheta0, & ! NDCTEST_explicit_first
         apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
-    use theta_grid, only: ntgrid ! NDCTESTmichael
+    use theta_grid, only: ntgrid ! NDCTEST_explicit_first
     use gs2_time, only: code_dt, code_dt_old
     implicit none
     integer :: diagnostics = 1
     integer, intent (in) :: istep
     logical, intent (in) :: remove_zonal_flows_switch
     integer, parameter :: verb=4
-    integer :: ig, it, ik ! NDCTESTmichaelnew
-    complex, dimension(:,:,:), allocatable :: antot_expflow, antot_tdep_expflow ! NDCTESTmichaelnew
-    complex, dimension(:,:,:), allocatable :: dummy1, dummy2 ! NDCTESTmichaelnew
-    logical :: michael_exp = .true. ! NDCTESTswitchexp
+    integer :: ig, it, ik ! NDCTEST_explicit_first
+    complex, dimension(:,:,:), allocatable :: antot_expflow, antot_tdep_expflow ! NDCTEST_explicit_first
+    complex, dimension(:,:,:), allocatable :: dummy1, dummy2 ! NDCTEST_explicit_first
+    logical :: explicit_first = .true. ! NDCTESTswitchexp
     logical :: undo_remap
     real :: gdt
     logical :: field_local = .false.
@@ -509,8 +509,8 @@ contains
         
     end if
 
-    ! NDCTESTmichaelnew: compute phistar[it]
-    if(explicit_flowshear .and. michael_exp) then
+    ! NDCTEST_explicit_first: compute phistar[it]
+    if(explicit_flowshear .and. explicit_first) then
 
         !deallocate is further down in this subroutine
         allocate(antot_expflow(-ntgrid:ntgrid,ntheta0,naky))
@@ -542,8 +542,8 @@ contains
 
     end if
     
-    if(explicit_flowshear .and. michael_exp) then
-        ! NDCTESTmichaelnew: replace phi[it] and phi[it+1] by phibar[it]
+    if(explicit_flowshear .and. explicit_first) then
+        ! NDCTEST_explicit_first: replace phi[it] and phi[it+1] by phibar[it]
         phi = phi-phistar_old
         phinew = phinew-phistar_old
     end if
@@ -566,8 +566,8 @@ contains
         ! In cases with flowshear, undo the last ExB remapping --NDC 07/18
         if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
 
-            ! In Michael's implementation, move back to full phi for reset
-            if(explicit_flowshear .and. michael_exp) then
+            ! In first implementation, move back to full phi for reset
+            if(explicit_flowshear .and. explicit_first) then
                 phi = phi+phistar_old
                 phinew = phinew+phistar_old
             end if
@@ -588,17 +588,17 @@ contains
 
     ! Modified field equation for explicit flowshear implementation
     ! necessary to make aminv time independent. -- NDC 02/2018
-    ! NDCTESTfelix & NDCTESTmichael
-    if(explicit_flowshear .and. .not. michael_exp) then
-        expflowopt = expflowopt_felix
+    ! NDCTEST_explicit_second & NDCTEST_explicit_first
+    if(explicit_flowshear .and. .not. explicit_first) then
+        expflowopt = expflowopt_second
     end if
-    ! NDCTESTmichaelnew: in flowshear cases, QN returns phibar[it+1]-phibar[it]
+    ! NDCTEST_explicit_first: in flowshear cases, QN returns phibar[it+1]-phibar[it]
     call getfield (phinew, aparnew, bparnew)
-    if(explicit_flowshear .and. .not. michael_exp) then
+    if(explicit_flowshear .and. .not. explicit_first) then
         expflowopt = expflowopt_none
     end if
     
-    ! NDCTESTmichaelnew: in flowshear cases, this sets phinew=phibar[it+1]
+    ! NDCTEST_explicit_first: in flowshear cases, this sets phinew=phibar[it+1]
     phinew = phinew + phi
     aparnew  = aparnew + apar
     bparnew  = bparnew + bpar
@@ -612,8 +612,8 @@ contains
     
     call timeadv (phi, apar, bpar, phinew, aparnew, bparnew, istep, diagnostics)
 
-    ! NDCTESTmichaelnew: compute phistar[it+1] and get the full phi[it] and phi[it+1]
-    if(explicit_flowshear .and. michael_exp) then
+    ! NDCTEST_explicit_first: compute phistar[it+1] and get the full phi[it] and phi[it+1]
+    if(explicit_flowshear .and. explicit_first) then
 
         expflowopt = expflowopt_antot_new
         call getan(antot_expflow, dummy1, dummy2)
@@ -805,7 +805,7 @@ contains
     real, dimension(naky) :: dkx
     logical :: tadv_for_interp
     real, dimension(naky) :: kx_shift_stored
-    logical :: michael_exp = .true.
+    logical :: explicit_first = .true. ! NDCTEST_explicit_first
     logical :: skip_old = .true.
 
     call prof_entering ("init_response_matrix", "fields_implicit")
@@ -1079,7 +1079,7 @@ contains
               aparold = 0.
           end if
 
-          if(explicit_flowshear .and. michael_exp) then
+          if(explicit_flowshear .and. explicit_first) then
               phistar_old = 0.
           end if
 

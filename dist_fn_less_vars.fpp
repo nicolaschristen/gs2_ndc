@@ -5709,9 +5709,7 @@ contains
     subroutine set_source
 
       implicit none
-      complex :: phigavgB_bd, apargavg_bd, chigavg_bd
-      complex :: dapargavg
-      complex :: wd_term
+      complex :: phigavgB_bd, apargavg_bd, dapargavg
 
 !CMR, 4/8/2011:
 ! Some concerns, may be red herrings !
@@ -5753,20 +5751,9 @@ contains
              bdfac_r*aj0_ptr%old(ig+1,iglo)*apar(ig+1,it,ik) + bdfac_l*aj0_ptr%old(ig,iglo)*apar(ig,it,ik) ) &
              + fapar * (1.0-fexp(is)) * ( &
              bdfac_r*aj0_ptr%new(ig+1,iglo)*aparnew(ig+1,it,ik) + bdfac_l*aj0_ptr%new(ig,iglo)*aparnew(ig,it,ik) )
-         chigavg_bd = phigavgB_bd - spec(is)%stm*vpac(ig,isgn,iglo)*apargavg_bd
          dapargavg = 2.0*fapar * ( &
              bdfac_r*(aj0_ptr%new(ig+1,iglo)*aparnew(ig+1,it,ik)-aj0_ptr%old(ig+1,iglo)*apar(ig+1,it,ik)) + &
              bdfac_l*(aj0_ptr%new(ig,iglo)*aparnew(ig,it,ik)-aj0_ptr%old(ig,iglo)*apar(ig,it,ik)) )
-         wd_term = fexp(is) * wdold(ig) * ( &
-                 bdfac_r * ( fphi*aj0_ptr%old(ig+1,iglo)*phi(ig+1,it,ik) &
-                     + fbpar*2.0*spec(is)%tz*vperp2(ig+1,iglo)*aj1_ptr%old(ig+1,iglo)*bpar(ig+1,it,ik) ) &
-                 + bdfac_l * ( fphi*aj0_ptr%old(ig,iglo)*phi(ig,it,ik) &
-                     + fbpar*2.0*spec(is)%tz*vperp2(ig,iglo)*aj1_ptr%old(ig,iglo)*bpar(ig,it,ik) ) ) &
-             + (1.0-fexp(is)) * wdnew(ig) * ( &
-                 bdfac_r * ( fphi*aj0_ptr%new(ig+1,iglo)*phinew(ig+1,it,ik) &
-                     + fbpar*2.0*spec(is)%tz*vperp2(ig+1,iglo)*aj1_ptr%new(ig+1,iglo)*bparnew(ig+1,it,ik) ) & 
-                 + bdfac_l * ( fphi*aj0_ptr%new(ig,iglo)*phinew(ig,it,ik) &
-                     + fbpar*2.0*spec(is)%tz*vperp2(ig,iglo)*aj1_ptr%new(ig,iglo)*bparnew(ig,it,ik)) )
          
 !MAB, 6/5/2009:
 ! added the omprimfac source term arising with equilibrium flow shear  
@@ -5789,7 +5776,7 @@ contains
               + 2.*zi*(wstarfac(ig,isgn,iglo) &
               + vpac(ig,isgn,iglo)*code_dt*wunits(ik)*ufac(ie,is) &
               -2.0*omprimfac*vpac(ig,isgn,iglo)*code_dt*wunits(ik)*g_exb*itor_over_B(ig)/spec(is)%stm) &
-              * chigavg_bd
+              * (phigavgB_bd - spec(is)%stm*vpac(ig,isgn,iglo)*apargavg_bd)
 
 #else
 
@@ -5797,12 +5784,22 @@ contains
          source(ig) = anon(ie)*(-2.0*vpar(ig,isgn,iglo)*(phigavgB(ig+1)-phigavgB(ig)) &
               -spec(is)%zstm*vpac(ig,isgn,iglo) &
               *(dapargavg  &
-              + 2.0*D_res(it,ik)*apargavg_bd) &
-              -2.*zi*wd_term) &
+              + 2.0*D_res(it,ik)*apargavg_bd)) &
+              -anon(ie)*2.*zi * &
+                  ( fexp(is) * wdold(ig) * &
+                      ( bdfac_r * ( fphi*aj0_ptr%old(ig+1,iglo)*phi(ig+1,it,ik) &
+                       + fbpar*2.0*spec(is)%tz*vperp2(ig+1,iglo)*aj1_ptr%old(ig+1,iglo)*bpar(ig+1,it,ik) ) &
+                       + bdfac_l * ( fphi*aj0_ptr%old(ig,iglo)*phi(ig,it,ik) &
+                       + fbpar*2.0*spec(is)%tz*vperp2(ig,iglo)*aj1_ptr%old(ig,iglo)*bpar(ig,it,ik) ) ) &
+                   + (1.0-fexp(is)) * wdnew(ig) * &
+                      ( bdfac_r * ( fphi*aj0_ptr%new(ig+1,iglo)*phinew(ig+1,it,ik) &
+                       + fbpar*2.0*spec(is)%tz*vperp2(ig+1,iglo)*aj1_ptr%new(ig+1,iglo)*bparnew(ig+1,it,ik) ) & 
+                       + bdfac_l * ( fphi*aj0_ptr%new(ig,iglo)*phinew(ig,it,ik) &
+                       + fbpar*2.0*spec(is)%tz*vperp2(ig,iglo)*aj1_ptr%new(ig,iglo)*bparnew(ig,it,ik)) ) ) &
               + 2.*zi*(wstar(ik,ie,is) &
               + vpac(ig,isgn,iglo)*code_dt*wunits(ik)*ufac(ie,is) &
               -2.0*omprimfac*vpac(ig,isgn,iglo)*code_dt*wunits(ik)*g_exb*itor_over_B(ig)/spec(is)%stm) &
-              *chigavg_bd
+              * (phigavgB_bd - spec(is)%stm*vpac(ig,isgn,iglo)*apargavg_bd)
 
 #endif
       end do
@@ -5871,7 +5868,6 @@ contains
     subroutine add_source_flowshear_mixed_and_explicit
 
       implicit none
-      complex :: g_bd
       complex :: phigavgB_tdep_new_bd, phigavgB_tdep_old_bd, phigavgB_near_old_bd
       complex :: chigavg_tdep_new_bd, chigavg_tdep_old_bd, chigavg_near_old_bd
 
@@ -5893,7 +5889,6 @@ contains
          ! For more details, see notes from Nicolas Christen 11/2017
          ! NDCQUEST: talk about EM terms here
 
-         g_bd = bdfac_r*g(ig+1,isgn,iglo) + bdfac_l*g(ig,isgn,iglo)
          phigavgB_tdep_new_bd = bdfac_r*phigavgB_tdep_new(ig+1)+bdfac_l*phigavgB_tdep_new(ig)
          phigavgB_tdep_old_bd = bdfac_r*phigavgB_tdep_old(ig+1)+bdfac_l*phigavgB_tdep_old(ig)
          phigavgB_near_old_bd = bdfac_r*phigavgB_near_old(ig+1)+bdfac_l*phigavgB_near_old(ig)
@@ -5910,7 +5905,8 @@ contains
          ! NDCQUEST: in g_exb term, is there a reason to use 2.*wunits instead of aky ?
          source(ig) = source(ig) &
               - zi * spec(is)%tz * vdrift_x_cent(ig,isgn,iglo)/shat * &
-                  ( fexp(is)*kx_shift_old(ik)+(1.0-fexp(is))*kx_shift(ik) ) * g_bd &
+                  ( fexp(is)*kx_shift_old(ik)+(1.0-fexp(is))*kx_shift(ik) ) * &
+                  ( bdfac_r*g(ig+1,isgn,iglo) + bdfac_l*g(ig,isgn,iglo) )
               - zi * fexp(is)*vdrift_x_cent(ig,isgn,iglo)/shat*kx_shift_old(ik) * phigavgB_tdep_old_bd &
               - zi * (1.0-fexp(is))*vdrift_x_cent(ig,isgn,iglo)/shat*kx_shift(ik) * phigavgB_tdep_new_bd &
               - 2.*zi * wdold(ig) * (fexp(is)*phigavgB_tdep_old_bd+(1.0-fexp(is))*phigavgB_tdep_new_bd-phigavgB_near_old_bd) &
@@ -5990,18 +5986,14 @@ contains
          
          ! NDCTEST_explicit_first
          ! NDCQUEST: EXPLICIT_FLOWSHEAR IS NOT ADAPTED FOR EM RUNS.
-         phistargavg_old_bd = bdfac_r*aj0_tdep%old(ig+1,iglo)*phistar_old(ig+1,it,ik) &
-             + bdfac_l*aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik)
-
          ! NDCQUEST: should I fexp t-dep factors in front of old g/phi/apar/bpar ?
          source(ig) = source(ig) &
-              - zi * ( vdrift_x_cent(ig,isgn,iglo)/shat*kx_shift_old(ik) + & ! NDCTEST_explicit_first: replaced vdrift_x
-                  2.*wdold(ig) ) * phistargavg_old_bd &
+              + ( - zi * ( vdrift_x_cent(ig,isgn,iglo)/shat*kx_shift_old(ik) + 2.*wdold(ig) ) &
+                 - 2.*code_dt*zi * aky(ik)/spec(is)%stm * omprimfac * itor_over_B(ig) * vpac(ig,isgn,iglo) * g_exb &
+                 + 2.*zi * wstar(ik,ie,is) ) * ( bdfac_r*aj0_tdep%old(ig+1,iglo)*phistar_old(ig+1,it,ik) &
+                     + bdfac_l*aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik) )
               - 2.*vpar(ig,isgn,iglo) * ( &
                   aj0_tdep%old(ig+1,iglo)*phistar_old(ig+1,it,ik) - aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik) ) &
-              - 2.*code_dt*zi * aky(ik)/spec(is)%stm * omprimfac * itor_over_B(ig) * vpac(ig,isgn,iglo) * g_exb * &
-                 phistargavg_old_bd &
-              + 2.*zi * wstar(ik,ie,is) * phistargavg_old_bd
 
       end do
 
