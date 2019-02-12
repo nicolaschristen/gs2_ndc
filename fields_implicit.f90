@@ -791,7 +791,6 @@ contains
         gamtot_right, gamtot1_right, gamtot2_right, gamtot3_right
     use dist_fn, only: M_class, N_class, i_class, &
         update_kperp2_tdep, update_bessel_tdep, update_gamtots_tdep, compute_a_b_r_ainv, update_wdrift_tdep, &
-        for_interp_left, for_interp_right, &
         adiabatic_option_switch, adiabatic_option_fieldlineavg, &
         wdrift_tdep, wdrift_ptr, wdrift_left, wdrift_right, &
         wdriftttp_tdep, wdriftttp_ptr, wdriftttp_left, wdriftttp_right, &
@@ -1050,7 +1049,6 @@ contains
                        if(implicit_flowshear .or. mixed_flowshear) then
                            
                            ! Use _left vars
-                           for_interp_left = .true.
                            call shift_ptr_to_left
                            kx_shift = -0.5*dkx
                            
@@ -1060,10 +1058,7 @@ contains
                                call init_response_row(ig,ifield,am_left,i,n,tadv_for_interp)
                            end if
                            
-                           for_interp_left = .false.
-                           
-                           ! signalling to dist_fn::getfieldeq to use _right vars
-                           for_interp_right = .true.
+                           ! use _right vars
                            call shift_ptr_to_right
                            kx_shift = 0.5*dkx
 
@@ -1073,7 +1068,6 @@ contains
                                call init_response_row(ig,ifield,am_right,i,n,tadv_for_interp)
                            end if
                            
-                           for_interp_right = .false.
                            call shift_ptr_to_tdep
 
                        end if
@@ -1113,8 +1107,7 @@ contains
                    ! required for aminv interpolation in cases with flow-shear --NDC 11/2017
                    if(implicit_flowshear .or. mixed_flowshear) then
                        
-                       ! signalling to dist_fn::getfieldeq to use _left vars
-                       for_interp_left = .true.
+                       ! use _left vars
                        call shift_ptr_to_left
                        kx_shift = -0.5*dkx
                        
@@ -1124,10 +1117,7 @@ contains
                            call init_response_row(ig,ifield,am_left,i,n,tadv_for_interp)
                        end if
                        
-                       for_interp_left = .false.
-                       
-                       ! signalling to dist_fn::getfieldeq to use _right vars
-                       for_interp_right = .true.
+                       ! use _right vars
                        call shift_ptr_to_right
                        kx_shift = 0.5*dkx
 
@@ -1137,7 +1127,6 @@ contains
                            call init_response_row(ig,ifield,am_right,i,n,tadv_for_interp)
                        end if
                        
-                       for_interp_right = .false.
                        call shift_ptr_to_tdep
 
                    end if
@@ -1175,8 +1164,7 @@ contains
                    ! required for aminv interpolation in cases with flow-shear --NDC 11/2017
                    if(implicit_flowshear .or. mixed_flowshear) then
                        
-                       ! signalling to dist_fn::getfieldeq to use _left vars
-                       for_interp_left = .true.
+                       ! use _left vars
                        call shift_ptr_to_left
                        kx_shift = -0.5*dkx
                        
@@ -1186,10 +1174,7 @@ contains
                            call init_response_row(ig,ifield,am_left,i,n,tadv_for_interp)
                        end if
                        
-                       for_interp_left = .false.
-                       
-                       ! signalling to dist_fn::getfieldeq to use _right vars
-                       for_interp_right = .true.
+                       ! use _right vars
                        call shift_ptr_to_right
                        kx_shift = 0.5*dkx
 
@@ -1199,7 +1184,6 @@ contains
                            call init_response_row(ig,ifield,am_right,i,n,tadv_for_interp)
                        end if
                        
-                       for_interp_right = .false.
                        call shift_ptr_to_tdep
 
                    end if

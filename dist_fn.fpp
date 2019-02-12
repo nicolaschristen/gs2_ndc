@@ -112,9 +112,6 @@ module dist_fn
   public :: first_gk_solve ! NDCTEST_explicit
   public :: compute_a_b_r_ainv
 
-  public :: for_interp_left
-  public :: for_interp_right
-
   ! NDCTEST_explicit_first & NDCTEST_explicit_second
   public :: expflowopt
   public :: expflowopt_none, expflowopt_second, expflowopt_antot_old, expflowopt_antot_new, &
@@ -365,9 +362,6 @@ module dist_fn
   ! and for the second solve we need the full phi[it+1].
   logical :: first_gk_solve = .false.
   ! endNDCTESTneighb
-
-  logical :: for_interp_left = .false.
-  logical :: for_interp_right = .false.
 
   integer :: expflowopt
   integer, parameter :: expflowopt_none=0, expflowopt_second=1, expflowopt_antot_old=2, expflowopt_antot_tdep_old=3, &
@@ -2301,20 +2295,13 @@ contains
 
       ! Flow shear pointers
       !
-      ! wdrift_ptr = wdrift,            (old/mixed/explicit flow shear algos)
-      !            = wdrift_tdep,       (implicit algo & standard timeadv)
-      !            = wdrift_left/right, (implicit algo & init interp aminv matrices)
-      ! wdriftttp_ptr = wdriftttp,            (old/mixed/explicit flow shear algos)
-      !               = wdriftttp_tdep,       (implicit algo & standard timeadv)
-      !               = wdriftttp_left/right, (implicit algo & interp aminv matrices)
-      ! ainv_ptr = ainv,                 (old/mixed/explicit flow shear algos)
-      !          = ainv, updated in time (implicit algo & standard timeadv)
-      !          = ainv_left/right,      (implicit algo & init interp aminv matrices)
-      ! r_ptr = r,                 (old/mixed/explicit flow shear algos)
-      !       = r, updated in time (implicit algo & standard timeadv)
-      !       = r_left/right,      (implicit algo & init interp aminv matrices)
+      ! For var in {wdrift, wdriftttp, ainv, r},
       !
-      ! NDC 2/2019
+      ! var_ptr = var            (old/mixed/explicit flow shear algo)
+      !         = var_tdep       (implicit algo & standard timeadv)
+      !         = var_left/right (implicit algo & init interp aminv matrices)
+      !
+      ! NDC 02/2019
 
       do iglo = g_lo%llim_proc, g_lo%ulim_proc
           
@@ -5613,20 +5600,20 @@ contains
 
     ! Flow shear pointers
     !
-    ! aj0_ptr_src = aj0,            (old/mixed/explicit flow shear algos)
-    !             = aj0_tdep,       (implicit algo & standard timeadv)
-    !             = aj0_left/right, (implicit algo & init interp aminv matrices)
-    ! aj1_ptr_src = aj1,            (old/mixed/explicit flow shear algos)
-    !             = aj1_tdep,       (implicit algo & standard timeadv)
-    !             = aj1_left/right, (implicit algo & init interp aminv matrices)
-    ! wdrift_ptr = wdrift,            (old/mixed/explicit flow shear algos)
-    !            = wdrift_tdep,       (implicit algo & standard timeadv)
-    !            = wdrift_left/right, (implicit algo & init interp aminv matrices)
-    ! wdriftttp_ptr = wdriftttp,            (old/mixed/explicit flow shear algos)
-    !               = wdriftttp_tdep,       (implicit algo & standard timeadv)
-    !               = wdriftttp_left/right, (implicit algo & init interp aminv matrices)
+    ! For var in {aj0, aj1},
+    !
+    ! var_ptr_src = var            (old/mixed/explicit flow shear algos)
+    !             = var_tdep       (implicit algo & standard timeadv)
+    !             = var_left/right (implicit algo & init interp aminv matrices)
+    !
+    ! For var in {wdrift, wdriftttp},
+    !
+    ! var_ptr = var            (old/mixed/explicit flow shear algos)
+    !         = var_tdep       (implicit algo & standard timeadv)
+    !         = var_left/right (implicit algo & init interp aminv matrices)
     !
     ! NDC 02/2019
+
     phigavgB = fexp(is) * &
         ( fphi*aj0_ptr_src%old(:,iglo)*phi(:,it,ik) + fbpar*2.0*spec(is)%tz*vperp2(:,iglo)*aj1_ptr_src%old(:,iglo)*bpar(:,it,ik) ) &
         + (1.0-fexp(is)) * &
@@ -6713,14 +6700,14 @@ contains
 
     ! Flow shear pointers
     !
-    ! aj0_ptr%old = aj0,           (old flow shear algo)
-    !             = aj0_tdep%old   (new algo & standard timeadv)
-    !             = aj0_left/right (new algo & init interp aminv matrices)
-    ! aj1_ptr%old = aj1,           (old flow shear algo)
-    !             = aj1_tdep%old   (new algo & standard timeadv)
-    !             = aj1_left/right (new algo & init interp aminv matrices)
+    ! For var in {aj0, aj1},
+    !
+    ! var_ptr = var            (old flow shear algo)
+    !         = var_tdep       (new algos & standard timeadv)
+    !         = var_left/right (new algos & init interp aminv matrices)
     !
     ! NDC 02/2019
+
     aj0_l = aj0_ptr%new(-ntgrid,iglo)
     aj0_r = aj0_ptr%new(ntgrid,iglo)
     aj1_l = aj1_ptr%new(-ntgrid,iglo)
@@ -6831,14 +6818,13 @@ contains
 
     ! Flow shear pointers
     !
-    ! ainv_ptr = ainv,                 (old/mixed/explicit flow shear algos)
-    !          = ainv, updated in time (implicit algo & standard timeadv)
-    !          = ainv_left/right,      (implicit algo & init interp aminv matrices)
-    ! r_ptr = r,                 (old/mixed/explicit flow shear algos)
-    !       = r, updated in time (implicit algo & standard timeadv)
-    !       = r_left/right,      (implicit algo & init interp aminv matrices)
+    ! For var in {ainv, r},
     !
-    ! NDC 2/2019
+    ! var_ptr = var                   (old/mixed/explicit flow shear algos)
+    !         = var [updated in time] (implicit algo & standard timeadv)
+    !         = var_left/right        (implicit algo & init interp aminv matrices)
+    !
+    ! NDC 02/2019
 
     do ig = ntgrid-1, -ntgrid, -1
        gnew(ig,2,iglo) = -gnew(ig+1,2,iglo)*r_ptr(ig,2,iglo) + ainv_ptr(ig,2,iglo)*source(ig,2)
@@ -7160,9 +7146,9 @@ endif
              vperp2right = bmag(ntgrid)*al(il)*energy(ie)
              ! Flow shear pointers
              !
-             ! kperp2_ptr%new = kperp2,                (old flow shear algo)
-             !                = kperp2_tdep%new,       (new algo & standard timeadv)
-             !                = kperp2_left/right,     (new algo & init interp aminv matrices)
+             ! kperp2_ptr%new = kperp2,            (old flow shear algo)
+             !                = kperp2_tdep%new,   (new algos & standard timeadv)
+             !                = kperp2_left/right, (new algos & init interp aminv matrices)
              !
              ! NDC 02/2019
              argl = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(-ntgrid)*kperp2_ptr%new(-ntgrid,itl,ik))
@@ -7395,9 +7381,10 @@ endif
   end subroutine ensure_single_val_fields_pass_r
 
   subroutine getan (antot, antota, antotp)
-    use dist_fn_arrays, only: vpa, vperp2, aj0, aj1, gnew, aj0_tdep, g, &
-        aj0_left, aj0_right, aj1_tdep, aj1_left, aj1_right
-    use kt_grids, only: kperp2, implicit_flowshear, mixed_flowshear, explicit_flowshear
+    use dist_fn_arrays, only: vpa, vperp2, gnew, &
+        aj0_ptr, aj1_ptr, &
+        g, aj0, aj1, aj0_tdep, aj1_tdep ! NDCTEST_explicit
+    use kt_grids, only: kperp2, explicit_flowshear
     use species, only: nspec, spec
     use theta_grid, only: ntgrid
     use le_grids, only: integrate_species
@@ -7419,35 +7406,20 @@ endif
 !that field. (NOTE this probably isn't actually needed as we shouldn't
 !use the various antots if we're not calculating/using the related field).
 
+    ! Flow shear pointers:
+    !
+    ! For var in {aj0, aj1},
+    !
+    ! var_ptr = var            (old flow shear algo)
+    !         = var_tdep       (mixed/implicit algos & standard timeadv)
+    !         = var_left/right (mixed/implicit algos & init interp aminv matrices)
+    !
+    ! NDC 02/2019
+
     if (fphi > epsilon(0.0)) then
-       
-       if(implicit_flowshear .or. mixed_flowshear) then
-           if(for_interp_left) then
-               do iglo = g_lo%llim_proc, g_lo%ulim_proc
-                  do isgn = 1, 2
-                     do ig=-ntgrid, ntgrid       
-                        g0(ig,isgn,iglo) = aj0_left(ig,iglo)*gnew(ig,isgn,iglo)
-                     end do
-                  end do
-               end do
-           elseif(for_interp_right) then
-               do iglo = g_lo%llim_proc, g_lo%ulim_proc
-                  do isgn = 1, 2
-                     do ig=-ntgrid, ntgrid       
-                        g0(ig,isgn,iglo) = aj0_right(ig,iglo)*gnew(ig,isgn,iglo)
-                     end do
-                  end do
-               end do
-           else
-               do iglo = g_lo%llim_proc, g_lo%ulim_proc
-                  do isgn = 1, 2
-                     do ig=-ntgrid, ntgrid       
-                        g0(ig,isgn,iglo) = aj0_tdep%new(ig,iglo)*gnew(ig,isgn,iglo)
-                     end do
-                  end do
-               end do
-           end if
-       elseif(explicit_flowshear) then
+
+       if(explicit_flowshear) then
+
            select case(expflowopt)
            case(expflowopt_none)
                ! Behaviour without new flow shear algorithm.
@@ -7505,80 +7477,44 @@ endif
                   end do
                end do
            end select
+
        else
-           ! Behaviour without new flow shear algorithm.
+
            do iglo = g_lo%llim_proc, g_lo%ulim_proc
               do isgn = 1, 2
                  do ig=-ntgrid, ntgrid       
-                     g0(ig,isgn,iglo) = aj0(ig,iglo)*gnew(ig,isgn,iglo)
+                    g0(ig,isgn,iglo) = aj0_ptr%new(ig,iglo)*gnew(ig,isgn,iglo)
                  end do
               end do
            end do
+
        end if
 
        wgt = spec%z*spec%dens
        call integrate_species (g0, wgt, antot)
 
 !    if (kfilter > epsilon(0.0)) call par_filter(antot)
+       ! NDCQUEST: afilter not adapted to new flow shear algo.
        if (afilter > epsilon(0.0)) antot = antot * exp(-afilter**4*kperp2**2/4.)
        if(esv) call ensure_single_val_fields_pass(antot) !<DD>
     else
 
-       antot=0.
+        antot=0.
 
     end if ! if fphi>0
 
     if (fapar > epsilon(0.0)) then
 
-       ! Select correct J0 depending on the flow shear algo,
-       ! and whether we are currently computing a shifted am matrix
-       ! for interpolation. -- NDC 11/18
-       if(implicit_flowshear .or. mixed_flowshear) then
-           if(for_interp_left) then
-               do iglo = g_lo%llim_proc, g_lo%ulim_proc
-                  do isgn = 1, 2
-                     do ig=-ntgrid, ntgrid
-                        g0(ig,isgn,iglo) = aj0_left(ig,iglo)*vpa(ig,isgn,iglo)*gnew(ig,isgn,iglo)
-                     end do
-                  end do
-               end do
-           elseif(for_interp_right) then
-               do iglo = g_lo%llim_proc, g_lo%ulim_proc
-                  do isgn = 1, 2
-                     do ig=-ntgrid, ntgrid
-                        g0(ig,isgn,iglo) = aj0_right(ig,iglo)*vpa(ig,isgn,iglo)*gnew(ig,isgn,iglo)
-                     end do
-                  end do
-               end do
-           else
-               do iglo = g_lo%llim_proc, g_lo%ulim_proc
-                  do isgn = 1, 2
-                     do ig=-ntgrid, ntgrid
-                        g0(ig,isgn,iglo) = aj0_tdep%new(ig,iglo)*vpa(ig,isgn,iglo)*gnew(ig,isgn,iglo)
-                     end do
-                  end do
-               end do
-           end if
-       elseif(explicit_flowshear) then
-           ! NDCQUEST: THIS IS WRONG, EM IS NOT ADAPTED TO EXPLICIT_FLOWSHEAR YET.
-           do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              do isgn = 1, 2
-                 do ig=-ntgrid, ntgrid
-                    g0(ig,isgn,iglo) = aj0_tdep%new(ig,iglo)*vpa(ig,isgn,iglo)*gnew(ig,isgn,iglo)
-                 end do
-              end do
-           end do
-       else
-           ! Behaviour without new flow shear algorithm.
-           do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              do isgn = 1, 2
-                 do ig=-ntgrid, ntgrid
-                    g0(ig,isgn,iglo) = aj0(ig,iglo)*vpa(ig,isgn,iglo)*gnew(ig,isgn,iglo)
-                 end do
-              end do
-           end do
-       end if
-       
+       ! NDCTEST_explicit: for explicit flow shear algo, this
+       ! is wrong. EM is not adapted to explicit_flowshear yet.
+       do iglo = g_lo%llim_proc, g_lo%ulim_proc
+          do isgn = 1, 2
+             do ig=-ntgrid, ntgrid
+                g0(ig,isgn,iglo) = aj0_ptr%new(ig,iglo)*vpa(ig,isgn,iglo)*gnew(ig,isgn,iglo)
+             end do
+          end do
+       end do
+
        wgt = 2.0*beta*spec%z*spec%dens*sqrt(spec%temp/spec%mass)
        call integrate_species (g0, wgt, antota)
 !    if (kfilter > epsilon(0.0)) call par_filter(antota)
@@ -7588,55 +7524,19 @@ endif
 
        antota=0.
 
-    end if ! if fapar>0
+    end if
 
     if (fbpar > epsilon(0.0)) then
 
-       if(implicit_flowshear .or. mixed_flowshear) then
-           if(for_interp_left) then
-               do iglo = g_lo%llim_proc, g_lo%ulim_proc
-                  do isgn = 1, 2
-                     do ig=-ntgrid, ntgrid
-                        g0(ig,isgn,iglo) = aj1_left(ig,iglo)*vperp2(ig,iglo)*gnew(ig,isgn,iglo)
-                     end do
-                  end do
-               end do
-           elseif(for_interp_right) then
-               do iglo = g_lo%llim_proc, g_lo%ulim_proc
-                  do isgn = 1, 2
-                     do ig=-ntgrid, ntgrid
-                        g0(ig,isgn,iglo) = aj1_right(ig,iglo)*vperp2(ig,iglo)*gnew(ig,isgn,iglo)
-                     end do
-                  end do
-               end do
-           else
-               do iglo = g_lo%llim_proc, g_lo%ulim_proc
-                  do isgn = 1, 2
-                     do ig=-ntgrid, ntgrid
-                        g0(ig,isgn,iglo) = aj1_tdep%new(ig,iglo)*vperp2(ig,iglo)*gnew(ig,isgn,iglo)
-                     end do
-                  end do
-               end do
-           end if
-       elseif(explicit_flowshear) then
-           ! NDCQUEST: THIS IS WRONG, EM IS NOT ADAPTED TO EXPLICIT_FLOWSHEAR YET.
-           do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              do isgn = 1, 2
-                 do ig=-ntgrid, ntgrid
-                    g0(ig,isgn,iglo) = aj1_tdep%new(ig,iglo)*vperp2(ig,iglo)*gnew(ig,isgn,iglo)
-                 end do
-              end do
-           end do
-       else
-           ! Behaviour without new flow shear algorithm.
-           do iglo = g_lo%llim_proc, g_lo%ulim_proc
-              do isgn = 1, 2
-                 do ig=-ntgrid, ntgrid
-                    g0(ig,isgn,iglo) = aj1(ig,iglo)*vperp2(ig,iglo)*gnew(ig,isgn,iglo)
-                 end do
-              end do
-           end do
-       end if
+       ! NDCTEST_explicit: for explicit flow shear algo, this
+       ! is wrong. EM is not adapted to explicit_flowshear yet.
+       do iglo = g_lo%llim_proc, g_lo%ulim_proc
+          do isgn = 1, 2
+             do ig=-ntgrid, ntgrid
+                g0(ig,isgn,iglo) = aj1_ptr%new(ig,iglo)*vperp2(ig,iglo)*gnew(ig,isgn,iglo)
+             end do
+          end do
+       end do
 
        wgt = spec%temp*spec%dens
        call integrate_species (g0, wgt, antotp)
@@ -7647,7 +7547,7 @@ endif
        
        antotp=0.
 
-    end if ! if fbpar>0.
+    end if
 
     call prof_leaving ("getan", "dist_fn")
   end subroutine getan
@@ -8641,15 +8541,13 @@ endif
   subroutine getfieldeq1 (phi, apar, bpar, antot, antota, antotp, &
        fieldeq, fieldeqa, fieldeqp)
     use theta_grid, only: ntgrid, bmag, delthet, jacob
-    use kt_grids, only: naky, ntheta0, aky, kperp2, kperp2_tdep, &
-        implicit_flowshear, mixed_flowshear, explicit_flowshear, &
-        kperp2_left, kperp2_right
+    use kt_grids, only: naky, ntheta0, aky, kperp2_ptr, &
+        kperp2, explicit_flowshear ! NDCTEST_explicit
     use run_parameters, only: fphi, fapar, fbpar
     use run_parameters, only: beta, tite
     use species, only: spec, has_electron_species
-    use dist_fn_arrays, only: gamtot_tdep, gamtot_left, gamtot_right, &
-        gamtot1_tdep, gamtot1_left, gamtot1_right, &
-        gamtot2_tdep, gamtot2_left, gamtot2_right
+    use dist_fn_arrays, only: gamtot_ptr, gamtot1_ptr, gamtot2_ptr, &
+        gamtot_tdep, gamtot1_tdep, gamtot2_tdep ! NDCTEST_explicit
     implicit none
     complex, dimension (-ntgrid:,:,:), intent (in) :: phi, apar, bpar
     complex, dimension (-ntgrid:,:,:), intent (in) :: antot, antota, antotp
@@ -8670,26 +8568,26 @@ endif
 
     end if
 
+    ! Flow shear pointers:
+    !
+    ! For var in {kperp2, gamtot, gamtot1, gamtot2},
+    !
+    ! var_ptr = var            (old flow shear algo)
+    !         = var_tdep       (mixed/implicit algos & standard timeadv)
+    !         = var_left/right (mixed/implicit algos & init interp aminv matrices)
+    !
+    ! NDC 02/2019
+
     if (fphi > epsilon(0.0)) then
-       
-       ! Select correct gamtots depending on the flow shear algo,
-       ! and whether we are currently computing a shifted am matrix
-       ! for interpolation. -- NDC 11/18
-       if(implicit_flowshear .or. mixed_flowshear) then
-           if(for_interp_left) then
-               fieldeq = antot + bpar*gamtot1_left - gamtot_left*gridfac1*phi
-           elseif(for_interp_right) then
-               fieldeq = antot + bpar*gamtot1_right - gamtot_right*gridfac1*phi
+       if(explicit_flowshear) then
+           ! NDCQUEST: bpar term is surely wrong since EM is not yet adapted to explicit flow shear algo.
+           if(expflowopt==expflowopt_second) then
+               fieldeq = antot + bpar*gamtot1 - gridfac1*phi * gamtot_tdep%old
            else
-               fieldeq = antot + bpar*gamtot1_tdep%new - gamtot_tdep%new*gridfac1*phi
+               fieldeq = antot + bpar*gamtot1 - gamtot*gridfac1*phi
            end if
-       elseif(explicit_flowshear .and. expflowopt == expflowopt_second) then ! NDCTEST_explicit_second
-           ! NDCQUEST: bpar term IS SURELY WRONG, EM IS NOT ADAPTED TO EXPLICIT_FLOWSHEAR YET.
-           fieldeq = antot + bpar*gamtot1 - gridfac1*phi * gamtot_tdep%old
        else
-           ! NDCQUEST: NOT SURE EXPLICIT_MICHAEL IS REALLY THIS CASE: EM IS NOT ADAPTED TO EXPLICIT_FLOWSHEAR YET.
-           ! Behaviour without new flow shear algorithm.
-           fieldeq = antot + bpar*gamtot1 - gamtot*gridfac1*phi
+           fieldeq = antot + bpar*gamtot1_ptr%new - gamtot_ptr%new*gridfac1*phi
        end if
 
        if (.not. has_electron_species(spec)) then
@@ -8699,53 +8597,25 @@ endif
              end do
           end do
        end if
-
-    end if ! fphi>0
+    end if
 
     if (fapar > epsilon(0.0)) then
-
-       ! Select correct kperp2 depending on the flow shear algo,
-       ! and whether we are currently computing a shifted am matrix
-       ! for interpolation. -- NDC 11/18
-       if(implicit_flowshear .or. mixed_flowshear) then
-           if(for_interp_left) then
-               fieldeqa = antota - kperp2_left*gridfac1*apar
-           elseif(for_interp_right) then
-               fieldeqa = antota - kperp2_right*gridfac1*apar
-           else
-               fieldeqa = antota - kperp2_tdep%new*gridfac1*apar
-           end if
-       elseif(explicit_flowshear) then
-           ! NDCQUEST: THIS IS SURELY WRONG, EM IS NOT ADAPTED TO EXPLICIT_FLOWSHEAR YET.
+       if(explicit_flowshear) then
+           ! NDCTEST_explicit: probably wrong, EM is not yet adapted to explicit flow shear algo
            fieldeqa = antota - kperp2*gridfac1*apar
        else
-           ! Behaviour without new flow shear algorithm.
-           fieldeqa = antota - kperp2*gridfac1*apar
+           fieldeqa = antota - kperp2_ptr%new*gridfac1*apar
        end if
-
-    end if ! fapar>0
+    end if
 
 ! bpar == delta B_parallel / B_0(theta) b/c of the factor of 1/bmag(theta)**2
 ! in the following
     if (fbpar > epsilon(0.0)) then
-
-       ! Select correct gamtots depending on the flow shear algo,
-       ! and whether we are currently computing a shifted am matrix
-       ! for interpolation. -- NDC 11/18
-       if(implicit_flowshear .or. mixed_flowshear) then
-           if(for_interp_left) then
-               fieldeqp = (antotp+bpar*gamtot2_left+0.5*phi*gamtot1_left)*beta*apfac
-           elseif(for_interp_right) then
-               fieldeqp = (antotp+bpar*gamtot2_right+0.5*phi*gamtot1_right)*beta*apfac
-           else
-               fieldeqp = (antotp+bpar*gamtot2_tdep%new+0.5*phi*gamtot1_tdep%new)*beta*apfac
-           end if
-       elseif(explicit_flowshear) then
-           ! NDCQUEST: THIS IS SURELY WRONG, EM IS NOT ADAPTED TO EXPLICIT_FLOWSHEAR YET.
+       if(explicit_flowshear) then
+           ! NDCTEST_explicit: probably wrong, EM is not yet adapted to explicit flow shear algo
            fieldeqp = (antotp+bpar*gamtot2+0.5*phi*gamtot1)*beta*apfac
        else
-           ! Behaviour without new flow shear algorithm.
-           fieldeqp = (antotp+bpar*gamtot2+0.5*phi*gamtot1)*beta*apfac
+           fieldeqp = (antotp+bpar*gamtot2_ptr%new+0.5*phi*gamtot1_ptr%new)*beta*apfac
        end if
 
        do ik = 1, naky
@@ -8754,8 +8624,7 @@ endif
           end do
        end do
        fieldeqp = fieldeqp + bpar*gridfac1
-
-    end if ! fbpar>0
+    end if
 
 !    first = .false.
 
@@ -12624,12 +12493,10 @@ endif
 !--------------------------------------------------------------------------- 
   subroutine calculate_flux_surface_average (fl_avg,antot)
 
-    use kt_grids, only: naky, ntheta0, aky, kwork_filter, &
-        explicit_flowshear, mixed_flowshear, implicit_flowshear
+    use kt_grids, only: naky, ntheta0, aky, kwork_filter
     use run_parameters, only: tite
     use theta_grid, only: ntgrid, delthet, jacob
-    use dist_fn_arrays, only: gamtot_tdep, gamtot_left, gamtot_right, &
-        gamtot3_tdep, gamtot3_left, gamtot3_right
+    use dist_fn_arrays, only: gamtot_ptr, gamtot3_ptr
     implicit none
     complex, dimension (ntheta0, naky), intent (out) :: fl_avg
     complex, dimension (-ntgrid:ntgrid,ntheta0,naky), intent (in) :: antot
@@ -12637,100 +12504,32 @@ endif
 
     fl_avg = 0.
 
-    ! In the following, we select the correct gamtots 
-    ! depending on the choice of flow shear algo,
-    ! and whether we are currently computing a shifted am matrix
-    ! for interpolation. -- NDC 11/18
+    ! Flow shear pointers:
+    !
+    ! gamtot3_ptr = gamtot3            (old flow shear algo)
+    !             = gamtot3_tdep       (mixed/implicit algos & standard timeadv)
+    !             = gamtot3_left/right (mixed/implicit algos & init interp aminv matrices)
+    !
+    ! NDC 02/2019
+
     if (.not. allocated(awgt)) then
        allocate (awgt(ntheta0, naky))
        awgt = 0.
-       if(implicit_flowshear .or. mixed_flowshear) then
-           if(for_interp_left) then
-               do ik = 1, naky
-                  if (aky(ik) > epsilon(0.0)) cycle
-                  do it = 1, ntheta0
-                     if(kwork_filter(it,ik)) cycle
-                     awgt(it,ik) = 1.0/sum(delthet*jacob*gamtot3_left(:,it,ik))
-                  end do
-               end do
-           elseif(for_interp_right) then
-               do ik = 1, naky
-                  if (aky(ik) > epsilon(0.0)) cycle
-                  do it = 1, ntheta0
-                     if(kwork_filter(it,ik)) cycle
-                     awgt(it,ik) = 1.0/sum(delthet*jacob*gamtot3_right(:,it,ik))
-                  end do
-               end do
-           else
-               do ik = 1, naky
-                  if (aky(ik) > epsilon(0.0)) cycle
-                  do it = 1, ntheta0
-                     if(kwork_filter(it,ik)) cycle
-                     awgt(it,ik) = 1.0/sum(delthet*jacob*gamtot3_tdep%new(:,it,ik))
-                  end do
-               end do
-           end if
-       elseif(explicit_flowshear) then
-           ! NDCQUEST: THIS IS SURELY WRONG, EM IS NOT ADAPTED TO EXPLICIT_FLOWSHEAR YET.
-           do ik = 1, naky
-              if (aky(ik) > epsilon(0.0)) cycle
-              do it = 1, ntheta0
-                 if(kwork_filter(it,ik)) cycle
-                 awgt(it,ik) = 1.0/sum(delthet*jacob*gamtot3(:,it,ik))
-              end do
-           end do
-       else
-           ! Behaviour without new flow shear algorithm.
-           do ik = 1, naky
-              if (aky(ik) > epsilon(0.0)) cycle
-              do it = 1, ntheta0
-                 if(kwork_filter(it,ik)) cycle
-                 awgt(it,ik) = 1.0/sum(delthet*jacob*gamtot3(:,it,ik))
-              end do
-           end do
-       end if
+       do ik = 1, naky
+          if (aky(ik) > epsilon(0.0)) cycle
+          do it = 1, ntheta0
+             if(kwork_filter(it,ik)) cycle
+             awgt(it,ik) = 1.0/sum(delthet*jacob*gamtot3_ptr%new(:,it,ik))
+          end do
+       end do
     endif
-     
-    if(implicit_flowshear .or. mixed_flowshear) then
-        if(for_interp_left) then
-            do ik = 1, naky
-               do it = 1, ntheta0
-                  if(kwork_filter(it,ik)) cycle
-                  fl_avg(it,ik) = tite*sum(delthet*jacob*antot(:,it,ik)/gamtot_left(:,it,ik))*awgt(it,ik)
-               end do
-            end do
-        elseif(for_interp_right) then
-            do ik = 1, naky
-               do it = 1, ntheta0
-                  if(kwork_filter(it,ik)) cycle
-                  fl_avg(it,ik) = tite*sum(delthet*jacob*antot(:,it,ik)/gamtot_right(:,it,ik))*awgt(it,ik)
-               end do
-            end do
-        else
-            do ik = 1, naky
-               do it = 1, ntheta0
-                  if(kwork_filter(it,ik)) cycle
-                  fl_avg(it,ik) = tite*sum(delthet*jacob*antot(:,it,ik)/gamtot_tdep%new(:,it,ik))*awgt(it,ik)
-               end do
-            end do
-        end if
-    elseif(explicit_flowshear) then
-        ! NDCQUEST: THIS IS SURELY WRONG, EM IS NOT ADAPTED TO EXPLICIT_FLOWSHEAR YET.
-        do ik = 1, naky
-           do it = 1, ntheta0
-              if(kwork_filter(it,ik)) cycle
-              fl_avg(it,ik) = tite*sum(delthet*jacob*antot(:,it,ik)/gamtot(:,it,ik))*awgt(it,ik)
-           end do
-        end do
-    else
-        ! Behaviour without new flow shear algorithm.
-        do ik = 1, naky
-           do it = 1, ntheta0
-              if(kwork_filter(it,ik)) cycle
-              fl_avg(it,ik) = tite*sum(delthet*jacob*antot(:,it,ik)/gamtot(:,it,ik))*awgt(it,ik)
-           end do
-        end do
-    end if
+
+    do ik = 1, naky
+       do it = 1, ntheta0
+          if(kwork_filter(it,ik)) cycle
+          fl_avg(it,ik) = tite*sum(delthet*jacob*antot(:,it,ik)/gamtot_ptr%new(:,it,ik))*awgt(it,ik)
+       end do
+    end do
 
   end subroutine calculate_flux_surface_average
 
