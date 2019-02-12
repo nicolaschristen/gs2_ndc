@@ -794,7 +794,8 @@ contains
         for_interp_left, for_interp_right, &
         adiabatic_option_switch, adiabatic_option_fieldlineavg, &
         wdrift_tdep, wdrift_ptr, wdrift_left, wdrift_right, &
-        wdriftttp_tdep, wdriftttp_ptr, wdriftttp_left, wdriftttp_right
+        wdriftttp_tdep, wdriftttp_ptr, wdriftttp_left, wdriftttp_right, &
+        shift_ptr_to_tdep
     use run_parameters, only: fphi, fapar, fbpar
     use gs2_layouts, only: init_fields_layouts, f_lo, init_jfields_layouts, &
         g_lo
@@ -869,6 +870,14 @@ contains
         
        ! For flow-shear cases
        if(implicit_flowshear .or. mixed_flowshear) then
+
+           ! The arrays are allocated to be as small as possible.
+           ! First deallocate them.
+           if(allocated(kperp2_left)) then
+               call deallocate_left_right
+           end if
+           ! Then allocate to their correct sizes. -- NDC 2/2019
+           call allocate_left_right
            
            dkx = (akx(2) - akx(1))
            kx_shift_stored = kx_shift
@@ -878,64 +887,13 @@ contains
            ! use it to compute corresponding kperp, Bessel funcs, gamtots,
            ! and store those in '_left' vars.
            ! NDC 11/2018
-           allocate(kperp2_left(-ntgrid:ntgrid,ntheta0,naky))
-           allocate(aj0_left(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
-           allocate(aj1_left(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
-           allocate(gamtot_left(-ntgrid:ntgrid,ntheta0,naky))
-           ! NDCQUEST : do we need t-dep versions of gamtot1,2 in electrostatic cases ?
-           if(fbpar>0.) then
-               allocate(gamtot1_left(-ntgrid:ntgrid,ntheta0,naky))
-               allocate(gamtot2_left(-ntgrid:ntgrid,ntheta0,naky))
-           else
-               allocate(gamtot1_left(1,1,1))
-               gamtot1_left = 0.0
-               allocate(gamtot2_left(1,1,1))
-               gamtot2_left = 0.0
-           end if
-           if(.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) then
-               if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
-                   allocate(gamtot3_left(-ntgrid:ntgrid,ntheta0,naky))
-               else
-                   allocate(gamtot3_left(1,1,1))
-                   gamtot3_left = 0.0
-               end if
-           else
-               allocate(gamtot3_left(1,1,1))
-               gamtot3_left = 0.0
-           end if
-           if(implicit_flowshear) then
-               allocate(r_left(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-               allocate(ainv_left(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-               allocate(wdrift_left(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-               allocate(wdriftttp_left(-ntgrid:ntgrid,ntheta0,naky,negrid,nspec,2))
-           else
-               allocate(r_left(1,1,1))
-               r_left = 0.0
-               allocate(ainv_left(1,1,1))
-               ainv_left = 0.0
-               allocate(wdrift_left(1,1,1))
-               wdrift_left = 0.0
-               allocate(wdriftttp_left(1,1,1,1,1,1))
-               wdriftttp_left = 0.0
-           end if
-
+           call shift_ptr_to_left
            kx_shift = -0.5*dkx
-           kperp2_ptr%new => kperp2_left
-           aj0_ptr%new => aj0_left
-           aj1_ptr%new => aj1_left
-           gamtot_ptr%new => gamtot_left
-           gamtot1_ptr%new => gamtot1_left
-           gamtot2_ptr%new => gamtot2_left
-           gamtot3_ptr%new => gamtot3_left
            call update_kperp2_tdep(skip_old)
            call update_bessel_tdep(skip_old)
            call update_gamtots_tdep(skip_old)
            if(implicit_flowshear) then
-               r_ptr => r_left
-               ainv_ptr => ainv_left
                call compute_a_b_r_ainv
-               wdrift_ptr%new => wdrift_left
-               wdriftttp_ptr%new => wdriftttp_left
                call update_wdrift_tdep
            end if
 
@@ -944,63 +902,13 @@ contains
            ! use it to compute corresponding kperp, Bessel funcs, gamtots,
            ! and store those in '_right' vars.
            ! NDC 11/2018
-           allocate(kperp2_right(-ntgrid:ntgrid,ntheta0,naky))
-           allocate(aj0_right(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
-           allocate(aj1_right(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
-           allocate(gamtot_right(-ntgrid:ntgrid,ntheta0,naky))
-           if(fbpar>0.) then
-               allocate(gamtot1_right(-ntgrid:ntgrid,ntheta0,naky))
-               allocate(gamtot2_right(-ntgrid:ntgrid,ntheta0,naky))
-           else
-               allocate(gamtot1_right(1,1,1))
-               gamtot1_right = 0.0
-               allocate(gamtot2_right(1,1,1))
-               gamtot2_right = 0.0
-           end if
-           if(.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) then
-               if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
-                   allocate(gamtot3_right(-ntgrid:ntgrid,ntheta0,naky))
-               else
-                   allocate(gamtot3_right(1,1,1))
-                   gamtot3_right = 0.0
-               end if
-           else
-               allocate(gamtot3_right(1,1,1))
-               gamtot3_right = 0.0
-           end if
-           if(implicit_flowshear) then
-               allocate(r_right(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-               allocate(ainv_right(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-               allocate(wdrift_right(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-               allocate(wdriftttp_right(-ntgrid:ntgrid,ntheta0,naky,negrid,nspec,2))
-           else
-               allocate(r_right(1,1,1))
-               r_right = 0.0
-               allocate(ainv_right(1,1,1))
-               ainv_right = 0.0
-               allocate(wdrift_right(1,1,1))
-               wdrift_right = 0.0
-               allocate(wdriftttp_right(1,1,1,1,1,1))
-               wdriftttp_right = 0.0
-           end if
-
+           call shift_ptr_to_right
            kx_shift = 0.5*dkx
-           kperp2_ptr%new => kperp2_right
-           aj0_ptr%new => aj0_right
-           aj1_ptr%new => aj1_right
-           gamtot_ptr%new => gamtot_right
-           gamtot1_ptr%new => gamtot1_right
-           gamtot2_ptr%new => gamtot2_right
-           gamtot3_ptr%new => gamtot3_right
            call update_kperp2_tdep(skip_old)
            call update_bessel_tdep(skip_old)
            call update_gamtots_tdep(skip_old)
            if(implicit_flowshear) then
-               r_ptr => r_right
-               ainv_ptr => ainv_right
                call compute_a_b_r_ainv
-               wdrift_ptr%new => wdrift_right
-               wdriftttp_ptr%new => wdriftttp_right
                call update_wdrift_tdep
            end if
 
@@ -1008,23 +916,13 @@ contains
            ! we update kx*_new to kxbar (and do not care about kx*_old),
            ! use it to compute corresponding kperp Bessel funcs, gamtots.
            ! NDC 11/2018
+           call shift_ptr_to_tdep
            kx_shift = 0.
-           kperp2_ptr%new => kperp2_tdep%new
-           aj0_ptr%new => aj0_tdep%new
-           aj1_ptr%new => aj1_tdep%new
-           gamtot_ptr%new => gamtot_tdep%new
-           gamtot1_ptr%new => gamtot1_tdep%new
-           gamtot2_ptr%new => gamtot2_tdep%new
-           gamtot3_ptr%new => gamtot3_tdep%new
            call update_kperp2_tdep(skip_old)
            call update_bessel_tdep(skip_old)
            call update_gamtots_tdep(skip_old)
            if(implicit_flowshear) then
-               r_ptr => r
-               ainv_ptr => ainv
                call compute_a_b_r_ainv
-               wdrift_ptr%new => wdrift_tdep%new
-               wdriftttp_ptr%new => wdriftttp_tdep%new
                call update_wdrift_tdep
            end if
        end if
@@ -1063,7 +961,7 @@ contains
           ! required for aminv interpolation in cases with flow-shear --NDC 11/2017
           if(implicit_flowshear .or. mixed_flowshear) then
         
-              if(interp_before) then
+              if(interp_before) then ! NDCTEST_interp_before
                  
                   if(.not. associated(amcollec(i)%am)) then
 
@@ -1141,7 +1039,7 @@ contains
                    if (.not. skip_initialisation) then
                        
                        if(allocated(kx_shift)) kx_shift = 0.
-                       if(interp_before .and. .not. explicit_flowshear) then
+                       if(interp_before .and. .not. explicit_flowshear) then ! NDCTEST_interp_before
                            call init_response_row (ig, ifield, amcollec(i)%am, i, n)
                        else
                            call init_response_row (ig, ifield, am, i, n)
@@ -1151,8 +1049,9 @@ contains
                        ! required for aminv interpolation in cases with flow-shear --NDC 11/2017
                        if(implicit_flowshear .or. mixed_flowshear) then
                            
-                           ! signalling to dist_fn::getfieldeq to use _left vars
+                           ! Use _left vars
                            for_interp_left = .true.
+                           call shift_ptr_to_left
                            kx_shift = -0.5*dkx
                            
                            if(interp_before) then
@@ -1165,6 +1064,7 @@ contains
                            
                            ! signalling to dist_fn::getfieldeq to use _right vars
                            for_interp_right = .true.
+                           call shift_ptr_to_right
                            kx_shift = 0.5*dkx
 
                            if(interp_before) then
@@ -1174,6 +1074,7 @@ contains
                            end if
                            
                            for_interp_right = .false.
+                           call shift_ptr_to_tdep
 
                        end if
 
@@ -1214,6 +1115,7 @@ contains
                        
                        ! signalling to dist_fn::getfieldeq to use _left vars
                        for_interp_left = .true.
+                       call shift_ptr_to_left
                        kx_shift = -0.5*dkx
                        
                        if(interp_before) then
@@ -1226,6 +1128,7 @@ contains
                        
                        ! signalling to dist_fn::getfieldeq to use _right vars
                        for_interp_right = .true.
+                       call shift_ptr_to_right
                        kx_shift = 0.5*dkx
 
                        if(interp_before) then
@@ -1235,6 +1138,7 @@ contains
                        end if
                        
                        for_interp_right = .false.
+                       call shift_ptr_to_tdep
 
                    end if
 
@@ -1273,6 +1177,7 @@ contains
                        
                        ! signalling to dist_fn::getfieldeq to use _left vars
                        for_interp_left = .true.
+                       call shift_ptr_to_left
                        kx_shift = -0.5*dkx
                        
                        if(interp_before) then
@@ -1285,6 +1190,7 @@ contains
                        
                        ! signalling to dist_fn::getfieldeq to use _right vars
                        for_interp_right = .true.
+                       call shift_ptr_to_right
                        kx_shift = 0.5*dkx
 
                        if(interp_before) then
@@ -1294,6 +1200,7 @@ contains
                        end if
                        
                        for_interp_right = .false.
+                       call shift_ptr_to_tdep
 
                    end if
 
@@ -1330,24 +1237,11 @@ contains
        
        if(implicit_flowshear .or. mixed_flowshear) then
               
-           ! Deallocate memory used to compute interpolation matrices
-           deallocate(kperp2_left)
-           deallocate(aj0_left, aj1_left)
-           deallocate(gamtot_left, gamtot1_left, gamtot2_left)
-           deallocate(kperp2_right)
-           deallocate(aj0_right, aj1_right)
-           deallocate(gamtot_right, gamtot1_right, gamtot2_right)
-           if(.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) then
-               if (adiabatic_option_switch == adiabatic_option_fieldlineavg) then
-                   deallocate(gamtot3_left, gamtot3_right)
-               end if
-           end if
-           if(implicit_flowshear) then
-               deallocate(r_left, ainv_left)
-               deallocate(r_right, ainv_right)
-               deallocate(wdrift_right, wdrift_left)
-               deallocate(wdriftttp_right, wdriftttp_left)
-           end if
+           ! Deallocate large arrays, they are only needed if
+           ! new interpolation matrices are needed.
+           call deallocate_left_right
+           ! And reallocate them to small arrays for memory. -- NDC 2/2019
+           call allocate_small_left_right
            
            ! Restore time dependent quantities from before matrix computation
            kx_shift = kx_shift_stored
@@ -1365,6 +1259,152 @@ contains
 
     if(dump_response) call dump_response_to_file_imp
     call prof_leaving ("init_response_matrix", "fields_implicit")
+
+  contains
+
+      subroutine allocate_left_right
+
+          implicit none
+
+          ! NDCQUEST: there are a lot of dfnc-sized arrays... Should this
+          ! become an issue memory-wise, one could
+          ! temporarily de-allocate gexp_1,2,3 (only used for NL).
+          allocate(kperp2_left(-ntgrid:ntgrid,ntheta0,naky))
+          allocate(kperp2_right(-ntgrid:ntgrid,ntheta0,naky))
+          allocate(aj0_left(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
+          allocate(aj0_right(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
+          allocate(aj1_left(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
+          allocate(aj1_right(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
+          allocate(gamtot_left(-ntgrid:ntgrid,ntheta0,naky))
+          allocate(gamtot_right(-ntgrid:ntgrid,ntheta0,naky))
+          ! NDCQUEST: are gamtot1,2 needed for electrostatic ?
+          if(fbpar>0.) then
+              allocate(gamtot1_left(-ntgrid:ntgrid,ntheta0,naky))
+              allocate(gamtot1_right(-ntgrid:ntgrid,ntheta0,naky))
+              allocate(gamtot2_left(-ntgrid:ntgrid,ntheta0,naky))
+              allocate(gamtot2_right(-ntgrid:ntgrid,ntheta0,naky))
+          end if
+          if( (.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) &
+              .and. adiabatic_option_switch == adiabatic_option_fieldlineavg ) then
+              allocate(gamtot3_left(-ntgrid:ntgrid,ntheta0,naky))
+              allocate(gamtot3_right(-ntgrid:ntgrid,ntheta0,naky))
+          end if
+          if(implicit_flowshear) then
+              allocate(r_left(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+              allocate(r_right(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+              allocate(ainv_left(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+              allocate(ainv_right(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+              allocate (wdrift_left(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+              allocate (wdrift_right(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+              allocate (wdriftttp_left(-ntgrid:ntgrid,ntheta0,naky,negrid,nspec,2))
+              allocate (wdriftttp_right(-ntgrid:ntgrid,ntheta0,naky,negrid,nspec,2))
+          end if
+
+      end subroutine allocate_left_right
+
+      subroutine deallocate_left_right
+
+          implicit none
+
+          deallocate(kperp2_left,kperp2_right)
+          deallocate(aj0_left,aj0_right)
+          deallocate(aj1_left,aj1_right)
+          deallocate(gamtot_left,gamtot_right)
+          ! NDCQUEST: are gamtot1,2 needed for electrostatic ?
+          if(fbpar>0.) then
+              deallocate(gamtot1_left,gamtot1_right)
+              deallocate(gamtot2_left,gamtot2_right)
+          end if
+          if( (.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) &
+              .and. adiabatic_option_switch == adiabatic_option_fieldlineavg ) then
+              deallocate(gamtot3_left, gamtot3_right)
+          end if
+          if(implicit_flowshear) then
+              deallocate(r_left, r_right)
+              deallocate(ainv_left, ainv_right)
+              deallocate(wdrift_left, wdrift_right)
+              deallocate(wdriftttp_left, wdriftttp_right)
+          end if
+
+      end subroutine deallocate_left_right
+
+      subroutine allocate_small_left_right
+
+          implicit none
+
+          allocate(kperp2_left(1,1,1),kperp2_right(1,1,1))
+          allocate(aj0_left(1,1),aj0_right(1,1))
+          allocate(aj1_left(1,1),aj1_right(1,1))
+          allocate(gamtot_left(1,1,1),gamtot_right(1,1,1))
+          ! NDCQUEST: are gamtot1,2 needed for electrostatic ?
+          if(fbpar>0.) then
+              allocate(gamtot1_left(1,1,1),gamtot1_right(1,1,1))
+              allocate(gamtot2_left(1,1,1),gamtot2_right(1,1,1))
+          end if
+          if( (.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) &
+              .and. adiabatic_option_switch == adiabatic_option_fieldlineavg ) then
+              allocate(gamtot3_left(1,1,1), gamtot3_right(1,1,1))
+          end if
+          if(implicit_flowshear) then
+              allocate(r_left(1,1,1), r_right(1,1,1))
+              allocate(ainv_left(1,1,1), ainv_right(1,1,1))
+              allocate(wdrift_left(1,1,1), wdrift_right(1,1,1))
+              allocate(wdriftttp_left(1,1,1,1,1,1), wdriftttp_right(1,1,1,1,1,1))
+          end if
+
+      end subroutine allocate_small_left_right
+
+      subroutine shift_ptr_to_left
+
+          implicit none
+
+          kperp2_ptr%new => kperp2_left
+          aj0_ptr%new => aj0_left
+          aj1_ptr%new => aj1_left
+          gamtot_ptr%new => gamtot_left
+          ! NDCQUEST: are gamtot1,2 needed for electrostatic ?
+          if(fbpar>0.) then
+              gamtot1_ptr%new => gamtot1_left
+              gamtot2_ptr%new => gamtot2_left
+          end if
+          if( (.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) &
+              .and. adiabatic_option_switch == adiabatic_option_fieldlineavg ) then
+              gamtot3_ptr%new => gamtot3_left
+          end if
+          if(implicit_flowshear) then
+              r_ptr => r_left
+              ainv_ptr => ainv_left
+              wdrift_ptr%new => wdrift_left
+              wdriftttp_ptr%new => wdriftttp_left
+          end if
+
+      end subroutine shift_ptr_to_left
+
+      subroutine shift_ptr_to_right
+
+          implicit none
+
+          kperp2_ptr%new => kperp2_right
+          aj0_ptr%new => aj0_right
+          aj1_ptr%new => aj1_right
+          gamtot_ptr%new => gamtot_right
+          ! NDCQUEST: are gamtot1,2 needed for electrostatic ?
+          if(fbpar>0.) then
+              gamtot1_ptr%new => gamtot1_right
+              gamtot2_ptr%new => gamtot2_right
+          end if
+          if( (.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) &
+              .and. adiabatic_option_switch == adiabatic_option_fieldlineavg ) then
+              gamtot3_ptr%new => gamtot3_right
+          end if
+          if(implicit_flowshear) then
+              r_ptr => r_right
+              ainv_ptr => ainv_right
+              wdrift_ptr%new => wdrift_right
+              wdriftttp_ptr%new => wdriftttp_right
+          end if
+
+      end subroutine shift_ptr_to_right
 
   end subroutine init_response_matrix
 

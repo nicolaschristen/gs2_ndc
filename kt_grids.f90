@@ -1314,6 +1314,11 @@ contains
         kperp2_ptr%new => kperp2
     end if
 
+    allocate(kperp2_left(1,1,1))
+    kperp2_left = 0.0
+    allocate(kperp2_right(1,1,1))
+    kperp2_right = 0.0
+
   end subroutine init_kperp2
 
   subroutine finish_kt_grids
@@ -1330,6 +1335,8 @@ contains
     if(allocated(kperp2_tdep%old)) deallocate(kperp2_tdep%old)
     if(allocated(kperp2_tdep%new)) deallocate(kperp2_tdep%new)
     nullify(kperp2_ptr%old, kperp2_ptr%new)
+    if(allocated(kperp2_left)) deallocate(kperp2_left)
+    if(allocated(kperp2_right)) deallocate(kperp2_right)
     
     reality = .false. ; box = .false.
     kp2init = .false.

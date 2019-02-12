@@ -973,10 +973,14 @@ contains
 
   subroutine finish_dist_fn_level_2
     use dist_fn_arrays, only: aj0, aj1, aj0_gf, aj1_gf, aj0_tdep, aj1_tdep, &
-        aj0_ptr_src, aj1_ptr_src, aj0_ptr, aj1_ptr, &
+        aj0_ptr_src, aj1_ptr_src, aj0_ptr, aj1_ptr, aj0_left, aj0_right, &
+        aj1_left, aj1_right, &
         gamtot_tdep, gamtot1_tdep, gamtot2_tdep, gamtot3_tdep, &
         gamtot_ptr, gamtot1_ptr, gamtot2_ptr, gamtot3_ptr, &
-        a, b, r, ainv, r_ptr, ainv_ptr
+        gamtot_left, gamtot_right, gamtot1_left, gamtot1_right, &
+        gamtot2_left, gamtot2_right, gamtot3_left, gamtot3_right, &
+        a, b, r, ainv, r_ptr, ainv_ptr, &
+        r_left, r_right, ainv_left, ainv_right
 
     if (.not. initialized_dist_fn_level_2) return
     initialized_dist_fn_level_2 = .false.
@@ -989,27 +993,35 @@ contains
     if (allocated(aj0_gf)) deallocate (aj0_gf, aj1_gf)
     if (allocated(aj0_tdep%old)) deallocate (aj0_tdep%old)
     if (allocated(aj0_tdep%new)) deallocate (aj0_tdep%new)
+    if (allocated(aj0_left)) deallocate (aj0_left, aj0_right)
     nullify(aj0_ptr%old, aj0_ptr%new)
     nullify(aj0_ptr_src%old, aj0_ptr_src%new)
     if (allocated(aj1_tdep%old)) deallocate (aj1_tdep%old)
     if (allocated(aj1_tdep%new)) deallocate (aj1_tdep%new)
+    if (allocated(aj1_left)) deallocate (aj1_left, aj1_right)
     nullify(aj1_ptr%old, aj1_ptr%new)
     nullify(aj1_ptr_src%old, aj1_ptr_src%new)
     if (allocated(gamtot_tdep%old)) deallocate (gamtot_tdep%old)
     if (allocated(gamtot_tdep%new)) deallocate (gamtot_tdep%new)
+    if (allocated(gamtot_left)) deallocate (gamtot_left, gamtot_right)
     nullify(gamtot_ptr%old, gamtot_ptr%new)
     if (allocated(gamtot1_tdep%old)) deallocate (gamtot1_tdep%old)
     if (allocated(gamtot1_tdep%new)) deallocate (gamtot1_tdep%new)
+    if (allocated(gamtot1_left)) deallocate (gamtot1_left, gamtot1_right)
     nullify(gamtot1_ptr%old, gamtot1_ptr%new)
     if (allocated(gamtot2_tdep%old)) deallocate (gamtot2_tdep%old)
     if (allocated(gamtot2_tdep%new)) deallocate (gamtot2_tdep%new)
+    if (allocated(gamtot2_left)) deallocate (gamtot2_left, gamtot2_right)
     nullify(gamtot2_ptr%old, gamtot2_ptr%new)
     if (allocated(gamtot3_tdep%old)) deallocate (gamtot3_tdep%old)
     if (allocated(gamtot3_tdep%new)) deallocate (gamtot3_tdep%new)
+    if (allocated(gamtot3_left)) deallocate (gamtot3_left, gamtot3_right)
     nullify(gamtot3_ptr%old, gamtot3_ptr%new)
     if (allocated(gridfac1)) deallocate (gridfac1, gamtot, gamtot1, gamtot2)
     if (allocated(gamtot3)) deallocate (gamtot3)
     if (allocated(a)) deallocate (a, b, r, ainv)
+    if (allocated(r_left)) deallocate (r_left, r_right)
+    if (allocated(ainv_left)) deallocate (ainv_left, ainv_right)
     nullify(r_ptr, ainv_ptr)
   end subroutine finish_dist_fn_level_2
   
@@ -1046,6 +1058,9 @@ contains
         deallocate(wdriftttp_tdep%old, wdriftttp_tdep%new, wdriftttp_left, wdriftttp_right)
         nullify(wdriftttp_ptr%old, wdriftttp_ptr%new)
     end if
+    if(allocated(wdrift_left)) deallocate(wdrift_left, wdrift_right)
+    if(allocated(wdriftttp_left)) deallocate(wdriftttp_left, wdrift_right)
+
     if (allocated(wstar)) deallocate (wstar)
 !AJ
     if (allocated(vpa_gf)) deallocate(vpa_gf, vperp2_gf)
@@ -1354,6 +1369,15 @@ contains
         ! Coriolis as well as magnetic drifts
         allocate (wdrift(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
         allocate (wdriftttp(-ntgrid:ntgrid,ntheta0,naky,negrid,nspec,2))
+
+        allocate(wdrift_left(1,1,1))
+        wdrift_left = 0.0
+        allocate(wdrift_right(1,1,1))
+        wdrift_right = 0.0
+        allocate (wdriftttp_left(1,1,1,1,1,1))
+        wdriftttp_left = 0.0
+        allocate (wdriftttp_right(1,1,1,1,1,1))
+        wdriftttp_right = 0.0
     end if
     if(.not. allocated(vdrift_x)) then
         allocate(vdrift_x(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
@@ -1833,7 +1857,7 @@ contains
 
   subroutine init_bessel
     use dist_fn_arrays, only: aj0, aj1, aj0_ptr, aj1_ptr, aj0_ptr_src, aj1_ptr_src, &
-        aj0_tdep, aj1_tdep
+        aj0_tdep, aj1_tdep, aj0_left, aj0_right, aj1_left, aj1_right
  !AJ
     use dist_fn_arrays, only: aj0_gf, aj1_gf
     use kt_grids, only: kperp2, naky, ntheta0, &
@@ -1978,6 +2002,15 @@ contains
         aj1_ptr_src%new => aj1
 
     end if
+
+    allocate(aj0_left(1,1))
+    aj0_left = 0.0
+    allocate(aj0_right(1,1))
+    aj0_right = 0.0
+    allocate(aj1_left(1,1))
+    aj1_left = 0.0
+    allocate(aj1_right(1,1))
+    aj1_right = 0.0
 
   end subroutine init_bessel
 
@@ -2211,7 +2244,8 @@ contains
       use kt_grids, only: implicit_flowshear
       use theta_grid, only: ntgrid
       use gs2_layouts, only: g_lo
-      use dist_fn_arrays, only: a, b, r, ainv, r_ptr, ainv_ptr
+      use dist_fn_arrays, only: a, b, r, ainv, r_ptr, ainv_ptr, &
+          ainv_left, ainv_right, r_left, r_right
       
       implicit none
       
@@ -2223,6 +2257,15 @@ contains
           a = 0. ; b = 0. ; r = 0. ; ainv = 0.
           r_ptr => r
           ainv_ptr => ainv
+
+          allocate(ainv_left(1,1,1))
+          ainv_left = 0.0
+          allocate(ainv_right(1,1,1))
+          ainv_right = 0.0
+          allocate(r_left(1,1,1))
+          r_left = 0.0
+          allocate(r_right(1,1,1))
+          r_right = 0.0
       end if
           
       call compute_a_b_r_ainv
@@ -8164,7 +8207,9 @@ endif
   subroutine init_fieldeq
     use dist_fn_arrays, only: aj0, aj1, vperp2, &
         gamtot_tdep, gamtot1_tdep, gamtot2_tdep, gamtot3_tdep, &
-        gamtot_ptr, gamtot1_ptr, gamtot2_ptr, gamtot3_ptr
+        gamtot_ptr, gamtot1_ptr, gamtot2_ptr, gamtot3_ptr, &
+        gamtot_left, gamtot_right, gamtot1_left, gamtot1_right, &
+        gamtot2_left, gamtot2_right, gamtot3_left, gamtot3_right
     use species, only: nspec, spec, has_electron_species, has_ion_species
     use theta_grid, only: ntgrid
     use kt_grids, only: naky, ntheta0, aky, kperp2, &
@@ -8413,6 +8458,23 @@ endif
 
        endif
     endif
+
+    allocate(gamtot_left(1,1,1))
+    gamtot_left = 0.0
+    allocate(gamtot_right(1,1,1))
+    gamtot_right = 0.0
+    allocate(gamtot1_left(1,1,1))
+    gamtot1_left = 0.0
+    allocate(gamtot1_right(1,1,1))
+    gamtot1_right = 0.0
+    allocate(gamtot2_left(1,1,1))
+    gamtot2_left = 0.0
+    allocate(gamtot2_right(1,1,1))
+    gamtot2_right = 0.0
+    allocate(gamtot3_left(1,1,1))
+    gamtot3_left = 0.0
+    allocate(gamtot3_right(1,1,1))
+    gamtot3_right = 0.0
 
   end subroutine init_fieldeq
 
@@ -12672,7 +12734,6 @@ endif
 
   end subroutine calculate_flux_surface_average
 
-  ! NDCTEST_coll & NDCTEST_nl_vs_lin
   subroutine shift_ptr_to_tdep
 
       use dist_fn_arrays, only: aj0_tdep, aj0_ptr, &
@@ -12680,8 +12741,12 @@ endif
           gamtot_tdep, gamtot_ptr, &
           gamtot1_tdep, gamtot1_ptr, &
           gamtot2_tdep, gamtot2_ptr, &
-          gamtot3_tdep, gamtot3_ptr
-      use kt_grids, only: kx_tdep, kx_ptr, kperp2_tdep, kperp2_ptr
+          gamtot3_tdep, gamtot3_ptr, &
+          ainv, ainv_ptr, r, r_ptr
+      use kt_grids, only: kx_tdep, kx_ptr, kperp2_tdep, kperp2_ptr, &
+          implicit_flowshear
+      use run_parameters, only: fbpar
+      use species, only: has_electron_species, has_ion_species, spec
 
       implicit none
 
@@ -12700,14 +12765,29 @@ endif
       gamtot_ptr%old => gamtot_tdep%old
       gamtot_ptr%new => gamtot_tdep%new
 
-      gamtot1_ptr%old => gamtot1_tdep%old
-      gamtot1_ptr%new => gamtot1_tdep%new
+      ! NDCQUEST: are gamtot1,2 needed for electrostatic ?
+      if(fbpar>0.) then
+          gamtot1_ptr%old => gamtot1_tdep%old
+          gamtot1_ptr%new => gamtot1_tdep%new
 
-      gamtot2_ptr%old => gamtot2_tdep%old
-      gamtot2_ptr%new => gamtot2_tdep%new
+          gamtot2_ptr%old => gamtot2_tdep%old
+          gamtot2_ptr%new => gamtot2_tdep%new
+      end if
 
-      gamtot3_ptr%old => gamtot3_tdep%old
-      gamtot3_ptr%new => gamtot3_tdep%new
+      if( (.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) &
+          .and. adiabatic_option_switch == adiabatic_option_fieldlineavg ) then
+          gamtot3_ptr%old => gamtot3_tdep%old
+          gamtot3_ptr%new => gamtot3_tdep%new
+      end if
+
+      if(implicit_flowshear) then
+          r_ptr => r
+          ainv_ptr => ainv
+          wdrift_ptr%old => wdrift_tdep%old
+          wdrift_ptr%new => wdrift_tdep%new
+          wdriftttp_ptr%old => wdriftttp_tdep%old
+          wdriftttp_ptr%new => wdriftttp_tdep%new
+      end if
 
   end subroutine shift_ptr_to_tdep
 
@@ -12715,8 +12795,12 @@ endif
 
       use dist_fn_arrays, only: aj0, aj0_ptr, &
           aj1, aj1_ptr, &
-          gamtot_ptr, gamtot1_ptr, gamtot2_ptr, gamtot3_ptr
-      use kt_grids, only: akx_extended, kx_ptr, kperp2, kperp2_ptr
+          gamtot_ptr, gamtot1_ptr, gamtot2_ptr, gamtot3_ptr, &
+          ainv, ainv_ptr, r, r_ptr
+      use kt_grids, only: akx_extended, kx_ptr, kperp2, kperp2_ptr, &
+          implicit_flowshear
+      use run_parameters, only: fbpar
+      use species, only: has_electron_species, has_ion_species, spec
 
       implicit none
 
@@ -12735,16 +12819,30 @@ endif
       gamtot_ptr%old => gamtot
       gamtot_ptr%new => gamtot
 
-      gamtot1_ptr%old => gamtot1
-      gamtot1_ptr%new => gamtot1
+      ! NDCQUEST: are gamtot1,2 needed for electrostatic ?
+      if(fbpar>0.) then
+          gamtot1_ptr%old => gamtot1
+          gamtot1_ptr%new => gamtot1
 
-      gamtot2_ptr%old => gamtot2
-      gamtot2_ptr%new => gamtot2
+          gamtot2_ptr%old => gamtot2
+          gamtot2_ptr%new => gamtot2
+      end if
 
-      gamtot3_ptr%old => gamtot3
-      gamtot3_ptr%new => gamtot3
+      if( (.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) &
+          .and. adiabatic_option_switch == adiabatic_option_fieldlineavg ) then
+          gamtot3_ptr%old => gamtot3
+          gamtot3_ptr%new => gamtot3
+      end if
+
+      if(implicit_flowshear) then
+          r_ptr => r
+          ainv_ptr => ainv
+          wdrift_ptr%old => wdrift
+          wdrift_ptr%new => wdrift
+          wdriftttp_ptr%old => wdriftttp
+          wdriftttp_ptr%new => wdriftttp
+      end if
 
   end subroutine shift_ptr_from_tdep
-  ! end NDCTEST_coll & NDCTEST_nl_vs_lin
 
 end module dist_fn
