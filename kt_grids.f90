@@ -548,7 +548,7 @@ module kt_grids_box
   logical :: implicit_flowshear
   logical :: mixed_flowshear
   logical :: apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
-  logical :: interp_before ! NDCTEST
+  logical :: interp_before ! NDCTEST_interp_before
   logical :: remap_gexp
 
 contains
@@ -563,7 +563,7 @@ contains
          y0, rtwist, x0, nkpolar, rhostar_box, explicit_flowshear, implicit_flowshear, &
          mixed_flowshear, &
          apply_flowshear_nonlin, & ! NDCTEST_nl_vs_lin
-         interp_before, & ! NDCTEST_before
+         interp_before, & ! NDCTEST_interp_before
          remap_gexp
 
     if (parameters_read) return
@@ -583,7 +583,7 @@ contains
     ! true if a new flow shear algo is selected, false if the old algo is used.
     apply_flowshear_nonlin = .false.
     ! endNDCTEST_nl_vs_lin
-    interp_before = .false. ! NDCTEST_before
+    interp_before = .false. ! NDCTEST_interp_before
     ! If the user has explicitly specified it in his input file, remap_gexp
     ! will be set to this user provided value. If it is not specified, it will be set to
     ! true if a new flow shear algo is selected, false if the old algo is used.
@@ -874,21 +874,21 @@ contains
   subroutine box_get_flowshear_flags(explicit_flowshear_public, implicit_flowshear_public, &
           mixed_flowshear_public, &
           apply_flowshear_nonlin_public, & ! NDCTEST_nl_vs_lin
-          interp_before_public, & ! NDCTEST
+          interp_before_public, & ! NDCTEST_interp_before
           remap_gexp_public)
       implicit none
       logical, intent(inout) :: explicit_flowshear_public
       logical, intent(inout) :: implicit_flowshear_public
       logical, intent(inout) :: mixed_flowshear_public
       logical, intent(inout) :: apply_flowshear_nonlin_public ! NDCTEST_nl_vs_lin
-      logical, intent(inout) :: interp_before_public ! NDCTEST
+      logical, intent(inout) :: interp_before_public ! NDCTEST_interp_before
       logical, intent(inout) :: remap_gexp_public
 
       explicit_flowshear_public = explicit_flowshear
       implicit_flowshear_public = implicit_flowshear
       mixed_flowshear_public = mixed_flowshear
       apply_flowshear_nonlin_public = apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
-      interp_before_public = interp_before ! NDCTEST
+      interp_before_public = interp_before ! NDCTEST_interp_before
       remap_gexp_public = remap_gexp
   end subroutine box_get_flowshear_flags
 end module kt_grids_box
@@ -917,7 +917,7 @@ module kt_grids
   public :: implicit_flowshear
   public :: mixed_flowshear
   public :: apply_flowshear_nonlin
-  public :: interp_before ! NDCTEST
+  public :: interp_before ! NDCTEST_interp_before
   public :: remap_gexp
 
   public :: akx_extended
@@ -941,7 +941,7 @@ module kt_grids
   logical :: implicit_flowshear
   logical :: mixed_flowshear
   logical :: apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
-  logical :: interp_before ! NDCTEST
+  logical :: interp_before ! NDCTEST_interp_before
   logical :: remap_gexp
   real, dimension(:,:), allocatable, target :: akx_extended
 
@@ -1090,14 +1090,14 @@ contains
             call box_get_flowshear_flags(explicit_flowshear, implicit_flowshear, &
                 mixed_flowshear, &
                 apply_flowshear_nonlin, & ! NDCTEST_nl_vs_lin
-                interp_before, & ! NDCTEST_before
+                interp_before, & ! NDCTEST_interp_before
                 remap_gexp)
         else
             explicit_flowshear = .false.
             implicit_flowshear = .false.
             mixed_flowshear = .false.
             apply_flowshear_nonlin = .false. ! NDCTEST_nl_vs_lin
-            interp_before = .false. ! NDCTEST_before
+            interp_before = .false. ! NDCTEST_interp_before
             remap_gexp = .false.
         end if
     end if
@@ -1105,7 +1105,7 @@ contains
     call broadcast (implicit_flowshear)
     call broadcast (mixed_flowshear)
     call broadcast (apply_flowshear_nonlin) ! NDCTEST_nl_vs_lin
-    call broadcast (interp_before) ! NDCTEST_before
+    call broadcast (interp_before) ! NDCTEST_interp_before
     call broadcast (remap_gexp)
     
     call init_kx_tdep

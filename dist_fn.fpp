@@ -355,13 +355,13 @@ module dist_fn
   logical :: explicit_terms_present = .false.
   logical :: explicit_lowflow = .false.
 
-  ! NDCTESTneighb
+  ! NDCTEST_explicit
   ! In GK equation, h=0 as incoming BC => need phi to adjust g.
   ! In the fully explicit flow shear algorithm, we need to add phistar back
   ! to work with the full phi. For the first gk_solve, we need the full phi[it],
   ! and for the second solve we need the full phi[it+1].
   logical :: first_gk_solve = .false.
-  ! endNDCTESTneighb
+  ! endNDCTEST_explicit
 
   integer :: expflowopt
   integer, parameter :: expflowopt_none=0, expflowopt_second=1, expflowopt_antot_old=2, expflowopt_antot_tdep_old=3, &
@@ -912,7 +912,7 @@ contains
     use lowflow, only: finish_lowflow_terms
     use dist_fn_arrays, only: hneoc, vparterm, wdfac, wstarfac, wdttpfac
 #endif
-    use dist_fn_arrays, only: jump ! NDCTESTneighb
+    use dist_fn_arrays, only: jump
     implicit none
     if (.not. initialized_dist_fn_level_1) return
     initialized_dist_fn_level_1 = .false.
@@ -4692,8 +4692,7 @@ contains
     use le_grids, only: negrid, nlambda
     use species, only: nspec
     use run_parameters, only: fphi, fapar, fbpar
-    use dist_fn_arrays, only: theta0_shift, &
-        jump ! NDCTESTneighb
+    use dist_fn_arrays, only: theta0_shift, jump
     use gs2_time, only: code_dt, code_dt_old, code_time
     use constants, only: twopi   
     use fields_arrays, only: aparold
@@ -6160,7 +6159,7 @@ contains
     use dist_fn_arrays, only: hneoc, vparterm, wdfac, wstarfac, wdttpfac
 #endif
     use dist_fn_arrays, only: aj0, aj1, vperp2, g, ittp, &
-        a, b, r, ainv ! NDCTESTneighb
+        a, b, r, ainv
     use theta_grid, only: ntgrid
     use kt_grids, only: aky
     use le_grids, only: nlambda, ng2, lmax, anon

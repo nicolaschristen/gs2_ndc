@@ -1407,7 +1407,7 @@ contains
     logical, intent(in), optional :: tadv_opt
     complex, dimension (:,:,:), allocatable :: fieldeq, fieldeqa, fieldeqp
     integer :: irow, istart, iflo, ik, it, ifin, m, nn
-    logical :: tadv ! NDCTESTshift
+    logical :: tadv
 
     if(present(tadv_opt)) then
         tadv = tadv_opt
@@ -1431,7 +1431,7 @@ contains
     !together, this may not be so easy if we do all the ik together but it should
     !be possible.
 
-    ! NDCTESTshift: no need to call timeadv for interpolation matrices in mixed flow-shear approach
+    ! No need to call timeadv for interpolation matrices in mixed flow-shear approach.
     if(tadv) then
         
         skip_explicit_for_response = .true.

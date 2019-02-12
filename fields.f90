@@ -449,16 +449,16 @@ contains
     use theta_grid, only: ntgrid
     use kt_grids, only: naky, ntheta0, &
         mixed_flowshear, &
-        explicit_flowshear ! NDCTESTmichaelnew
+        explicit_flowshear ! NDCTEST_explicit_first
     use antenna, only: no_driver
     use fields_arrays, only: phi, apar, bpar, phinew, aparnew, bparnew, apar_ext, &
         aparold, &
-        phistar_old, phistar_new ! NDCTESTmichaelnew
+        phistar_old, phistar_new ! NDCTEST_explicit_first
     use fields_arrays, only: gf_phi, gf_apar, gf_bpar, gf_phinew, gf_aparnew, gf_bparnew
     use unit_tests, only: debug_message
     implicit none
     integer, parameter :: verb=3
-    logical :: michael_exp = .true. ! NDCTESTswitchexp
+    logical :: explicit_first = .true. ! NDCTESTswitchexp
 
     if (.not. allocated(phi)) then
        call debug_message(verb, 'fields::allocate_arrays allocating')
@@ -470,17 +470,17 @@ contains
        allocate (bparnew (-ntgrid:ntgrid,ntheta0,naky))
        if(mixed_flowshear .or. explicit_flowshear) then
            allocate(aparold(-ntgrid:ntgrid,ntheta0,naky))
-           if(explicit_flowshear .and. michael_exp) then
-               allocate ( phistar_old (-ntgrid:ntgrid,ntheta0,naky)) ! NDCTESTmichaelnew
-               allocate ( phistar_new (-ntgrid:ntgrid,ntheta0,naky)) ! NDCTESTmichaelnew
+           if(explicit_flowshear .and. explicit_first) then
+               allocate ( phistar_old (-ntgrid:ntgrid,ntheta0,naky)) ! NDCTEST_explicit_first
+               allocate ( phistar_new (-ntgrid:ntgrid,ntheta0,naky)) ! NDCTEST_explicit_first
            else
-               allocate ( phistar_old (1,1,1)) ! NDCTESTmichaelnew
-               allocate ( phistar_new (1,1,1)) ! NDCTESTmichaelnew
+               allocate ( phistar_old (1,1,1)) ! NDCTEST_explicit_first
+               allocate ( phistar_new (1,1,1)) ! NDCTEST_explicit_first
            end if
        else
            allocate(aparold(1,1,1))
-           allocate ( phistar_old (1,1,1)) ! NDCTESTmichaelnew
-           allocate ( phistar_new (1,1,1)) ! NDCTESTmichaelnew
+           allocate ( phistar_old (1,1,1)) ! NDCTEST_explicit_first
+           allocate ( phistar_new (1,1,1)) ! NDCTEST_explicit_first
        end if
        if(fieldopt_switch .eq. fieldopt_gf_local) then
           !AJ It should be possible to reduce the size of these by only allocating them
@@ -502,8 +502,8 @@ contains
     apar = 0.; aparnew = 0.
     bpar = 0.; bparnew = 0.
     aparold = 0.
-    phistar_old = 0. ! NDCTESTmichaelnew
-    phistar_new = 0. ! NDCTESTmichaelnew
+    phistar_old = 0. ! NDCTEST_explicit_first
+    phistar_new = 0. ! NDCTEST_explicit_first
 
     if(fieldopt_switch .eq. fieldopt_gf_local) then
        gf_phi = 0.; gf_phinew = 0.
@@ -669,7 +669,7 @@ contains
     use fields_gf_local, only: finish_fields_gf_local
     use fields_arrays, only: phi, apar, bpar, phinew, aparnew, bparnew, &
         aparold, &
-        phistar_old, phistar_new ! NDCTESTmichaelnew
+        phistar_old, phistar_new ! NDCTEST_explicit_first
     use fields_arrays, only: apar_ext, gf_phi, gf_apar, gf_bpar
     use fields_arrays, only: apar_ext, gf_phinew, gf_aparnew, gf_bparnew
     use unit_tests, only: debug_message
@@ -711,7 +711,7 @@ contains
 
     if (allocated(phi)) deallocate (phi, apar, bpar, phinew, aparnew, bparnew)
     if (allocated(aparold)) deallocate (aparold)
-    if (allocated(phistar_old)) deallocate (phistar_old, phistar_new) ! NDCTESTmichaelnew
+    if (allocated(phistar_old)) deallocate (phistar_old, phistar_new) ! NDCTEST_explicit_first
     if (allocated(gf_phi)) deallocate(gf_phi, gf_apar, gf_bpar, gf_phinew, gf_aparnew, gf_bparnew)
     if (allocated(apar_ext)) deallocate (apar_ext)
     call debug_message(verbosity, &
