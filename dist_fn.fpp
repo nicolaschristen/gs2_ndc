@@ -105,14 +105,12 @@ module dist_fn
   public :: update_kperp2_tdep
   public :: update_bessel_tdep
   public :: update_gamtots_tdep
+  public :: update_wdrift_tdep
 
-  public :: compute_wdrift ! NDCTESTshift
-  public :: init_invert_rhs ! NDCTESTshift
+  public :: init_invert_rhs
   
-  ! NDCTESTneighb
-  public :: first_gk_solve
+  public :: first_gk_solve ! NDCTEST_explicit
   public :: compute_a_b_r_ainv
-  ! endNDCTESTneighb
 
   public :: for_interp_left
   public :: for_interp_right
@@ -125,6 +123,9 @@ module dist_fn
   public :: skip_explicit_for_response
 
   public :: shift_ptr_to_tdep, shift_ptr_from_tdep ! NDCTEST_coll & NDCTEST_nl_vs_lin
+
+  public :: wdrift_tdep, wdrift_ptr, wdrift_left, wdrift_right
+  public :: wdriftttp_tdep, wdriftttp_ptr, wdriftttp_left, wdriftttp_right
 
   ! knobs
   complex, dimension (:), allocatable :: fexp ! (nspec)
@@ -183,18 +184,61 @@ module dist_fn
   real, dimension (:,:,:), allocatable :: wstar_neo
   ! (-ntgrid:ntgrid,ntheta0,naky)
 
-  complex, dimension (:,:,:), allocatable :: wdrift
+  complex, dimension (:,:,:), allocatable, target :: wdrift
   ! (-ntgrid:ntgrid, 2, -g-layout-)
 #else
-  real, dimension (:,:,:), allocatable :: wdrift
+  real, dimension (:,:,:), allocatable, target :: wdrift
+#endif
+
+  ! Time-dependent versions of wdrift, containing values for present and next
+  ! time-steps. Used for flow-shear cases. --NDC 02/2019
+  type :: wdrift_tdep_type
+#ifdef LOWFLOW
+      complex, dimension(:,:,:), allocatable :: old
+      complex, dimension(:,:,:), allocatable :: new
+#else
+      real, dimension(:,:,:), allocatable :: old
+      real, dimension(:,:,:), allocatable :: new
+#endif
+  end type wdrift_tdep_type
+
+  type :: wdrift_tdep_ptr_type
+#ifdef LOWFLOW
+      complex, dimension(:,:,:), pointer :: old
+      complex, dimension(:,:,:), pointer :: new
+#else
+      real, dimension(:,:,:), pointer :: old
+      real, dimension(:,:,:), pointer :: new
+#endif
+  end type wdrift_tdep_ptr_type
+
+  type(wdrift_tdep_type), target :: wdrift_tdep
+  type(wdrift_tdep_ptr_type) :: wdrift_ptr
+  real, dimension(:,:,:), allocatable, target :: wdrift_left, wdrift_right
+
   real, dimension (:,:,:), allocatable :: vdrift_x
   real, dimension (:,:,:), allocatable :: vdrift_x_cent
   ! (-ntgrid:ntgrid, 2, -g-layout-)
-#endif
 
 !  real, dimension (:,:,:,:,:), allocatable :: wdriftttp
-  real, dimension (:,:,:,:,:,:), allocatable :: wdriftttp
+  real, dimension (:,:,:,:,:,:), allocatable, target :: wdriftttp
   ! (-ntgrid:ntgrid,ntheta0,naky,negrid,nspec) replicated
+
+  ! Time-dependent versions of wdriftttp, containing values for present and next
+  ! time-steps. Used for flow-shear cases. --NDC 02/2019
+  type :: wdriftttp_tdep_type
+      real, dimension(:,:,:,:,:,:), allocatable :: old
+      real, dimension(:,:,:,:,:,:), allocatable :: new
+  end type wdriftttp_tdep_type
+
+  type :: wdriftttp_tdep_ptr_type
+      real, dimension(:,:,:,:,:,:), pointer :: old
+      real, dimension(:,:,:,:,:,:), pointer :: new
+  end type wdriftttp_tdep_ptr_type
+
+  type(wdriftttp_tdep_type), target :: wdriftttp_tdep
+  type(wdriftttp_tdep_ptr_type) :: wdriftttp_ptr
+  real, dimension(:,:,:,:,:,:), allocatable, target :: wdriftttp_left, wdriftttp_right
 
   real, dimension (:,:,:), allocatable :: wstar
   ! (naky,negrid,nspec) replicated
@@ -997,6 +1041,10 @@ contains
     if (allocated(vpa)) deallocate (vpa, vpac, vpar)
     if (allocated(ittp)) then
         deallocate (ittp, wdrift, vdrift_x, vdrift_x_cent, wdriftttp)
+        deallocate(wdrift_tdep%old, wdrift_tdep%new, wdrift_left, wdrift_right)
+        nullify(wdrift_ptr%old, wdrift_ptr%new)
+        deallocate(wdriftttp_tdep%old, wdriftttp_tdep%new, wdriftttp_left, wdriftttp_right)
+        nullify(wdriftttp_ptr%old, wdriftttp_ptr%new)
     end if
     if (allocated(wstar)) deallocate (wstar)
 !AJ
@@ -1285,49 +1333,15 @@ contains
   end subroutine fill_species_knobs
 
   subroutine init_wdrift
-
-      use species, only: nspec
-      use theta_grid, only: ntgrid
-      use kt_grids, only: naky, ntheta0, explicit_flowshear, implicit_flowshear, &
-          mixed_flowshear
-      use le_grids, only: negrid
-      use gs2_layouts, only: g_lo
-      
-      implicit none
-
-      if (.not. allocated(wdrift)) then
-          ! allocate wdrift with sign(vpa) dependence because will contain 
-          ! Coriolis as well as magnetic drifts
-          allocate (wdrift(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-          allocate (wdriftttp(-ntgrid:ntgrid,ntheta0,naky,negrid,nspec,2))
-      end if
-      if(.not. allocated(vdrift_x)) then
-          allocate(vdrift_x(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-          allocate(vdrift_x_cent(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-      end if
-
-#ifdef LOWFLOW
-      if (.not. allocated(wcurv)) allocate (wcurv(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
-#endif
-
-      call compute_wdrift(wdrift, wdriftttp)
-      
-  end subroutine init_wdrift
-
-  subroutine compute_wdrift(my_wdrift, my_wdriftttp, my_kx_shift_opt)
     use species, only: nspec
     use theta_grid, only: ntgrid
-    use kt_grids, only: naky, ntheta0
+    use kt_grids, only: naky, ntheta0, implicit_flowshear
     use le_grids, only: negrid, ng2, nlambda, jend, forbid
 !    use le_grids, only: al
 !    use theta_grids, only: bmag
     use gs2_layouts, only: g_lo, ik_idx, it_idx, il_idx, ie_idx, is_idx
     use dist_fn_arrays, only: ittp
     implicit none
-    real, dimension(:), intent(in), optional :: my_kx_shift_opt
-    real, dimension (-ntgrid:,:,g_lo%llim_proc:), intent(inout) :: my_wdrift
-    real, dimension (-ntgrid:,:,:,:,:,:), intent(inout) :: my_wdriftttp
-    real, dimension(:), allocatable :: my_kx_shift
     integer :: ig, ik, it, il, ie, is
     integer :: iglo
 !    logical :: alloc = .true.
@@ -1335,16 +1349,23 @@ contains
     logical,parameter :: debug = .false.
 !CMR
 
-    allocate(my_kx_shift(naky))
-    if(present(my_kx_shift_opt)) then
-        my_kx_shift = my_kx_shift_opt
-    else
-        my_kx_shift = 0.
+    if (.not. allocated(wdrift)) then
+        ! allocate wdrift with sign(vpa) dependence because will contain 
+        ! Coriolis as well as magnetic drifts
+        allocate (wdrift(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+        allocate (wdriftttp(-ntgrid:ntgrid,ntheta0,naky,negrid,nspec,2))
     end if
+    if(.not. allocated(vdrift_x)) then
+        allocate(vdrift_x(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+        allocate(vdrift_x_cent(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+    end if
+
+#ifdef LOWFLOW
+      if (.not. allocated(wcurv)) allocate (wcurv(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
+#endif
 
 ! find totally trapped particles 
 !    if (alloc) allocate (ittp(-ntgrid:ntgrid))
-    ! Compute ittp only when compute_wdrift is called for the first time -- NDC 02/2018
     if (.not. allocated(ittp)) then
         allocate (ittp(-ntgrid:ntgrid))
 !    ittp = 0
@@ -1371,7 +1392,7 @@ contains
         end do
     end if
 
-    my_wdrift = 0.  ; my_wdriftttp = 0.
+    wdrift = 0.  ; wdriftttp = 0.
     vdrift_x = 0.
     vdrift_x_cent = 0.
 #ifdef LOWFLOW
@@ -1387,7 +1408,7 @@ contains
           ik=ik_idx(g_lo,iglo)
           is=is_idx(g_lo,iglo)
           if ( jend(ig) > 0 .and. jend(ig) <= nlambda .and. il >= ng2+1 .and. il <= jend(ig)) then
-             my_wdrift(ig,1,iglo) = wdrift_func(ig, il, ie, it, ik, my_kx_shift)*tpdriftknob
+             wdrift(ig,1,iglo) = wdrift_func(ig, il, ie, it, ik)*tpdriftknob
              vdrift_x(ig,1,iglo) = calc_vdrift_x(ig, il, ie)*tpdriftknob
 #ifdef LOWFLOW
              wcurv(ig,iglo) = wcurv_func(ig, it, ik)*tpdriftknob
@@ -1395,7 +1416,7 @@ contains
 !CMR:  multiply trapped particle drift by tpdriftknob 
 !CMR:               (tpdriftknob defaults to driftknob if not supplied)
           else
-             my_wdrift(ig,1,iglo) = wdrift_func(ig, il, ie, it, ik, my_kx_shift)*driftknob
+             wdrift(ig,1,iglo) = wdrift_func(ig, il, ie, it, ik)*driftknob
              vdrift_x(ig,1,iglo) = calc_vdrift_x(ig, il, ie)*driftknob
 #ifdef LOWFLOW
              wcurv(ig,iglo) = wcurv_func(ig, it, ik)*driftknob
@@ -1404,8 +1425,8 @@ contains
           endif
 !CMRend
           ! add Coriolis drift to magnetic drifts
-          my_wdrift(ig,2,iglo) = my_wdrift(ig,1,iglo) - wcoriolis_func(ig,il,ie,it,ik,is,my_kx_shift)
-          my_wdrift(ig,1,iglo) = my_wdrift(ig,1,iglo) + wcoriolis_func(ig,il,ie,it,ik,is,my_kx_shift)
+          wdrift(ig,2,iglo) = wdrift(ig,1,iglo) - wcoriolis_func(ig,il,ie,it,ik,is)
+          wdrift(ig,1,iglo) = wdrift(ig,1,iglo) + wcoriolis_func(ig,il,ie,it,ik,is)
           
           vdrift_x(ig,2,iglo) = vdrift_x(ig,1,iglo) - calc_vcoriolis_x(ig,il,ie,is)
           vdrift_x(ig,1,iglo) = vdrift_x(ig,1,iglo) + calc_vcoriolis_x(ig,il,ie,is)
@@ -1422,14 +1443,14 @@ contains
                    do il = ittp(ig), nlambda
                       if (forbid(ig, il)) exit
 !GWH+JAB: should this be calculated only at ittp? or for each totally trapped pitch angle? (Orig logic: there was only one totally trapped pitch angle; now multiple ttp are allowed.
-                      my_wdriftttp(ig,it,ik,ie,is,1) &
-                           = wdrift_func(ig,ittp(ig),ie,it,ik,my_kx_shift)*tpdriftknob
+                      wdriftttp(ig,it,ik,ie,is,1) &
+                           = wdrift_func(ig,ittp(ig),ie,it,ik)*tpdriftknob
 !CMR:  totally trapped particle drifts also scaled by tpdriftknob 
                       ! add Coriolis drift to magnetic drifts
-                      my_wdriftttp(ig,it,ik,ie,is,2) = my_wdriftttp(ig,it,ik,ie,is,1) &
-                           - wcoriolis_func(ig,il,ie,it,ik,is,my_kx_shift)
-                      my_wdriftttp(ig,it,ik,ie,is,1) = my_wdriftttp(ig,it,ik,ie,is,1) &
-                           + wcoriolis_func(ig,il,ie,it,ik,is,my_kx_shift)
+                      wdriftttp(ig,it,ik,ie,is,2) = wdriftttp(ig,it,ik,ie,is,1) &
+                           - wcoriolis_func(ig,il,ie,it,ik,is)
+                      wdriftttp(ig,it,ik,ie,is,1) = wdriftttp(ig,it,ik,ie,is,1) &
+                           + wcoriolis_func(ig,il,ie,it,ik,is)
                    end do
                 end do
              end do
@@ -1440,7 +1461,7 @@ contains
 ! This should be weighted by bakdif to be completely consistent
     do iglo = g_lo%llim_proc, g_lo%ulim_proc
        do ig = -ntgrid, ntgrid-1
-          my_wdrift(ig,:,iglo) = 0.5*(my_wdrift(ig,:,iglo) + my_wdrift(ig+1,:,iglo))
+          wdrift(ig,:,iglo) = 0.5*(wdrift(ig,:,iglo) + wdrift(ig+1,:,iglo))
           vdrift_x_cent(ig,:,iglo) = 0.5*(vdrift_x(ig,:,iglo) + vdrift_x(ig+1,:,iglo))
 #ifdef LOWFLOW
           wcurv(ig,iglo) =  0.5*(wcurv(ig,iglo) + wcurv(ig+1,iglo))
@@ -1450,11 +1471,91 @@ contains
 
 !    alloc = .false.
 !CMR
+
+    if(implicit_flowshear) then
+        allocate(wdrift_tdep%old(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+        wdrift_tdep%old = wdrift
+        wdrift_ptr%old => wdrift_tdep%old
+        allocate(wdrift_tdep%new(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+        wdrift_tdep%new = wdrift
+        wdrift_ptr%new => wdrift_tdep%new
+
+        allocate(wdriftttp_tdep%old(-ntgrid:ntgrid,ntheta0,naky,negrid,nspec,2))
+        wdriftttp_tdep%old = wdriftttp
+        wdriftttp_ptr%old => wdriftttp_tdep%old
+        allocate(wdriftttp_tdep%new(-ntgrid:ntgrid,ntheta0,naky,negrid,nspec,2))
+        wdriftttp_tdep%new = wdriftttp
+        wdriftttp_ptr%new => wdriftttp_tdep%new
+    else
+        allocate(wdrift_tdep%old(1,1,1))
+        wdrift_tdep%old = 0.0
+        wdrift_ptr%old => wdrift
+        allocate(wdrift_tdep%new(1,1,1))
+        wdrift_tdep%new = 0.0
+        wdrift_ptr%new => wdrift
+
+        allocate(wdriftttp_tdep%old(1,1,1,1,1,1))
+        wdriftttp_tdep%old = 0.0
+        wdriftttp_ptr%old => wdriftttp
+        allocate(wdriftttp_tdep%new(1,1,1,1,1,1))
+        wdriftttp_tdep%new = 0.0
+        wdriftttp_ptr%new => wdriftttp
+    end if
+
     if (debug) write(6,*) 'compute_wdrift: driftknob, tpdriftknob=',driftknob,tpdriftknob
 
-    deallocate(my_kx_shift)
+  end subroutine init_wdrift
 
-  end subroutine compute_wdrift
+  subroutine update_wdrift_tdep
+
+      use species, only: nspec
+      use theta_grid, only: ntgrid, shat
+      use kt_grids, only: naky, ntheta0
+      use le_grids, only: negrid, nlambda, forbid
+      use gs2_layouts, only: g_lo, ik_idx, it_idx, il_idx, ie_idx, is_idx
+      use dist_fn_arrays, only: ittp, kx_shift, kx_shift_old
+
+      implicit none
+
+      integer :: ig, ik, it, il, ie, is, isgn
+      integer :: iglo
+
+      do iglo = g_lo%llim_proc, g_lo%ulim_proc
+         do ig = -ntgrid, ntgrid
+            il=il_idx(g_lo,iglo)
+            ie=ie_idx(g_lo,iglo)
+            it=it_idx(g_lo,iglo)
+            ik=ik_idx(g_lo,iglo)
+            is=is_idx(g_lo,iglo)
+            do isgn = 1,2
+                wdrift_ptr%old(ig,isgn,iglo) = wdrift(ig,isgn,iglo) + vdrift_x_cent(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik)
+                wdrift_ptr%new(ig,isgn,iglo) = wdrift(ig,isgn,iglo) + vdrift_x_cent(ig,isgn,iglo)/(2.*shat)*kx_shift(ik)
+            end do
+         end do
+      end do
+      
+      do is = 1, nspec
+         do ie = 1, negrid
+            do ik = 1, naky
+               do it = 1, ntheta0
+                  do ig = -ntgrid, ntgrid
+                     if (ittp(ig) == nlambda+1) cycle
+                     do il = ittp(ig), nlambda
+                        if (forbid(ig, il)) exit
+                        do isgn = 1,2
+                            wdriftttp_ptr%old(ig,it,ik,ie,is,isgn) = wdriftttp(ig,it,ik,ie,is,isgn) + &
+                                vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik)
+                            wdriftttp_ptr%new(ig,it,ik,ie,is,isgn) = wdriftttp(ig,it,ik,ie,is,isgn) + &
+                                vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift(ik)
+                        end do
+                     end do
+                  end do
+               end do
+            end do
+         end do
+      end do
+
+  end subroutine update_wdrift_tdep
 
   ! NDC 11/2017
   ! Split wdrift_func into x and y parts by defining
@@ -1489,7 +1590,7 @@ contains
   
   end function calc_vdrift_x
 
-  function wdrift_func (ig, il, ie, it, ik, my_kx_shift_opt)
+  function wdrift_func (ig, il, ie, it, ik)
     use theta_grid, only: shat
     use kt_grids, only: aky, theta0, akx
     use le_grids, only: energy, al
@@ -1498,18 +1599,12 @@ contains
     implicit none
     real :: wdrift_func
     integer, intent (in) :: ig, ik, it, il, ie
-    real, dimension(:), intent(in), optional :: my_kx_shift_opt
 
     ! note that wunits=aky/2 (for wstar_units=F)
     if (aky(ik) == 0.0) then
        wdrift_func = 0.5*akx(it)/shat * calc_vdrift_x(ig,il,ie)
     else
-        if(present(my_kx_shift_opt)) then
-            wdrift_func = wunits(ik) * &
-                ((theta0(it,ik)+my_kx_shift_opt(ik)/(shat*aky(ik)))*calc_vdrift_x(ig,il,ie) + calc_vdrift_y(ig,il,ie))
-        else
-            wdrift_func = wunits(ik) * (calc_vdrift_x(ig,il,ie) + calc_vdrift_y(ig,il,ie))
-        end if
+       wdrift_func = wunits(ik) * (calc_vdrift_x(ig,il,ie) + calc_vdrift_y(ig,il,ie))
     end if
   end function wdrift_func
 
@@ -1567,31 +1662,23 @@ contains
 
   end function calc_vcoriolis_y
 
-  function wcoriolis_func (ig, il, ie, it, ik, is, my_kx_shift_opt)
+  function wcoriolis_func (ig, il, ie, it, ik, is)
 
     use theta_grid, only: bmag, cdrift, cdrift0, shat
     use kt_grids, only: aky, theta0, akx
     use le_grids, only: energy, al
     use run_parameters, only: wunits
-    use kt_grids, only: implicit_flowshear ! NDCTESTshift
-    use dist_fn_arrays, only: kx_shift ! NDCTESTshift
 
     implicit none
 
     real :: wcoriolis_func
-    real, dimension(:), intent(in), optional :: my_kx_shift_opt
     integer, intent (in) :: ig, ik, it, il, ie, is
 
     if (aky(ik) == 0.0) then
         wcoriolis_func = akx(it)/(2.*shat) * calc_vcoriolis_x(ig,il,ie,is)
     else
-        if(present(my_kx_shift_opt)) then
-            wcoriolis_func = wunits(ik) * &
-                (calc_vcoriolis_y(ig,il,ie,is) + (theta0(it,ik)+my_kx_shift_opt(ik)/(shat*aky(ik)))*calc_vcoriolis_x(ig,il,ie,is))
-        else
-            wcoriolis_func = wunits(ik) * &
-                (calc_vcoriolis_y(ig,il,ie,is) + theta0(it,ik)*calc_vcoriolis_x(ig,il,ie,is))
-        end if
+        wcoriolis_func = wunits(ik) * &
+            (calc_vcoriolis_y(ig,il,ie,is) + theta0(it,ik)*calc_vcoriolis_x(ig,il,ie,is))
     end if
 
   end function wcoriolis_func
@@ -2153,7 +2240,6 @@ contains
           a, b, r_ptr, ainv_ptr
       use species, only: spec
       use theta_grid, only: ntgrid, shat
-      use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear
       use le_grids, only: nlambda, ng2, forbid
       use constants, only: zi
       use gs2_layouts, only: g_lo, ik_idx, it_idx, il_idx, ie_idx, is_idx
@@ -2169,6 +2255,23 @@ contains
 #else
       real, dimension(-ntgrid:ntgrid) :: wdold, wdnew
 #endif
+
+      ! Flow shear pointers
+      !
+      ! wdrift_ptr = wdrift,            (old/mixed/explicit flow shear algos)
+      !            = wdrift_tdep,       (implicit algo & standard timeadv)
+      !            = wdrift_left/right, (implicit algo & init interp aminv matrices)
+      ! wdriftttp_ptr = wdriftttp,            (old/mixed/explicit flow shear algos)
+      !               = wdriftttp_tdep,       (implicit algo & standard timeadv)
+      !               = wdriftttp_left/right, (implicit algo & interp aminv matrices)
+      ! ainv_ptr = ainv,                 (old/mixed/explicit flow shear algos)
+      !          = ainv, updated in time (implicit algo & standard timeadv)
+      !          = ainv_left/right,      (implicit algo & init interp aminv matrices)
+      ! r_ptr = r,                 (old/mixed/explicit flow shear algos)
+      !       = r, updated in time (implicit algo & standard timeadv)
+      !       = r_left/right,      (implicit algo & init interp aminv matrices)
+      !
+      ! NDC 2/2019
 
       do iglo = g_lo%llim_proc, g_lo%ulim_proc
           
@@ -2188,26 +2291,11 @@ contains
               wdttpnew = wdriftttp(:,it,ik,ie,is,isgn) + wstar_neo(:,it,ik)*spec(is)%zt
               wdttpold = wdttpnew
 # else
-              ! Computing time dependent a,b,r,ainv
-              if(implicit_flowshear) then
+              wdnew = wdrift_ptr%new(:,isgn,iglo)
+              wdold = wdrift_ptr%old(:,isgn,iglo)
 
-                  wdnew = wdrift(:,isgn,iglo) + vdrift_x_cent(:,isgn,iglo)/(2.*shat)*kx_shift(ik)
-                  wdold = wdrift(:,isgn,iglo) &
-                      + vdrift_x_cent(:,isgn,iglo)/(2.*shat)*kx_shift_old(ik)
-                  
-                  wdttpnew = wdriftttp(:,it,ik,ie,is,isgn) + vdrift_x(:,isgn,iglo)/(2.*shat)*kx_shift(ik)
-                  wdttpold = wdriftttp(:,it,ik,ie,is,isgn) &
-                      + vdrift_x(:,isgn,iglo)/(2.*shat)*kx_shift_old(ik)
-
-              else
-
-                  wdnew = wdrift(:,isgn,iglo)
-                  wdold = wdnew
-
-                  wdttpnew = wdriftttp(:,it,ik,ie,is,isgn)
-                  wdttpold = wdttpnew
-              
-              end if
+              wdttpnew = wdriftttp_ptr%new(:,it,ik,ie,is,isgn)
+              wdttpold = wdriftttp_ptr%old(:,it,ik,ie,is,isgn)
 # endif
 
               do ig = -ntgrid, ntgrid-1
@@ -5440,7 +5528,6 @@ contains
     real :: bd
     logical :: explicit_first = .true. ! NDCTESTswitchexp
     real :: bdfac_l, bdfac_r
-    real, dimension(-ntgrid:ntgrid) :: wdold, wdnew, wdttpold, wdttpnew
     complex, dimension(-ntgrid:ntgrid) :: phigavgB, wdttp_term
     complex, dimension(-ntgrid:ntgrid) :: phigavgB_tdep_new, phigavgB_tdep_old, phigavgB_near_old
 
@@ -5468,7 +5555,6 @@ contains
 ! apargavg = apar J0 
 ! Both quantities are decentred in time and evaluated on || grid points
 !
-    ! NDCTESTneighb
     ! Old flow shear algo: source uses time independent quantities.
     ! Mixed algo: source contains the same terms as in the old algo,
     !             plus new time dependent terms 
@@ -5482,45 +5568,29 @@ contains
     !                (added in add_source_flowshear_explicit_first)
     ! NDC 11/18
 
-    ! Pick correct wdrift depending on
-    ! the flow shear algo and whether we are currently calculating
-    ! a shifted am matrix for interpolation. -- NDC 11/18
-    if(implicit_flowshear) then
-
-        wdnew = wdrift(:,isgn,iglo) &
-            + vdrift_x_cent(:,isgn,iglo)/(2.*shat)*kx_shift(ik)
-        wdold = wdrift(:,isgn,iglo) &
-            + vdrift_x_cent(:,isgn,iglo)/(2.*shat)*kx_shift_old(ik)
-        
-        wdttpnew = wdriftttp(:,it,ik,ie,is,2) &
-            + vdrift_x(:,isgn,iglo)/(2.*shat)*kx_shift(ik)
-        wdttpold = wdriftttp(:,it,ik,ie,is,2) &
-            + vdrift_x(:,isgn,iglo)/(2.*shat)*kx_shift_old(ik)
-    
-    else
-
-        wdnew = wdrift(:,isgn,iglo)
-        wdold = wdrift(:,isgn,iglo)
-
-        wdttpnew = wdriftttp(:,it,ik,ie,is,2)
-        wdttpold = wdriftttp(:,it,ik,ie,is,2)
-
-    end if
-
+    ! Flow shear pointers
+    !
     ! aj0_ptr_src = aj0,            (old/mixed/explicit flow shear algos)
     !             = aj0_tdep,       (implicit algo & standard timeadv)
-    !             = aj0_left/right, (implicit algo & interp aminv matrices)
+    !             = aj0_left/right, (implicit algo & init interp aminv matrices)
     ! aj1_ptr_src = aj1,            (old/mixed/explicit flow shear algos)
     !             = aj1_tdep,       (implicit algo & standard timeadv)
-    !             = aj1_left/right, (implicit algo & interp aminv matrices)
+    !             = aj1_left/right, (implicit algo & init interp aminv matrices)
+    ! wdrift_ptr = wdrift,            (old/mixed/explicit flow shear algos)
+    !            = wdrift_tdep,       (implicit algo & standard timeadv)
+    !            = wdrift_left/right, (implicit algo & init interp aminv matrices)
+    ! wdriftttp_ptr = wdriftttp,            (old/mixed/explicit flow shear algos)
+    !               = wdriftttp_tdep,       (implicit algo & standard timeadv)
+    !               = wdriftttp_left/right, (implicit algo & init interp aminv matrices)
+    !
     ! NDC 02/2019
     phigavgB = fexp(is) * &
         ( fphi*aj0_ptr_src%old(:,iglo)*phi(:,it,ik) + fbpar*2.0*spec(is)%tz*vperp2(:,iglo)*aj1_ptr_src%old(:,iglo)*bpar(:,it,ik) ) &
         + (1.0-fexp(is)) * &
         ( fphi*aj0_ptr_src%new(:,iglo)*phinew(:,it,ik) + fbpar*2.0*spec(is)%tz*vperp2(:,iglo)*aj1_ptr_src%new(:,iglo)*bparnew(:,it,ik) )
-    wdttp_term = fexp(is) * wdttpold * &
+    wdttp_term = fexp(is) * wdriftttp_ptr%old(:,it,ik,ie,is,2) * &
         ( fphi*aj0_ptr_src%old(:,iglo)*phi(:,it,ik) + fbpar*2.0*spec(is)%tz*vperp2(:,iglo)*aj1_ptr_src%old(:,iglo)*bpar(:,it,ik) ) &
-        + (1.0-fexp(is)) * wdttpnew * &
+        + (1.0-fexp(is)) * wdriftttp_ptr%new(:,it,ik,ie,is,2) * &
         ( fphi*aj0_ptr_src%new(:,iglo)*phinew(:,it,ik) + fbpar*2.0*spec(is)%tz*vperp2(:,iglo)*aj1_ptr_src%new(:,iglo)*bparnew(:,it,ik) )
     if(mixed_flowshear .or. explicit_flowshear) then
         phigavgB_tdep_new = fphi*aj0_tdep%new(:,iglo)*phi(:,it,ik) &
@@ -5641,7 +5711,7 @@ contains
                          (fexp(is)*kx_shift_old(ik)+(1.0-fexp(is))*kx_shift(ik)) * g(ig,2,iglo) &
                      - zi * fexp(is)*vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik) * phigavgB_tdep_old(ig) &
                      - zi * (1.0-fexp(is))*vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift(ik) * phigavgB_tdep_new(ig) &
-                     - zi * wdttpold(ig) * &
+                     - zi * wdriftttp_ptr%old(ig,it,ik,ie,is,2) * &
                          ( fexp(is)*phigavgB_tdep_old(ig)+(1.0-fexp(is))*phigavgB_tdep_new(ig) - phigavgB_near_old(ig) ) &
                      + zi * wstar(ik,ie,is) * &
                          ( fexp(is)*phigavgB_tdep_old(ig)+(1.0-fexp(is))*phigavgB_tdep_new(ig) - phigavgB_near_old(ig) )
@@ -5655,7 +5725,7 @@ contains
                  ! NDCQUEST: should I fexp t-dep factors in front of old g/phi/apar/bpar ?
                  source(ig) = source(ig) &
                       - zi * ( vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik) + &
-                          wdttpold(ig) ) * aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik) &
+                          wdriftttp_ptr%old(ig,it,ik,ie,is,2) ) * aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik) &
                       + zi * wstar(ik,ie,is) * aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik)
 
              end if
@@ -5797,12 +5867,12 @@ contains
          dapargavg = 2.0*fapar * ( &
              bdfac_r*(aj0_ptr_src%new(ig+1,iglo)*aparnew(ig+1,it,ik)-aj0_ptr_src%old(ig+1,iglo)*apar(ig+1,it,ik)) + &
              bdfac_l*(aj0_ptr_src%new(ig,iglo)*aparnew(ig,it,ik)-aj0_ptr_src%old(ig,iglo)*apar(ig,it,ik)) )
-         wd_term = fexp(is) * wdold(ig) * ( &
+         wd_term = fexp(is) * wdrift_ptr%old(ig,isgn,iglo) * ( &
                  bdfac_r * ( fphi*aj0_ptr_src%old(ig+1,iglo)*phi(ig+1,it,ik) &
                      + fbpar*2.0*spec(is)%tz*vperp2(ig+1,iglo)*aj1_ptr_src%old(ig+1,iglo)*bpar(ig+1,it,ik) ) &
                  + bdfac_l * ( fphi*aj0_ptr_src%old(ig,iglo)*phi(ig,it,ik) &
                      + fbpar*2.0*spec(is)%tz*vperp2(ig,iglo)*aj1_ptr_src%old(ig,iglo)*bpar(ig,it,ik) ) ) &
-             + (1.0-fexp(is)) * wdnew(ig) * ( &
+             + (1.0-fexp(is)) * wdrift_ptr%new(ig,isgn,iglo) * ( &
                  bdfac_r * ( fphi*aj0_ptr_src%new(ig+1,iglo)*phinew(ig+1,it,ik) &
                      + fbpar*2.0*spec(is)%tz*vperp2(ig+1,iglo)*aj1_ptr_src%new(ig+1,iglo)*bparnew(ig+1,it,ik) ) & 
                  + bdfac_l * ( fphi*aj0_ptr_src%new(ig,iglo)*phinew(ig,it,ik) &
@@ -5953,7 +6023,7 @@ contains
                   ( fexp(is)*kx_shift_old(ik)+(1.0-fexp(is))*kx_shift(ik) ) * g_bd &
               - zi * fexp(is)*vdrift_x_cent(ig,isgn,iglo)/shat*kx_shift_old(ik) * phigavgB_tdep_old_bd &
               - zi * (1.0-fexp(is))*vdrift_x_cent(ig,isgn,iglo)/shat*kx_shift(ik) * phigavgB_tdep_new_bd &
-              - 2.*zi * wdold(ig) * (fexp(is)*phigavgB_tdep_old_bd+(1.0-fexp(is))*phigavgB_tdep_new_bd-phigavgB_near_old_bd) &
+              - 2.*zi * wdrift_ptr%old(ig,isgn,iglo) * (fexp(is)*phigavgB_tdep_old_bd+(1.0-fexp(is))*phigavgB_tdep_new_bd-phigavgB_near_old_bd) &
               - 2.*vpar(ig,isgn,iglo) * ( &
                   fexp(is)*(phigavgB_tdep_old(ig+1)-phigavgB_tdep_old(ig)) &
                   + (1.0-fexp(is))*(phigavgB_tdep_new(ig+1)-phigavgB_tdep_new(ig)) &
@@ -6036,7 +6106,7 @@ contains
          ! NDCQUEST: should I fexp t-dep factors in front of old g/phi/apar/bpar ?
          source(ig) = source(ig) &
               - zi * ( vdrift_x_cent(ig,isgn,iglo)/shat*kx_shift_old(ik) + & ! NDCTEST_explicit_first: replaced vdrift_x
-                  2.*wdold(ig) ) * phistargavg_old_bd &
+                  2.*wdrift_ptr%old(ig,isgn,iglo) ) * phistargavg_old_bd &
               - 2.*vpar(ig,isgn,iglo) * ( &
                   aj0_tdep%old(ig+1,iglo)*phistar_old(ig+1,it,ik) - aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik) ) &
               - 2.*code_dt*zi * aky(ik)/spec(is)%stm * omprimfac * itor_over_B(ig) * vpac(ig,isgn,iglo) * g_exb * &
@@ -6598,12 +6668,15 @@ contains
     ! gnew is the inhomogeneous solution
     gnew(:,:,iglo) = 0.0
 
+    ! Flow shear pointers
+    !
     ! aj0_ptr%old = aj0,           (old flow shear algo)
     !             = aj0_tdep%old   (new algo & standard timeadv)
-    !             = aj0_left/right (new algo & interp amin matrices)
+    !             = aj0_left/right (new algo & init interp aminv matrices)
     ! aj1_ptr%old = aj1,           (old flow shear algo)
     !             = aj1_tdep%old   (new algo & standard timeadv)
-    !             = aj1_left/right (new algo & interp amin matrices)
+    !             = aj1_left/right (new algo & init interp aminv matrices)
+    !
     ! NDC 02/2019
     aj0_l = aj0_ptr%new(-ntgrid,iglo)
     aj0_r = aj0_ptr%new(ntgrid,iglo)
@@ -6713,11 +6786,17 @@ contains
 ! r=ainv=0 if forbid(ig,il) or forbid(ig+1,il), so gnew=0 in forbidden
 ! region and at upper bounce point
 
-    ! r_ptr%old = r_left/right (new flow shear algo & interp aminv matrices)
-    !           = r            (otherwise)
-    ! ainv_ptr%old = ainv_left/right (new flow shear algo & interp aminv matrices)
-    !              = ainv            (otherwise)
-    ! NDC 02/2019
+    ! Flow shear pointers
+    !
+    ! ainv_ptr = ainv,                 (old/mixed/explicit flow shear algos)
+    !          = ainv, updated in time (implicit algo & standard timeadv)
+    !          = ainv_left/right,      (implicit algo & init interp aminv matrices)
+    ! r_ptr = r,                 (old/mixed/explicit flow shear algos)
+    !       = r, updated in time (implicit algo & standard timeadv)
+    !       = r_left/right,      (implicit algo & init interp aminv matrices)
+    !
+    ! NDC 2/2019
+
     do ig = ntgrid-1, -ntgrid, -1
        gnew(ig,2,iglo) = -gnew(ig+1,2,iglo)*r_ptr(ig,2,iglo) + ainv_ptr(ig,2,iglo)*source(ig,2)
     end do
@@ -7036,9 +7115,12 @@ endif
 !      
              vperp2left = bmag(-ntgrid)*al(il)*energy(ie)
              vperp2right = bmag(ntgrid)*al(il)*energy(ie)
+             ! Flow shear pointers
+             !
              ! kperp2_ptr%new = kperp2,                (old flow shear algo)
              !                = kperp2_tdep%new,       (new algo & standard timeadv)
-             !                = kperp2_left/right,     (new algo for interp aminv matrices)
+             !                = kperp2_left/right,     (new algo & init interp aminv matrices)
+             !
              ! NDC 02/2019
              argl = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(-ntgrid)*kperp2_ptr%new(-ntgrid,itl,ik))
              argr = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ntgrid)*kperp2_ptr%new(ntgrid,itr,ik))
@@ -9139,6 +9221,10 @@ endif
         call update_kperp2_tdep
         call update_bessel_tdep
         call update_gamtots_tdep
+        if(implicit_flowshear) then
+            call update_wdrift_tdep
+            call compute_a_b_r_ainv
+        end if
     else if(apply_flowshear_nonlin) then
         call shift_ptr_to_tdep
         call update_kx_tdep

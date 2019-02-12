@@ -438,7 +438,7 @@ contains
     use fields_arrays, only: apar_ext
     use antenna, only: antenna_amplitudes, no_driver
     use dist_fn, only: timeadv, exb_shear, collisions_advance, &
-        update_kperp2_tdep, update_bessel_tdep, update_gamtots_tdep, update_kx_tdep, &
+        update_kperp2_tdep, update_bessel_tdep, update_gamtots_tdep, update_kx_tdep, update_wdrift_tdep, &
         gamtot, getan, & ! NDCTEST_explicit_first
         expflowopt, expflowopt_none, expflowopt_second, expflowopt_antot_old, expflowopt_antot_tdep_old, & ! NDCTEST_explicit_first
         expflowopt_antot_new, expflowopt_antot_tdep_new, & ! NDCTEST_explicit_first
@@ -505,7 +505,8 @@ contains
 
     if(implicit_flowshear) then
         
-        call compute_a_b_r_ainv ! NDCTESTneighb
+        call update_wdrift_tdep
+        call compute_a_b_r_ainv
         
     end if
 
@@ -789,14 +790,17 @@ contains
         gamtot_left, gamtot1_left, gamtot2_left, gamtot3_left, &
         gamtot_right, gamtot1_right, gamtot2_right, gamtot3_right
     use dist_fn, only: M_class, N_class, i_class, &
-        update_kperp2_tdep, update_bessel_tdep, update_gamtots_tdep, compute_a_b_r_ainv, &
+        update_kperp2_tdep, update_bessel_tdep, update_gamtots_tdep, compute_a_b_r_ainv, update_wdrift_tdep, &
         for_interp_left, for_interp_right, &
-        adiabatic_option_switch, adiabatic_option_fieldlineavg
+        adiabatic_option_switch, adiabatic_option_fieldlineavg, &
+        wdrift_tdep, wdrift_ptr, wdrift_left, wdrift_right, &
+        wdriftttp_tdep, wdriftttp_ptr, wdriftttp_left, wdriftttp_right
     use run_parameters, only: fphi, fapar, fbpar
     use gs2_layouts, only: init_fields_layouts, f_lo, init_jfields_layouts, &
         g_lo
     use prof, only: prof_entering, prof_leaving
-    use species, only: spec, has_electron_species, has_ion_species
+    use species, only: spec, has_electron_species, has_ion_species, nspec
+    use le_grids, only: negrid
     implicit none
     integer :: ig, ifield, it, ik, i, m, n
     complex, dimension(:,:), allocatable :: am
@@ -902,11 +906,17 @@ contains
            if(implicit_flowshear) then
                allocate(r_left(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
                allocate(ainv_left(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+               allocate(wdrift_left(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+               allocate(wdriftttp_left(-ntgrid:ntgrid,ntheta0,naky,negrid,nspec,2))
            else
                allocate(r_left(1,1,1))
                r_left = 0.0
                allocate(ainv_left(1,1,1))
                ainv_left = 0.0
+               allocate(wdrift_left(1,1,1))
+               wdrift_left = 0.0
+               allocate(wdriftttp_left(1,1,1,1,1,1))
+               wdriftttp_left = 0.0
            end if
 
            kx_shift = -0.5*dkx
@@ -924,6 +934,9 @@ contains
                r_ptr => r_left
                ainv_ptr => ainv_left
                call compute_a_b_r_ainv
+               wdrift_ptr%new => wdrift_left
+               wdriftttp_ptr%new => wdriftttp_left
+               call update_wdrift_tdep
            end if
 
            ! Flow shear, interpolation of am matrix:
@@ -958,11 +971,17 @@ contains
            if(implicit_flowshear) then
                allocate(r_right(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
                allocate(ainv_right(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+               allocate(wdrift_right(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+               allocate(wdriftttp_right(-ntgrid:ntgrid,ntheta0,naky,negrid,nspec,2))
            else
                allocate(r_right(1,1,1))
                r_right = 0.0
                allocate(ainv_right(1,1,1))
                ainv_right = 0.0
+               allocate(wdrift_right(1,1,1))
+               wdrift_right = 0.0
+               allocate(wdriftttp_right(1,1,1,1,1,1))
+               wdriftttp_right = 0.0
            end if
 
            kx_shift = 0.5*dkx
@@ -980,6 +999,9 @@ contains
                r_ptr => r_right
                ainv_ptr => ainv_right
                call compute_a_b_r_ainv
+               wdrift_ptr%new => wdrift_right
+               wdriftttp_ptr%new => wdriftttp_right
+               call update_wdrift_tdep
            end if
 
            ! Flow shear, interpolation of am matrix:
@@ -1001,6 +1023,9 @@ contains
                r_ptr => r
                ainv_ptr => ainv
                call compute_a_b_r_ainv
+               wdrift_ptr%new => wdrift_tdep%new
+               wdriftttp_ptr%new => wdriftttp_tdep%new
+               call update_wdrift_tdep
            end if
        end if
 
@@ -1320,6 +1345,8 @@ contains
            if(implicit_flowshear) then
                deallocate(r_left, ainv_left)
                deallocate(r_right, ainv_right)
+               deallocate(wdrift_right, wdrift_left)
+               deallocate(wdriftttp_right, wdriftttp_left)
            end if
            
            ! Restore time dependent quantities from before matrix computation
@@ -1329,6 +1356,7 @@ contains
            call update_gamtots_tdep(skip_old)
            if(implicit_flowshear) then
                call compute_a_b_r_ainv
+               call update_wdrift_tdep
            end if
 
        end if
