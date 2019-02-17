@@ -1358,37 +1358,13 @@ contains
     logical,parameter :: debug = .false.
 !CMR
 
-    if (.not. allocated(wdrift)) then
-        ! allocate wdrift with sign(vpa) dependence because will contain 
-        ! Coriolis as well as magnetic drifts
-        allocate (wdrift(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-        allocate (wdriftttp(-ntgrid:ntgrid,ntheta0,naky,negrid,nspec,2))
-
-        allocate(wdrift_left(1,1,1))
-        wdrift_left = 0.0
-        allocate(wdrift_right(1,1,1))
-        wdrift_right = 0.0
-        allocate (wdriftttp_left(1,1,1,1,1,1))
-        wdriftttp_left = 0.0
-        allocate (wdriftttp_right(1,1,1,1,1,1))
-        wdriftttp_right = 0.0
-    end if
-    if(.not. allocated(vdrift_x)) then
-        allocate(vdrift_x(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-        allocate(vdrift_x_cent(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
-    end if
-
-#ifdef LOWFLOW
-      if (.not. allocated(wcurv)) allocate (wcurv(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
-#endif
-
+    ! Begin new
 ! find totally trapped particles 
 !    if (alloc) allocate (ittp(-ntgrid:ntgrid))
-    if (.not. allocated(ittp)) then
-        allocate (ittp(-ntgrid:ntgrid))
+    if (.not. allocated(ittp)) allocate (ittp(-ntgrid:ntgrid))
 !    ittp = 0
-        ittp = nlambda+1
-        do ig = -ntgrid+1, ntgrid-1
+     ittp = nlambda+1
+    do ig = -ntgrid+1, ntgrid-1
 !       if (jend(ig) > 0 .and. jend(ig) <= nlambda) then
 !          if (1.0-al(jend(ig))*bmag(ig+1) < 2.0*epsilon(0.0) &
 !               .and. 1.0-al(jend(ig))*bmag(ig-1) < 2.0*epsilon(0.0)) &
@@ -1399,21 +1375,40 @@ contains
 
 ! all pitch angles greater than or equal to ittp are totally trapped or forbidden
 
-            if (nlambda > ng2) then
-                do il = ng2+1, nlambda
-                    if (forbid(ig-1,il) .and. forbid(ig+1, il) .and. .not. forbid(ig, il)) then
-                        ittp(ig) = il
-                        exit
-                    end if
-                end do
-            end if
-        end do
-    end if
+       if (nlambda > ng2) then
+          do il = ng2+1, nlambda
+             if (forbid(ig-1,il) .and. forbid(ig+1, il) .and. .not. forbid(ig, il)) then
+                ittp(ig) = il
+                exit
+             end if
+          end do
+       end if
+    end do
 
+    if (.not. allocated(wdrift)) then
+       ! allocate wdrift with sign(vpa) dependence because will contain 
+       ! Coriolis as well as magnetic drifts
+       allocate (wdrift(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+       allocate (wdriftttp(-ntgrid:ntgrid,ntheta0,naky,negrid,nspec,2))
+
+       allocate(wdrift_left(1,1,1))
+       wdrift_left = 0.0
+       allocate(wdrift_right(1,1,1))
+       wdrift_right = 0.0
+       allocate (wdriftttp_left(1,1,1,1,1,1))
+       wdriftttp_left = 0.0
+       allocate (wdriftttp_right(1,1,1,1,1,1))
+       wdriftttp_right = 0.0
+    end if
+    if(.not. allocated(vdrift_x)) then
+       allocate(vdrift_x(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+       allocate(vdrift_x_cent(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+    end if
     wdrift = 0.  ; wdriftttp = 0.
     vdrift_x = 0.
     vdrift_x_cent = 0.
 #ifdef LOWFLOW
+    if (.not. allocated(wcurv)) allocate (wcurv(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
     wcurv = 0.
 #endif
 
@@ -1450,7 +1445,7 @@ contains
           vdrift_x(ig,1,iglo) = vdrift_x(ig,1,iglo) + calc_vcoriolis_x(ig,il,ie,is)
        end do
     end do
-    
+    wdriftttp = 0.0
     do is = 1, nspec
        do ie = 1, negrid
           do ik = 1, naky
@@ -1487,9 +1482,6 @@ contains
        end do
     end do
 
-!    alloc = .false.
-!CMR
-
     if(implicit_flowshear) then
         allocate(wdrift_tdep%old(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
         wdrift_tdep%old = wdrift
@@ -1520,7 +1512,7 @@ contains
         wdriftttp_ptr%new => wdriftttp
     end if
 
-    if (debug) write(6,*) 'compute_wdrift: driftknob, tpdriftknob=',driftknob,tpdriftknob
+    if (debug) write(6,*) 'init_wdrift: driftknob, tpdriftknob=',driftknob,tpdriftknob
 
   end subroutine init_wdrift
 
@@ -1622,7 +1614,7 @@ contains
     if (aky(ik) == 0.0) then
        wdrift_func = 0.5*akx(it)/shat * calc_vdrift_x(ig,il,ie)
     else
-       wdrift_func = wunits(ik) * (calc_vdrift_x(ig,il,ie) + calc_vdrift_y(ig,il,ie))
+       wdrift_func = wunits(ik) * (theta0(it,ik)*calc_vdrift_x(ig,il,ie) + calc_vdrift_y(ig,il,ie))
     end if
   end function wdrift_func
 
@@ -2066,29 +2058,23 @@ contains
       ! First old (not needed if we are computing interpolation matrices)
       if(.not. skip_old) then
           do ik = 1, naky
-              ! flowshear has no effect on kperp if ky==0
-              if (aky(ik) /= 0.0) then
-                  do it = 1, ntheta0
-                      kperp2_ptr%old(:,it,ik) = kperp2(:,it,ik) + &
-                          kx_shift_old(ik)*kx_shift_old(ik)*gds22/(shat*shat) + &
-                          2.0*kx_shift_old(ik)*aky(ik)*gds21/shat + &
-                          2.0*kx_shift_old(ik)*akx(it)*gds22/(shat*shat)
-                  end do
-              end if
+              do it = 1, ntheta0
+                  kperp2_ptr%old(:,it,ik) = kperp2(:,it,ik) + &
+                      kx_shift_old(ik)*kx_shift_old(ik)*gds22/(shat*shat) + &
+                      2.0*kx_shift_old(ik)*aky(ik)*gds21/shat + &
+                      2.0*kx_shift_old(ik)*akx(it)*gds22/(shat*shat)
+              end do
           end do
       end if
 
       ! Then new
       do ik = 1, naky
-          ! flowshear has no effect on kperp if ky==0
-          if (aky(ik) /= 0.0) then
-              do it = 1, ntheta0
-                  kperp2_ptr%new(:,it,ik) = kperp2(:,it,ik) + &
-                      kx_shift(ik)*kx_shift(ik)*gds22/(shat*shat) + &
-                      2.0*kx_shift(ik)*aky(ik)*gds21/shat + &
-                      2.0*kx_shift(ik)*theta0(it,ik)*aky(ik)*gds22/shat
-              end do
-          end if
+          do it = 1, ntheta0
+              kperp2_ptr%new(:,it,ik) = kperp2(:,it,ik) + &
+                  kx_shift(ik)*kx_shift(ik)*gds22/(shat*shat) + &
+                  2.0*kx_shift(ik)*aky(ik)*gds21/shat + &
+                  2.0*kx_shift(ik)*theta0(it,ik)*aky(ik)*gds22/shat
+          end do
       end do
 
   end subroutine update_kperp2_tdep
@@ -2123,23 +2109,18 @@ contains
           do iglo = g_lo%llim_proc, g_lo%ulim_alloc
               
               ik = ik_idx(g_lo,iglo)
-              ! constant if ky==0
-              if (aky(ik) /= 0.0) then
+              it = it_idx(g_lo,iglo)
+              il = il_idx(g_lo,iglo)
+              ie = ie_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
 
-                  it = it_idx(g_lo,iglo)
-                  il = il_idx(g_lo,iglo)
-                  ie = ie_idx(g_lo,iglo)
-                  is = is_idx(g_lo,iglo)
+              do ig = -ntgrid, ntgrid
 
-                  do ig = -ntgrid, ntgrid
-
-                      ! Only update new
-                      arg = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ig)*kperp2_ptr%new(ig,it,ik))
-                      aj0_ptr%new(ig,iglo) = j0(arg)
-                  
-                  end do
-
-              end if
+                  ! Only update new
+                  arg = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ig)*kperp2_ptr%new(ig,it,ik))
+                  aj0_ptr%new(ig,iglo) = j0(arg)
+              
+              end do
 
           end do
 
@@ -2148,26 +2129,21 @@ contains
           do iglo = g_lo%llim_proc, g_lo%ulim_alloc
               
               ik = ik_idx(g_lo,iglo)
-              ! constant if ky==0
-              if (aky(ik) /= 0.0) then
+              it = it_idx(g_lo,iglo)
+              il = il_idx(g_lo,iglo)
+              ie = ie_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
 
-                  it = it_idx(g_lo,iglo)
-                  il = il_idx(g_lo,iglo)
-                  ie = ie_idx(g_lo,iglo)
-                  is = is_idx(g_lo,iglo)
+              do ig = -ntgrid, ntgrid
 
-                  do ig = -ntgrid, ntgrid
-
-                      ! First old
-                      arg = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ig)*kperp2_ptr%old(ig,it,ik))
-                      aj0_ptr%old(ig,iglo) = j0(arg)
-                      ! Then new
-                      arg = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ig)*kperp2_ptr%new(ig,it,ik))
-                      aj0_ptr%new(ig,iglo) = j0(arg)
-                  
-                  end do
-
-              end if
+                  ! First old
+                  arg = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ig)*kperp2_ptr%old(ig,it,ik))
+                  aj0_ptr%old(ig,iglo) = j0(arg)
+                  ! Then new
+                  arg = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ig)*kperp2_ptr%new(ig,it,ik))
+                  aj0_ptr%new(ig,iglo) = j0(arg)
+              
+              end do
 
           end do
 
@@ -2181,23 +2157,18 @@ contains
           do iglo = g_lo%llim_proc, g_lo%ulim_alloc
               
               ik = ik_idx(g_lo,iglo)
-              ! constant if ky==0
-              if (aky(ik) /= 0.0) then
+              it = it_idx(g_lo,iglo)
+              il = il_idx(g_lo,iglo)
+              ie = ie_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
 
-                  it = it_idx(g_lo,iglo)
-                  il = il_idx(g_lo,iglo)
-                  ie = ie_idx(g_lo,iglo)
-                  is = is_idx(g_lo,iglo)
+              do ig = -ntgrid, ntgrid
 
-                  do ig = -ntgrid, ntgrid
-
-                      ! Only update new
-                      arg = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ig)*kperp2_ptr%new(ig,it,ik))
-                      aj1_ptr%new(ig,iglo) = j1(arg)
-                  
-                  end do
-
-              end if
+                  ! Only update new
+                  arg = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ig)*kperp2_ptr%new(ig,it,ik))
+                  aj1_ptr%new(ig,iglo) = j1(arg)
+              
+              end do
 
           end do
 
@@ -2206,26 +2177,21 @@ contains
           do iglo = g_lo%llim_proc, g_lo%ulim_alloc
               
               ik = ik_idx(g_lo,iglo)
-              ! constant if ky==0
-              if (aky(ik) /= 0.0) then
+              it = it_idx(g_lo,iglo)
+              il = il_idx(g_lo,iglo)
+              ie = ie_idx(g_lo,iglo)
+              is = is_idx(g_lo,iglo)
 
-                  it = it_idx(g_lo,iglo)
-                  il = il_idx(g_lo,iglo)
-                  ie = ie_idx(g_lo,iglo)
-                  is = is_idx(g_lo,iglo)
+              do ig = -ntgrid, ntgrid
 
-                  do ig = -ntgrid, ntgrid
-
-                      ! First old
-                      arg = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ig)*kperp2_ptr%old(ig,it,ik))
-                      aj1_ptr%old(ig,iglo) = j1(arg)
-                      ! Then new
-                      arg = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ig)*kperp2_ptr%new(ig,it,ik))
-                      aj1_ptr%new(ig,iglo) = j1(arg)
-                  
-                  end do
-
-              end if
+                  ! First old
+                  arg = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ig)*kperp2_ptr%old(ig,it,ik))
+                  aj1_ptr%old(ig,iglo) = j1(arg)
+                  ! Then new
+                  arg = spec(is)%bess_fac*spec(is)%smz*sqrt(energy(ie)*al(il)/bmag(ig)*kperp2_ptr%new(ig,it,ik))
+                  aj1_ptr%new(ig,iglo) = j1(arg)
+              
+              end do
 
           end do
 

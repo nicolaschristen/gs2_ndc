@@ -892,8 +892,8 @@ contains
            call update_bessel_tdep(skip_old)
            call update_gamtots_tdep(skip_old)
            if(implicit_flowshear) then
-               call compute_a_b_r_ainv
                call update_wdrift_tdep
+               call compute_a_b_r_ainv
            end if
 
            ! Flow shear, interpolation of am matrix:
@@ -907,8 +907,8 @@ contains
            call update_bessel_tdep(skip_old)
            call update_gamtots_tdep(skip_old)
            if(implicit_flowshear) then
-               call compute_a_b_r_ainv
                call update_wdrift_tdep
+               call compute_a_b_r_ainv
            end if
 
            ! Flow shear, interpolation of am matrix:
@@ -921,8 +921,8 @@ contains
            call update_bessel_tdep(skip_old)
            call update_gamtots_tdep(skip_old)
            if(implicit_flowshear) then
-               call compute_a_b_r_ainv
                call update_wdrift_tdep
+               call compute_a_b_r_ainv
            end if
        end if
 
@@ -1233,8 +1233,8 @@ contains
            call update_bessel_tdep(skip_old)
            call update_gamtots_tdep(skip_old)
            if(implicit_flowshear) then
-               call compute_a_b_r_ainv
                call update_wdrift_tdep
+               call compute_a_b_r_ainv
            end if
 
        end if
