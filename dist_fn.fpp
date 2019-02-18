@@ -213,8 +213,8 @@ module dist_fn
   type(wdrift_tdep_ptr_type) :: wdrift_ptr
   real, dimension(:,:,:), allocatable, target :: wdrift_left, wdrift_right
 
-  real, dimension (:,:,:), allocatable :: vdrift_x
   real, dimension (:,:,:), allocatable :: vdrift_x_cent
+  real, dimension (:,:,:,:,:,:), allocatable :: vdriftttp_x
   ! (-ntgrid:ntgrid, 2, -g-layout-)
 
 !  real, dimension (:,:,:,:,:), allocatable :: wdriftttp
@@ -1033,8 +1033,8 @@ contains
     initialized = .false.
     
     wdrift = 0.
-    vdrift_x = 0.
     vdrift_x_cent = 0.
+    vdriftttp_x = 0.
     wdriftttp = 0.
     a = 0.
     b = 0.
@@ -1046,7 +1046,7 @@ contains
 
     if (allocated(vpa)) deallocate (vpa, vpac, vpar)
     if (allocated(ittp)) then
-        deallocate (ittp, wdrift, vdrift_x, vdrift_x_cent, wdriftttp)
+        deallocate (ittp, wdrift, vdrift_x_cent, vdriftttp_x, wdriftttp)
         deallocate(wdrift_tdep%old, wdrift_tdep%new, wdrift_left, wdrift_right)
         nullify(wdrift_ptr%old, wdrift_ptr%new)
         deallocate(wdriftttp_tdep%old, wdriftttp_tdep%new, wdriftttp_left, wdriftttp_right)
@@ -1400,13 +1400,13 @@ contains
        allocate (wdriftttp_right(1,1,1,1,1,1))
        wdriftttp_right = 0.0
     end if
-    if(.not. allocated(vdrift_x)) then
-       allocate(vdrift_x(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+    if(.not. allocated(vdrift_x_cent)) then
        allocate(vdrift_x_cent(-ntgrid:ntgrid,2,g_lo%llim_proc:g_lo%ulim_alloc))
+       allocate (vdriftttp_x(-ntgrid:ntgrid,ntheta0,naky,negrid,nspec,2))
     end if
     wdrift = 0.  ; wdriftttp = 0.
-    vdrift_x = 0.
     vdrift_x_cent = 0.
+    vdriftttp_x = 0.
 #ifdef LOWFLOW
     if (.not. allocated(wcurv)) allocate (wcurv(-ntgrid:ntgrid,g_lo%llim_proc:g_lo%ulim_alloc))
     wcurv = 0.
@@ -1422,7 +1422,7 @@ contains
           is=is_idx(g_lo,iglo)
           if ( jend(ig) > 0 .and. jend(ig) <= nlambda .and. il >= ng2+1 .and. il <= jend(ig)) then
              wdrift(ig,1,iglo) = wdrift_func(ig, il, ie, it, ik)*tpdriftknob
-             vdrift_x(ig,1,iglo) = calc_vdrift_x(ig, il, ie)*tpdriftknob
+             vdrift_x_cent(ig,1,iglo) = calc_vdrift_x(ig, il, ie)*tpdriftknob
 #ifdef LOWFLOW
              wcurv(ig,iglo) = wcurv_func(ig, it, ik)*tpdriftknob
 #endif
@@ -1430,7 +1430,7 @@ contains
 !CMR:               (tpdriftknob defaults to driftknob if not supplied)
           else
              wdrift(ig,1,iglo) = wdrift_func(ig, il, ie, it, ik)*driftknob
-             vdrift_x(ig,1,iglo) = calc_vdrift_x(ig, il, ie)*driftknob
+             vdrift_x_cent(ig,1,iglo) = calc_vdrift_x(ig, il, ie)*driftknob
 #ifdef LOWFLOW
              wcurv(ig,iglo) = wcurv_func(ig, it, ik)*driftknob
 #endif
@@ -1441,8 +1441,8 @@ contains
           wdrift(ig,2,iglo) = wdrift(ig,1,iglo) - wcoriolis_func(ig,il,ie,it,ik,is)
           wdrift(ig,1,iglo) = wdrift(ig,1,iglo) + wcoriolis_func(ig,il,ie,it,ik,is)
           
-          vdrift_x(ig,2,iglo) = vdrift_x(ig,1,iglo) - calc_vcoriolis_x(ig,il,ie,is)
-          vdrift_x(ig,1,iglo) = vdrift_x(ig,1,iglo) + calc_vcoriolis_x(ig,il,ie,is)
+          vdrift_x_cent(ig,2,iglo) = vdrift_x_cent(ig,1,iglo) - calc_vcoriolis_x(ig,il,ie,is)
+          vdrift_x_cent(ig,1,iglo) = vdrift_x_cent(ig,1,iglo) + calc_vcoriolis_x(ig,il,ie,is)
        end do
     end do
     wdriftttp = 0.0
@@ -1458,12 +1458,19 @@ contains
 !GWH+JAB: should this be calculated only at ittp? or for each totally trapped pitch angle? (Orig logic: there was only one totally trapped pitch angle; now multiple ttp are allowed.
                       wdriftttp(ig,it,ik,ie,is,1) &
                            = wdrift_func(ig,ittp(ig),ie,it,ik)*tpdriftknob
+                      vdriftttp_x(ig,it,ik,ie,is,1) = &
+                          calc_vdrift_x(ig, il, ie)*tpdriftknob
 !CMR:  totally trapped particle drifts also scaled by tpdriftknob 
                       ! add Coriolis drift to magnetic drifts
                       wdriftttp(ig,it,ik,ie,is,2) = wdriftttp(ig,it,ik,ie,is,1) &
                            - wcoriolis_func(ig,il,ie,it,ik,is)
                       wdriftttp(ig,it,ik,ie,is,1) = wdriftttp(ig,it,ik,ie,is,1) &
                            + wcoriolis_func(ig,il,ie,it,ik,is)
+                      
+                      vdriftttp_x(ig,it,ik,ie,is,2) = vdriftttp_x(ig,it,ik,ie,is,1) &
+                          - calc_vcoriolis_x(ig,il,ie,is)
+                      vdriftttp_x(ig,it,ik,ie,is,1) = vdriftttp_x(ig,it,ik,ie,is,1) &
+                          + calc_vcoriolis_x(ig,il,ie,is)
                    end do
                 end do
              end do
@@ -1475,7 +1482,7 @@ contains
     do iglo = g_lo%llim_proc, g_lo%ulim_proc
        do ig = -ntgrid, ntgrid-1
           wdrift(ig,:,iglo) = 0.5*(wdrift(ig,:,iglo) + wdrift(ig+1,:,iglo))
-          vdrift_x_cent(ig,:,iglo) = 0.5*(vdrift_x(ig,:,iglo) + vdrift_x(ig+1,:,iglo))
+          vdrift_x_cent(ig,:,iglo) = 0.5*(vdrift_x_cent(ig,:,iglo) + vdrift_x_cent(ig+1,:,iglo))
 #ifdef LOWFLOW
           wcurv(ig,iglo) =  0.5*(wcurv(ig,iglo) + wcurv(ig+1,iglo))
 #endif
@@ -1532,11 +1539,7 @@ contains
 
       do iglo = g_lo%llim_proc, g_lo%ulim_proc
          do ig = -ntgrid, ntgrid
-            il=il_idx(g_lo,iglo)
-            ie=ie_idx(g_lo,iglo)
-            it=it_idx(g_lo,iglo)
             ik=ik_idx(g_lo,iglo)
-            is=is_idx(g_lo,iglo)
             do isgn = 1,2
                 wdrift_ptr%old(ig,isgn,iglo) = wdrift(ig,isgn,iglo) + vdrift_x_cent(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik)
                 wdrift_ptr%new(ig,isgn,iglo) = wdrift(ig,isgn,iglo) + vdrift_x_cent(ig,isgn,iglo)/(2.*shat)*kx_shift(ik)
@@ -1554,9 +1557,9 @@ contains
                         if (forbid(ig, il)) exit
                         do isgn = 1,2
                             wdriftttp_ptr%old(ig,it,ik,ie,is,isgn) = wdriftttp(ig,it,ik,ie,is,isgn) + &
-                                vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik)
+                                vdriftttp_x(ig,it,ik,ie,is,isgn)/(2.*shat)*kx_shift_old(ik)
                             wdriftttp_ptr%new(ig,it,ik,ie,is,isgn) = wdriftttp(ig,it,ik,ie,is,isgn) + &
-                                vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift(ik)
+                                vdriftttp_x(ig,it,ik,ie,is,isgn)/(2.*shat)*kx_shift(ik)
                         end do
                      end do
                   end do
@@ -5702,10 +5705,10 @@ contains
          
                  ! NDCQUEST: how do we check for CFL condition with new explicit terms ?
                  source(ig) = source(ig) &
-                     - zi * spec(is)%tz * vdrift_x(ig,isgn,iglo)/(2.*shat) * &
+                     - zi * spec(is)%tz * vdriftttp_x(ig,it,ik,ie,is,2)/(2.*shat) * &
                          (fexp(is)*kx_shift_old(ik)+(1.0-fexp(is))*kx_shift(ik)) * g(ig,2,iglo) &
-                     - zi * fexp(is)*vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik) * phigavgB_tdep_old(ig) &
-                     - zi * (1.0-fexp(is))*vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift(ik) * phigavgB_tdep_new(ig) &
+                     - zi * fexp(is)*vdriftttp_x(ig,it,ik,ie,is,2)/(2.*shat)*kx_shift_old(ik) * phigavgB_tdep_old(ig) &
+                     - zi * (1.0-fexp(is))*vdriftttp_x(ig,it,ik,ie,is,2)/(2.*shat)*kx_shift(ik) * phigavgB_tdep_new(ig) &
                      - zi * wdriftttp_ptr%old(ig,it,ik,ie,is,2) * &
                          ( fexp(is)*phigavgB_tdep_old(ig)+(1.0-fexp(is))*phigavgB_tdep_new(ig) - phigavgB_near_old(ig) ) &
                      + zi * wstar(ik,ie,is) * &
@@ -5719,7 +5722,7 @@ contains
 
                  ! NDCQUEST: should I fexp t-dep factors in front of old g/phi/apar/bpar ?
                  source(ig) = source(ig) &
-                      - zi * ( vdrift_x(ig,isgn,iglo)/(2.*shat)*kx_shift_old(ik) + &
+                      - zi * ( vdriftttp_x(ig,it,ik,ie,is,2)/(2.*shat)*kx_shift_old(ik) + &
                           wdriftttp_ptr%old(ig,it,ik,ie,is,2) ) * aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik) &
                       + zi * wstar(ik,ie,is) * aj0_tdep%old(ig,iglo)*phistar_old(ig,it,ik)
 
