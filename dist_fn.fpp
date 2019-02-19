@@ -119,7 +119,8 @@ module dist_fn
 
   public :: skip_explicit_for_response
 
-  public :: shift_ptr_to_tdep, shift_ptr_from_tdep ! NDCTEST_coll & NDCTEST_nl_vs_lin
+  public :: shift_ptr_to_tdep, shift_ptr_to_std
+  public :: shift_ptr_to_left, shift_ptr_to_right
 
   public :: wdrift_tdep, wdrift_ptr, wdrift_left, wdrift_right
   public :: wdriftttp_tdep, wdriftttp_ptr, wdriftttp_left, wdriftttp_right
@@ -1384,11 +1385,11 @@ contains
 
 ! find totally trapped particles 
 !    if (alloc) allocate (ittp(-ntgrid:ntgrid))
-    if (.not. allocated(ittp)) then
+    if (.not. allocated(ittp)) &
         allocate (ittp(-ntgrid:ntgrid))
 !    ittp = 0
-        ittp = nlambda+1
-        do ig = -ntgrid+1, ntgrid-1
+    ittp = nlambda+1
+    do ig = -ntgrid+1, ntgrid-1
 !       if (jend(ig) > 0 .and. jend(ig) <= nlambda) then
 !          if (1.0-al(jend(ig))*bmag(ig+1) < 2.0*epsilon(0.0) &
 !               .and. 1.0-al(jend(ig))*bmag(ig-1) < 2.0*epsilon(0.0)) &
@@ -1399,16 +1400,15 @@ contains
 
 ! all pitch angles greater than or equal to ittp are totally trapped or forbidden
 
-            if (nlambda > ng2) then
-                do il = ng2+1, nlambda
-                    if (forbid(ig-1,il) .and. forbid(ig+1, il) .and. .not. forbid(ig, il)) then
-                        ittp(ig) = il
-                        exit
-                    end if
-                end do
-            end if
-        end do
-    end if
+        if (nlambda > ng2) then
+            do il = ng2+1, nlambda
+                if (forbid(ig-1,il) .and. forbid(ig+1, il) .and. .not. forbid(ig, il)) then
+                    ittp(ig) = il
+                    exit
+                end if
+            end do
+        end if
+    end do
 
     wdrift = 0.  ; wdriftttp = 0.
     vdrift_x_cent = 0.
@@ -1464,7 +1464,7 @@ contains
                       wdriftttp(ig,it,ik,ie,is,1) &
                            = wdrift_func(ig,ittp(ig),ie,it,ik)*tpdriftknob
                       vdriftttp_x(ig,it,ik,ie,is,1) = &
-                          calc_vdrift_x(ig, il, ie)*tpdriftknob
+                          calc_vdrift_x(ig, ittp(ig), ie)*tpdriftknob
 !CMR:  totally trapped particle drifts also scaled by tpdriftknob 
                       ! add Coriolis drift to magnetic drifts
                       wdriftttp(ig,it,ik,ie,is,2) = wdriftttp(ig,it,ik,ie,is,1) &
@@ -2088,7 +2088,7 @@ contains
               kperp2_ptr%new(:,it,ik) = kperp2(:,it,ik) + &
                   kx_shift(ik)*kx_shift(ik)*gds22/(shat*shat) + &
                   2.0*kx_shift(ik)*aky(ik)*gds21/shat + &
-                  2.0*kx_shift(ik)*theta0(it,ik)*aky(ik)*gds22/shat
+                  2.0*kx_shift(ik)*akx(it)*gds22/(shat*shat)
           end do
       end do
 
@@ -4514,7 +4514,9 @@ contains
     use run_parameters, only: reset, immediate_reset
     use unit_tests, only: debug_message
     use collisions, only: split_collisions
-    use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear ! NDCTEST_coll
+    use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear, & ! NDCTEST_coll
+        flowshear_ptr_loc, flowshear_ptr_at_std, flowshear_ptr_at_tdep, &
+        flowshear_ptr_at_left, flowshear_ptr_at_right
     implicit none
     complex, dimension (-ntgrid:,:,:), intent (in) :: phi, apar, bpar
     complex, dimension (-ntgrid:,:,:), intent (in) :: phinew, aparnew, bparnew
@@ -4523,6 +4525,7 @@ contains
     integer :: modep
     integer,save :: istep_last=-1
     integer, parameter :: verb = 3
+    integer :: shift_back_to = 0
 
     modep = 0
     if (present(mode)) modep = mode
@@ -4553,7 +4556,8 @@ contains
 
       ! NDCTEST_coll: for now, use non-tdep vars for collisions
       if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-          call shift_ptr_from_tdep
+          shift_back_to=flowshear_ptr_loc
+          call shift_ptr_to_std
       end if
       ! end NDCTEST_coll
 
@@ -4563,7 +4567,14 @@ contains
 
       ! NDCTEST_coll: for now, use non-tdep vars for collisions
       if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-          call shift_ptr_to_tdep
+          select case(shift_back_to)
+          case(flowshear_ptr_at_tdep)
+              call shift_ptr_to_tdep
+          case(flowshear_ptr_at_left)
+              call shift_ptr_to_left
+          case(flowshear_ptr_at_right)
+              call shift_ptr_to_right
+          end select
       end if
       ! end NDCTEST_coll
 
@@ -4603,7 +4614,9 @@ contains
     use le_derivatives, only: vspace_derivatives
     use theta_grid, only: ntgrid
     use unit_tests, only: debug_message
-    use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear ! NDCTEST_coll
+    use kt_grids, only: explicit_flowshear, implicit_flowshear, mixed_flowshear, & ! NDCTEST_coll
+        flowshear_ptr_loc, flowshear_ptr_at_std, flowshear_ptr_at_tdep, &
+        flowshear_ptr_at_left, flowshear_ptr_at_right
     implicit none
     complex, dimension (-ntgrid:,:,:), intent (in) :: phi, bpar
     complex, dimension (-ntgrid:,:,:), intent (inout) :: phinew, aparnew, bparnew
@@ -4611,6 +4624,7 @@ contains
     integer, optional, intent (in) :: mode
     integer :: modep
     integer, parameter :: verb = 3
+    integer :: shift_back_to = 0
 
     if(.not. split_collisions) return
 
@@ -4619,7 +4633,8 @@ contains
 
     ! NDCTEST_coll: for now, use non-tdep vars for collisions
     if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-        call shift_ptr_from_tdep
+        shift_back_to=flowshear_ptr_loc
+        call shift_ptr_to_std
     end if
     ! end NDCTEST_coll
 
@@ -4630,7 +4645,14 @@ contains
 
     ! NDCTEST_coll: for now, use non-tdep vars for collisions
     if(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) then
-        call shift_ptr_to_tdep
+        select case(shift_back_to)
+        case(flowshear_ptr_at_tdep)
+            call shift_ptr_to_tdep
+        case(flowshear_ptr_at_left)
+            call shift_ptr_to_left
+        case(flowshear_ptr_at_right)
+            call shift_ptr_to_right
+        end select
     end if
     ! end NDCTEST_coll
 
@@ -6409,6 +6431,8 @@ contains
           use dist_fn_arrays, only: g
           use gs2_transforms, only: update_flowshear_phase_fac
           use run_parameters, only: reset
+          use kt_grids, only: flowshear_ptr_loc, flowshear_ptr_at_tdep, &
+              flowshear_ptr_at_std
 
           implicit none
           
@@ -6448,9 +6472,13 @@ contains
               if(nonlinear_mode_switch == nonlinear_mode_on) then
 
                   ! NDCTEST_nl_vs_lin: remove ptr shifting
-                  if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. .not. apply_flowshear_nonlin) then
-                      call shift_ptr_from_tdep
-                  else if(.not.(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. apply_flowshear_nonlin) then
+                  if( flowshear_ptr_loc==flowshear_ptr_at_tdep .and. &
+                      (explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. &
+                      .not. apply_flowshear_nonlin ) then
+                      call shift_ptr_to_std
+                  else if( flowshear_ptr_loc==flowshear_ptr_at_std .and. &
+                      .not. (explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. &
+                      apply_flowshear_nonlin ) then
                       call shift_ptr_to_tdep
                   end if
 
@@ -6472,10 +6500,14 @@ contains
                   end if
 
                   ! NDCTEST_nl_vs_lin: remove ptr shifting
-                  if((explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. .not. apply_flowshear_nonlin) then
+                  if( flowshear_ptr_loc==flowshear_ptr_at_std &
+                      .and. (explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) &
+                      .and. .not. apply_flowshear_nonlin) then
                       call shift_ptr_to_tdep
-                  else if(.not.(explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) .and. apply_flowshear_nonlin) then
-                      call shift_ptr_from_tdep
+                  else if( flowshear_ptr_loc==flowshear_ptr_at_tdep .and. &
+                      .not. (explicit_flowshear .or. implicit_flowshear .or. mixed_flowshear) &
+                      .and. apply_flowshear_nonlin) then
+                      call shift_ptr_to_std
                   end if
 
               end if
@@ -9142,7 +9174,7 @@ endif
         call update_kx_tdep
         call update_kperp2_tdep
         call update_bessel_tdep
-        call shift_ptr_from_tdep
+        call shift_ptr_to_std
     end if
 
     phi=0. ; apar=0. ; bpar=0.
@@ -12524,7 +12556,8 @@ endif
           gamtot3_tdep, gamtot3_ptr, &
           ainv, ainv_ptr, r, r_ptr
       use kt_grids, only: kx_tdep, kx_ptr, kperp2_tdep, kperp2_ptr, &
-          implicit_flowshear
+          implicit_flowshear, &
+          flowshear_ptr_loc, flowshear_ptr_at_tdep
       use run_parameters, only: fbpar
       use species, only: has_electron_species, has_ion_species, spec
 
@@ -12569,16 +12602,19 @@ endif
           wdriftttp_ptr%new => wdriftttp_tdep%new
       end if
 
+      flowshear_ptr_loc = flowshear_ptr_at_tdep
+
   end subroutine shift_ptr_to_tdep
 
-  subroutine shift_ptr_from_tdep
+  subroutine shift_ptr_to_std
 
       use dist_fn_arrays, only: aj0, aj0_ptr, &
           aj1, aj1_ptr, &
           gamtot_ptr, gamtot1_ptr, gamtot2_ptr, gamtot3_ptr, &
           ainv, ainv_ptr, r, r_ptr
       use kt_grids, only: akx_extended, kx_ptr, kperp2, kperp2_ptr, &
-          implicit_flowshear
+          implicit_flowshear, &
+          flowshear_ptr_loc, flowshear_ptr_at_std
       use run_parameters, only: fbpar
       use species, only: has_electron_species, has_ion_species, spec
 
@@ -12623,6 +12659,84 @@ endif
           wdriftttp_ptr%new => wdriftttp
       end if
 
-  end subroutine shift_ptr_from_tdep
+      flowshear_ptr_loc = flowshear_ptr_at_std
+
+  end subroutine shift_ptr_to_std
+
+  subroutine shift_ptr_to_left
+
+      use dist_fn_arrays, only: aj0_left, aj0_ptr, &
+          aj1_left, aj1_ptr, &
+          gamtot_left, gamtot1_left, gamtot2_left, gamtot3_left, &
+          gamtot_ptr, gamtot1_ptr, gamtot2_ptr, gamtot3_ptr, &
+          ainv_left, ainv_ptr, r_left, r_ptr
+      use kt_grids, only: kperp2_left, kperp2_ptr, &
+          implicit_flowshear, &
+          flowshear_ptr_loc, flowshear_ptr_at_left
+      use run_parameters, only: fbpar
+      use species, only: has_electron_species, has_ion_species, spec
+      implicit none
+
+      kperp2_ptr%new => kperp2_left
+      aj0_ptr%new => aj0_left
+      aj1_ptr%new => aj1_left
+      gamtot_ptr%new => gamtot_left
+      ! NDCQUEST: are gamtot1,2 needed for electrostatic ?
+      if(fbpar>0.) then
+          gamtot1_ptr%new => gamtot1_left
+          gamtot2_ptr%new => gamtot2_left
+      end if
+      if( (.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) &
+          .and. adiabatic_option_switch == adiabatic_option_fieldlineavg ) then
+          gamtot3_ptr%new => gamtot3_left
+      end if
+      if(implicit_flowshear) then
+          r_ptr => r_left
+          ainv_ptr => ainv_left
+          wdrift_ptr%new => wdrift_left
+          wdriftttp_ptr%new => wdriftttp_left
+      end if
+
+      flowshear_ptr_loc = flowshear_ptr_at_left
+
+  end subroutine shift_ptr_to_left
+
+  subroutine shift_ptr_to_right
+
+      use dist_fn_arrays, only: aj0_right, aj0_ptr, &
+          aj1_right, aj1_ptr, &
+          gamtot_right, gamtot1_right, gamtot2_right, gamtot3_right, &
+          gamtot_ptr, gamtot1_ptr, gamtot2_ptr, gamtot3_ptr, &
+          ainv_right, ainv_ptr, r_right, r_ptr
+      use kt_grids, only: kperp2_right, kperp2_ptr, &
+          implicit_flowshear, &
+          flowshear_ptr_loc, flowshear_ptr_at_right
+      use run_parameters, only: fbpar
+      use species, only: has_electron_species, has_ion_species, spec
+      implicit none
+
+      kperp2_ptr%new => kperp2_right
+      aj0_ptr%new => aj0_right
+      aj1_ptr%new => aj1_right
+      gamtot_ptr%new => gamtot_right
+      ! NDCQUEST: are gamtot1,2 needed for electrostatic ?
+      if(fbpar>0.) then
+          gamtot1_ptr%new => gamtot1_right
+          gamtot2_ptr%new => gamtot2_right
+      end if
+      if( (.not. has_electron_species(spec) .or. .not. has_ion_species(spec)) &
+          .and. adiabatic_option_switch == adiabatic_option_fieldlineavg ) then
+          gamtot3_ptr%new => gamtot3_right
+      end if
+      if(implicit_flowshear) then
+          r_ptr => r_right
+          ainv_ptr => ainv_right
+          wdrift_ptr%new => wdrift_right
+          wdriftttp_ptr%new => wdriftttp_right
+      end if
+
+      flowshear_ptr_loc = flowshear_ptr_at_right
+
+  end subroutine shift_ptr_to_right
 
 end module dist_fn

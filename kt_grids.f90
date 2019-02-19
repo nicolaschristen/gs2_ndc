@@ -929,6 +929,9 @@ module kt_grids
   public :: kperp2_tdep_ptr_type
   public :: kperp2_left, kperp2_right
   
+  public :: flowshear_ptr_loc, flowshear_ptr_at_tdep, &
+      flowshear_ptr_at_left, flowshear_ptr_at_right, flowshear_ptr_at_std
+  
   logical, dimension(:,:), allocatable :: kwork_filter
   real, dimension (:,:,:), allocatable, target :: kperp2
   real, dimension (:,:), allocatable :: theta0
@@ -984,6 +987,12 @@ module kt_grids
   logical :: kp2init=.false.
   logical :: nml_exist
   logical :: parameters_read = .false.
+
+  integer :: flowshear_ptr_loc = 0
+  integer, parameter :: flowshear_ptr_at_std = 0
+  integer, parameter :: flowshear_ptr_at_tdep = 1
+  integer, parameter :: flowshear_ptr_at_left = 2
+  integer, parameter :: flowshear_ptr_at_right = 3
 
 contains
 
@@ -1110,6 +1119,13 @@ contains
     
     call init_kx_tdep
     call init_kperp2
+
+    if(mixed_flowshear .or. implicit_flowshear .or. explicit_flowshear) then
+        flowshear_ptr_loc = flowshear_ptr_at_tdep
+    else
+        flowshear_ptr_loc = flowshear_ptr_at_std
+    end if
+
   end subroutine init_kt_grids
 
   subroutine read_parameters_internal
