@@ -582,6 +582,7 @@ contains
     type(diagnostics_init_options_type) :: diagnostics_init_options
     real :: precision_test
 #endif
+    logical :: remap_plot = .true. ! NDCTESTremap_plot
     if (.not. state%included) return
 
     state%exit = .false. 
@@ -626,11 +627,13 @@ contains
 
       call debug_message(state%verb, &
         'gs2_main::initialize_diagnostics calling run_diagnostics')
-      ! Create variables and write constants
-      call run_diagnostics(-1,state%exit, state%replay)
-      !call broadcast(state%exit)
-      ! Write initial values
-      call run_diagnostics(0,state%exit, state%replay)
+      if(.not. remap_plot) then
+          ! Create variables and write constants
+          call run_diagnostics(-1,state%exit, state%replay)
+          !call broadcast(state%exit)
+          ! Write initial values
+          call run_diagnostics(0,state%exit, state%replay)
+      end if
 #else
       call mp_abort("use_old_diagnostics is .false. but you have &
         & not built gs2 with new diagnostics enabled", .true.)
@@ -723,6 +726,7 @@ contains
     logical :: temp_initval_override_store
     integer :: istep_loop_max
     logical :: remap_plot_shear = .false. ! NDCTESTremap_plot
+    logical :: remap_plot_nl = .true. ! NDCTESTremap_plot
 
     if (.not. state%included) return
 
@@ -818,7 +822,9 @@ contains
 #ifdef NEW_DIAG
          else 
            !if (state%replay) call broadcast(state%exit)
-           call run_diagnostics (istep, state%exit, state%replay)
+           if(.not. remap_plot_nl) then
+               call run_diagnostics (istep, state%exit, state%replay)
+           end if
 #endif
          end if
        end if

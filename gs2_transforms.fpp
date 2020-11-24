@@ -127,7 +127,7 @@ contains
     use gs2_layouts, only: pe_layout, init_accel_transform_layouts
     use gs2_layouts, only: init_y_transform_layouts
     use gs2_layouts, only: init_x_transform_layouts
-    use gs2_layouts, only: fft_wisdom_file, fft_use_wisdom, fft_measure_plan
+    use gs2_layouts, only: fft_wisdom_file, fft_use_wisdom, fft_measure_plan, nl_runname
     use fft_work, only: load_wisdom, save_wisdom, measure_plan
     use kt_grids, only: akx, explicit_flowshear, implicit_flowshear, mixed_flowshear, & ! NDCTESTnl
         apply_flowshear_nonlin ! NDCTEST_nl_vs_lin
@@ -212,9 +212,9 @@ contains
         
         if(remap_plot) then
             if(remap_plot_nl_analytic) then
-                open(71,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/x_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
+                open(71,file="/marconi/home/userexternal/nchriste/work_christen_FUA34/nl_toy/"//trim(nl_runname)//"/dat/x_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
             else
-                open(71,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/x_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
+                open(71,file="/marconi/home/userexternal/nchriste/work_christen_FUA34/nl_toy/"//trim(nl_runname)//"/dat/x_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
             end if
         end if
         dkx = akx(2)-akx(1)
@@ -239,9 +239,9 @@ contains
         ! NDCTESTremap_plot
         if(remap_plot) then
             if(remap_plot_nl_analytic) then
-                open(72,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/y_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
+                open(72,file="/marconi/home/userexternal/nchriste/work_christen_FUA34/nl_toy/"//trim(nl_runname)//"/dat/y_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
             else
-                open(72,file="/home/christenl/data/gs2/flowtest/final/gauss_shear/assuming_gs2_fixes_labframe/dat_nl/y_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
+                open(72,file="/marconi/home/userexternal/nchriste/work_christen_FUA34/nl_toy/"//trim(nl_runname)//"/dat/y_grid.dat",status="replace") ! NDCTESTremap_plot_towrite
             end if
             dky = aky(2)-aky(1)
             dy = 1./ny * 2.*pi/dky

@@ -1,0 +1,181 @@
+!-------------------LINEAR CYCLONE ITG CASE-----------------------
+! Widely used benchmark case.  Original study published
+! in Phys. Plasmas Vol. 7, p. 969 (Dimits et al.)
+! Can compare linear.out file with linear.test, which
+! is included in this directory.
+!-----------------------------------------------------------------
+
+&collisions_knobs
+ collision_model='none'
+/
+
+!&hyper_knobs
+! hyper_option = 'visc_only'
+! const_amp = .false.
+! isotropic_shear = .false.
+! D_hypervisc = 0.1
+!/
+
+&theta_grid_knobs
+ equilibrium_option='eik'
+/
+&theta_grid_parameters
+ ntheta= 4   ! number of theta grid points
+ nperiod= 1   ! always 1 for nonlinear simulationa
+
+! following describes shape 
+! and location of flux surface
+ rhoc = 0.54  ! r/a
+ shat = 0.8 ! r/q * dq/dr
+ qinp = 1.4 ! q
+ Rmaj = 3.0 ! R/a
+ R_geo = 3.0 ! R/a
+ shift = 0.0 ! dR/dr
+ akappa = 1.0 ! elongation
+ akappri = 0.0 ! dkappa/dr
+ tri = 0.0 ! triangularity
+ tripri = 0.0 ! dtri/dr
+/
+&parameters
+ beta = 0.0
+ zeff = 1.0
+/
+&theta_grid_eik_knobs
+ itor = 1
+ iflux = 0
+ irho = 2
+
+ ppl_eq = F
+ gen_eq = F
+ efit_eq = F
+ local_eq = T
+
+ eqfile = 'dskeq.cdf'
+ equal_arc = T
+ bishop = 4
+ s_hat_input = 0.8
+ beta_prime_input = 0.0
+ delrho = 1.e-3
+ isym = 0
+ writelots = F
+/
+&fields_knobs
+ field_option='implicit'
+/
+&gs2_diagnostics_knobs
+ exit_when_converged = .false. ! NDCTESTnlplot to avoid get_omegaavg giving
+ print_flux_line = F  ! NL
+ write_nl_flux = F    ! NL
+ print_line = F       ! L
+ write_line = F       ! L
+ write_omega = F      ! L
+ write_final_fields = F
+ write_g = F
+ write_verr = F
+ write_zonal_transfer = F
+ write_collisional = F
+ write_phi_over_time = .false.
+ nwrite=     1  ! how often diagnostics are written to file
+ navg=       1
+ nsave = 25 ! how often restart files are written
+ omegatinst = 500.0
+ save_for_restart = .false.   ! NL
+ ! save_for_restart = .false.
+ omegatol = -1.0e-3
+/
+! velocity space grid
+&le_grids_knobs
+ ngauss = 2  ! 2*nguass is the number of untrapped pitch angles per sign of vpar
+ negrid = 3
+ vcut= 2.5  ! max |v| value on the grid
+/
+&dist_fn_knobs
+ adiabatic_option="iphi00=2"
+ gridfac=   1.0
+ boundary_option="linked"  ! twist and shift BC
+! boundary_option="default"  ! ballooning BC
+ mach=0.1
+ g_exb=0.0502655 ! so that dky remaps just before t=20
+/
+
+&kt_grids_knobs
+ grid_option='box'  ! grid in kx and ky
+! grid_option='range' ! specified kx and ky values
+/
+&kt_grids_box_parameters
+ ! naky = (ny-1)/3 + 1
+ ny = 701
+ ! nakx = 2*(nx-1)/3 + 1
+ nx = 701
+ ! ky_min = 1/y0
+ y0 = 80.0
+ jtwist = 5
+ mixed_flowshear = F
+ apply_flowshear_nonlin = .false.
+ remap_gexp = .true.
+/
+!&kt_grids_range_parameters
+! ntheta0=1 ! number of kx
+! theta0_min=0.
+! theta0_max=0.
+! naky = 1
+! aky_min = 0.5
+! aky_max = 0.5
+!/
+&init_g_knobs
+ chop_side = F
+ phiinit=   1.e-3  ! init amplitude of phi
+ restart_file = "nc/nlplot2.nc"  ! if you have save_for_restart = .true.
+ ginit_option= "default"
+/
+&knobs
+ fphi =   1.0  ! evolve phi
+ fapar =  0.0  ! do not evolve A_parallel
+ fbpar = 0.0   ! do not evolve B_parallel
+ delt = 0.05   ! time step size (normalized by a / v_tref)
+ nstep = 450  ! number of time steps
+/
+&species_knobs
+ nspec=          1  ! # of kinetic species
+/
+&species_parameters_1
+ z=   1.0
+ mass=   1.0
+ dens=   1.0
+ temp=   1.0
+ tprim=  2.3  ! -d(ln T)/d (r/a)
+ fprim=  0.733  ! same thing for density
+ vnewk=  0.0  ! collision frequency (normalized by a/v_tref)
+ type='ion'
+/
+&dist_fn_species_knobs_1
+ fexpr= 0.48
+ bakdif= 0.02
+/
+&species_parameters_2
+ z=     -1.0
+ mass=   2.7e-4
+ dens=   1.0
+ temp=   1.0
+ tprim=  2.3
+ fprim=  0.733
+ vnewk=  0.0
+ type='electron'
+/
+&dist_fn_species_knobs_2
+ fexpr= 0.48
+ bakdif= 0.02
+/
+&nonlinear_terms_knobs
+ nonlinear_mode='on'
+ cfl = 0.25
+/
+&reinit_knobs
+ delt_adj = 2.0
+ delt_minimum = 1.e-4
+/
+&layouts_knobs
+ layout = 'lxyes'  ! order for parallelization, from right to left
+ local_field_solve = F
+ nl_runname = 'cosgaus_oldalgo_smalldkx'
+/

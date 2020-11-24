@@ -1,18 +1,103 @@
-# Host: Marconi
+# GS2 Makefile for Marconi
+#
+# Copyright 2016 University of York (David Dickinson), Edumnd Highcock
+# Copyright 2017 Adwiteey Mauriya
+# Copyright 2018 Edmund Highcock, George Wilkie, Stephen Biggs-Fox
+#
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and associated documentation files (the
+# "Software"), to deal in the Software without restriction, including
+# without limitation the rights to use, copy, modify, merge, publish,
+# distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so, subject to
+# the following conditions:
+#
+# The above copyright notice and this permission notice shall be included
+# in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+# IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+# CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+# TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+# ****************
+# * Introduction *
+# ****************
+#
+# Host: login.marconi.cineca.it CentOS (RHEL) server
+#
+# Maintainer: Stephen Biggs-Fox (snb519@york.ac.uk)
+#
+# ****************
+# * Dependencies *
+# ****************
+#
+# Before building, run the following:
+#
+# export MAKEFLAGS=-IMakefiles
+# export GK_SYSTEM=marconi
+# module purge
+# module load intel/pe-xe-2017--binary
+# module load intelmpi/2017--binary
+# module load netcdf/4.4.1--intel--pe-xe-2017--binary
+# module load netcdff/4.4.4--intel--pe-xe-2017--binary
+# module load fftw/3.3.4--intelmpi--2017--binary
+# module load profile/advanced
+# module load petsc/3.7.2_complex--intelmpi--2017--binary
+# module load profile/archive
+# module load slepc/3.7.3_complex--intelmpi--2017--binary
+# unset PETSC_ARCH
+#
+# Version numbers and module load order are important. If non-linear runs are not required, then
+# fftw can be left out. If eigensolver support is not required, then PETSc and SLEPc can be left
+# out. If eigensolver support is require, then it is very important to unset PETSC_ARCH or the
+# PETSC_LIB variable will be set incorrectly and the PETSc library won't be found.
+#
+# It is recommended that the above export and module load statements are written into the users
+# ~/.bashrc file for ease of use.
 
 helplocal:
 		# GK_SYSTEM = marconi
 		# You are using  Makefile.marconi to build gs2 executables on MARCONI.
 
 define STANDARD_SYSTEM_CONFIGURATION
-module load intel/pe-xe-2017--binary;\
-module load intelmpi/2017--binary;\
-module load netcdf/4.4.1--intel--pe-xe-2017--binary;\
-module load netcdff/4.4.4--intel--pe-xe-2017--binary;\
-module load fftw/3.3.4--intelmpi--2017--binary;\
+module purge;\
+module load env-skl;\
+# --- 2017 versions ---
+#module load profile/archive;\
+#module load intel/pe-xe-2017--binary;\
+#module load intelmpi/2017--binary;\
+#module load netcdf/4.4.1--intel--pe-xe-2017--binary;\
+#module load netcdff/4.4.4--intel--pe-xe-2017--binary;\
+#module load fftw/3.3.4--intelmpi--2017--binary;\
+#module load profile/advanced;\
+#module load petsc/3.7.2_complex--intelmpi--2017--binary;\
+#module load profile/archive;\
+#module load slepc/3.7.3_complex--intelmpi--2017--binary;\
+#module load lapack;\
+#module load blas;\
+# --- 2018 versions ---
+module load intel/pe-xe-2018--binary;\
+module load intelmpi/2018--binary;\
+module load zlib/1.2.8--gnu--6.1.0;\
+module load szip/2.1--gnu--6.1.0;\
+module load hdf5/1.10.4--intelmpi--2018--binary;\
+module load netcdf/4.6.1--intelmpi--2018--binary;\
+module load netcdff/4.4.4--intelmpi--2018--binary;\
+module load fftw/3.3.7--intelmpi--2018--binary;\
+module load profile/advanced;\
+module load petsc/3.8.3_complex--intelmpi--2018--binary;\
+module load profile/archive;\
+module load slepc/3.8.2_complex--intelmpi--2018--binary;\
+module load lapack;\
+module load blas;\
+unset PETSC_ARCH;\
 echo Module configuration complete;\
 export MAKEFLAGS='-j -IMakefiles';\
-export TESTEXEC='mpirun -N 36 -n 36';
+export TESTEXEC='mpirun -n 48';
 endef
 
 COMPILER=intel
@@ -21,8 +106,7 @@ CHIP=haswell
 USE_FFT = fftw3
 USE_NETCDF = on
 
-# This line disables the automated checking
-# of the intel version which is slow
+# This line disables the automated checking of the intel version, which is slow.
 DBLESIZEOPT = -double-size 128
 
 include Makefile.$(COMPILER)
@@ -35,18 +119,41 @@ ifdef USE_MPI
 endif
 
 ifeq ($(USE_FFT),fftw3)	
+	# Despite the change to utils/fft_work.fpp where the pre-processor '#include' statement was
+	# changed to the fortran 'include' statement, GS2 still builds OK without FFT_INC being set.
+	# Presumably, Marconi admin have set things up so that one does not need to explicitly include
+	# directories that are the default include directories of loaded modules.
 	FFT_INC = 
 	FFT_DIR = $(FFTW_HOME)
-	FFT_LIB = -lfftw3 #-lfftw3_mpi
-        CPPFLAGS   += -I $$FFTW_INC
+	FFT_LIB = -L$(FFTW_HOME)/lib -lfftw3
+	CPPFLAGS   += -I $$FFTW_INC
 endif	
 
-USE_HDF5=
+ifdef USE_HDF5
+  HDF5_INC= -I $(HDF5_HOME)/include
+  HDF5_LIB= -L $(HDF5_HOME)/lib
+else
+  HDF5_INC=
+  HDF5_LIB=
+endif
 
-#Note the module system sets some env vars for us
-#unfortunately some clash with values we use
+# The module system sets NETCDF_INC and NETCDF_LIB but they are just the paths to the NetCDF
+# C-library directories. GS2 uses the same variable names to mean the compiler options to include
+# and link the NetCDF C- and Fortran-libraries. Hence NETCDF_INC and NETCDF_LIB are re-defined
+# below.
 ifdef USE_NETCDF
   NETCDF_DIR=$(NETCDFF_HOME)
   NETCDF_INC= -I $(NETCDF_DIR)/include/ -I$(NETCDF_INCLUDE)
   NETCDF_LIB= -L $(NETCDF_DIR)/lib/ -lnetcdff -L$(NETCDF_HOME)/lib/ -lnetcdf
+endif
+
+ifdef GENQUAD
+  GENQUAD_LIB = -L $(LAPACK_HOME)/lib -llapack -L $(BLAS_HOME)/lib -lblas
+  GENQUAD_INC = -I $(LAPACK_HOME)/include -I $(BLAS_HOME)/include
+endif
+
+ifdef WITH_EIG
+    # Only need to set PETSC_DIR and SLEPC_DIR here. EIG_INC and EIG_LIB dealt with in main Makefile
+    PETSC_DIR = $(PETSC_HOME)
+    SLEPC_DIR = $(SLEPC_HOME)
 endif

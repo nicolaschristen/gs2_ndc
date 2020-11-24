@@ -18,6 +18,8 @@ module gs2_layouts
 
   private
 
+  public :: nl_runname
+
   public :: factors
   public :: pe_layout, layout, local_field_solve
   public :: is_kx_local
@@ -93,6 +95,8 @@ module gs2_layouts
   public :: fft_use_wisdom, fft_wisdom_file, fft_measure_plan
 
   public :: simple_gf_decomposition, gf_local_fields
+
+  character (len = 40) :: nl_runname
 
   logical :: initialized_x_transform = .false.
   logical :: initialized_y_transform = .false.
@@ -453,8 +457,9 @@ contains
          max_unbalanced_xxf, unbalanced_yxf, max_unbalanced_yxf, &
          opt_local_copy, opt_redist_nbk, opt_redist_init, intmom_sub, &
          intspec_sub, opt_redist_persist, opt_redist_persist_overlap, fft_measure_plan, &
-         fft_use_wisdom, fft_wisdom_file, simple_gf_decomposition, gf_local_fields
+         fft_use_wisdom, fft_wisdom_file, simple_gf_decomposition, gf_local_fields, nl_runname
 
+    nl_runname = "default_runname"
     local_field_solve = .false.
     unbalanced_xxf = .false.
     unbalanced_yxf = .false.
